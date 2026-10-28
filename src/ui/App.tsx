@@ -13,6 +13,7 @@ import { BOT_NAMES } from './pickers'
 import { PlayScreen } from './PlayScreen'
 import { SettingsPanel } from './SettingsPanel'
 import { applyTheme, BOT_DELAY, deviceToken, loadSettings, loadStats, saveSettings, saveStats, Settings, Stats } from './settings'
+import { setSoundEnabled, unlockSound } from './sfx'
 import { UpdateToast } from './UpdateToast'
 import { applyIfIdle, startUpdates, UpdateState } from './updates'
 
@@ -42,7 +43,7 @@ function saveGame(g: GameState | null) {
 
 function startGame(s: Settings): GameState {
   const players = Math.min(s.opponents + 1, maxPlayers(s.deckSize))
-  return newGame({ players, deckSize: s.deckSize, mode: s.mode, names: ['Вы', ...BOT_NAMES], human: ME, seed: Date.now() })
+  return newGame({ players, deckSize: s.deckSize, mode: s.mode, cheat: s.cheat, names: ['Вы', ...BOT_NAMES], human: ME, seed: Date.now() })
 }
 
 /** A room code from an invite link like …/durak/#join-AB3CD. */
@@ -68,6 +69,8 @@ export function App() {
     syncStatusBar()
   }, [settings.theme])
   useEffect(() => saveSettings(settings), [settings])
+  useEffect(() => setSoundEnabled(settings.sound), [settings.sound])
+  useEffect(() => unlockSound(), [])
   // A downloaded update switches in only while nobody is mid-game (and right away if the player taps it).
   const busyRef = useRef(false)
   const inRound = screen === 'game' || (screen === 'online' && online.phase === 'playing')

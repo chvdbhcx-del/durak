@@ -12,6 +12,10 @@ export interface Settings {
   speed: Speed
   /** shown to friends in online games */
   name: string
+  /** card sounds */
+  sound: boolean
+  /** "cheater" mode: cover with any card */
+  cheat: boolean
 }
 
 export interface Stats {
@@ -27,6 +31,8 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   speed: 'normal',
   name: `Игрок ${10 + Math.floor(Math.random() * 90)}`,
+  sound: true,
+  cheat: false,
 }
 /** How long a bot "thinks" before a move, in ms. Each move varies around this. */
 export const BOT_DELAY: Record<Speed, number> = { calm: 2600, normal: 1800, fast: 1000 }

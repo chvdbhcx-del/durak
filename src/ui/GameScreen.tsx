@@ -2,8 +2,9 @@ import { AnimatePresence, LayoutGroup, motion, type PanInfo } from 'framer-motio
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { beats, Card, rankLabel, sortHand, SUIT_NAME } from '../engine/cards'
 import { Action, canThrow, currentActor, GameState, HAND_SIZE, legalActions, previewAction } from '../engine/game'
-import { CardView } from './CardView'
+import { CardView, type Flight } from './CardView'
 import { notify, tap } from './native'
+import { playCard, playDeal, playSweep } from './sfx'
 import type { Stats } from './settings'
 import { SuitIcon } from './SuitIcon'
 
@@ -90,9 +91,25 @@ function useDealing(game: GameState) {
   return { dealt, dealing }
 }
 
+/** Where each card is, so a move between zones can be given its own flight. */
+function zoneMap(g: GameState): Map<string, string> {
+  const zones = new Map<string, string>()
+  g.deck.forEach((c) => zones.set(c.id, 'deck'))
+  g.discard.forEach((c) => zones.set(c.id, 'discard'))
+  g.table.forEach((p) => {
+    zones.set(p.attack.id, 'table')
+    if (p.defense) zones.set(p.defense.id, 'table')
+  })
+  g.players.forEach((p) => p.hand.forEach((c) => zones.set(c.id, `hand-${p.id}`)))
+  return zones
+}
+
 export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, onExit, onOpenSettings, onPlayAgain, room }: Props) {
   const { table: cw, hand: hw, flat } = useCardSizes()
   const { dealt, dealing } = useDealing(game)
+  const zones = useMemo(() => zoneMap(game), [game])
+  const prevZones = useRef(zones)
+  const prevSeed = useRef(game.options.seed)
   /** a card waiting for the player to pick which attack it covers */
   const [selected, setSelected] = useState<string | null>(null)
   /** moves lined up on the table, made only when the player confirms */
@@ -114,6 +131,47 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     return hidden
   }, [dealing, dealt, game])
   const hiddenIds = useMemo(() => new Set(undealt.map((c) => c.id)), [undealt])
+
+  // After each round the table sweeps into the discard, then hands refill from the deck, one card at a time.
+  const flights = useMemo(() => {
+    const out = new Map<string, Flight>()
+    const before = prevZones.current
+    if (dealing || prevSeed.current !== game.options.seed) return out
+    const swept: string[] = []
+    const taken: string[] = []
+    const drawn: string[] = []
+    for (const [id, zone] of zones) {
+      const was = before.get(id)
+      if (!was || was === zone) continue
+      if (zone === 'discard') swept.push(id)
+      else if (zone.startsWith('hand-') && was === 'deck') drawn.push(id)
+      else if (zone.startsWith('hand-') && was === 'table') taken.push(id)
+    }
+    swept.forEach((id, i) => out.set(id, { kind: 'discard', delay: 0.3 + i * 0.05 }))
+    taken.forEach((id, i) => out.set(id, { kind: 'take', delay: 0.3 + i * 0.05 }))
+    const start = swept.length || taken.length ? 0.3 + (swept.length + taken.length) * 0.05 + 0.35 : 0.25
+    drawn.forEach((id, i) => out.set(id, { kind: 'draw', delay: start + i * 0.1 }))
+    return out
+  }, [zones, dealing, game.options.seed])
+  useEffect(() => {
+    prevZones.current = zones
+    prevSeed.current = game.options.seed
+  }, [zones, game.options.seed])
+
+  // Sounds follow the flights: one shuffle for a sweep, one flick per card dealt.
+  useEffect(() => {
+    if (flights.size === 0) return
+    const list = [...flights.values()]
+    const sweep = list.filter((f) => f.kind !== 'draw')
+    if (sweep.length) playSweep(Math.min(...sweep.map((f) => f.delay)), sweep.length)
+    list
+      .filter((f) => f.kind === 'draw')
+      .slice(0, 10)
+      .forEach((f) => playDeal(f.delay))
+  }, [flights])
+  useEffect(() => {
+    if (dealing && dealt > 0) playDeal()
+  }, [dealt, dealing])
 
   const actor = dealing ? null : currentActor(game)
   const legal = useMemo(() => (dealing ? [] : legalActions(game, me)), [game, dealing, me])
@@ -154,6 +212,8 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     const show = (text: string, tone: Banner['tone']) => setBanner({ key: Date.now(), text, tone })
     const a = game.lastAction
     if (a && JSON.stringify(a) !== JSON.stringify(before.lastAction)) {
+      // A throw of my own already made its sound when the cards were put down.
+      if (['attack', 'defend', 'transfer', 'throw'].includes(a.action.type) && !(a.player === me && a.action.type === 'throw')) playCard()
       const who = game.players[a.player]
       if (a.action.type === 'transfer') show(a.player === me ? 'Вы перевели' : `${who.name} переводит`, 'info')
       else if (a.action.type === 'take') show(a.player === me ? 'Вы берёте' : `${who.name} берёт`, a.player === me ? 'bad' : 'good')
@@ -197,6 +257,15 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     tap('medium')
     for (const m of moves) act(m)
   }
+  const confirmRef = useRef(confirm)
+  confirmRef.current = confirm
+  // A lead or throw-in goes out by itself once no more cards are added.
+  const autoThrow = staged[0]?.type === 'throw'
+  useEffect(() => {
+    if (!autoThrow || dragging) return
+    const t = setTimeout(() => confirmRef.current(), 750)
+    return () => clearTimeout(t)
+  }, [plan, autoThrow, dragging])
 
   const transferSeat = nextDefender(game)
   const optionsFor = (cardId: string) => viewLegal.filter((a) => 'cardId' in a && a.cardId === cardId)
@@ -209,8 +278,11 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const canStage = (cardId: string) => !!throwWith(cardId) || optionsFor(cardId).length > 0
 
   const stage = (move: Action) => {
+    // Covering is played straight away; leading and throwing in wait a moment for more cards of the same rank.
+    if (move.type === 'defend') return play(move)
     tap('light')
     setSelected(null)
+    if (move.type === 'throw') playCard()
     setPlan(move.type === 'throw' ? [move] : [...staged, move])
   }
 
@@ -287,17 +359,15 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const passLabel = game.taking ? 'Пусть берёт' : me === game.attacker ? 'Бито' : 'Пас'
   const myTurn = actor === me && !game.over
   const main: { label: string; tone: 'primary' | 'danger'; onClick?: () => void } =
-    staged.length > 0
-      ? {
-          label: staged[0].type === 'throw' ? (game.table.length === 0 ? 'Сходить' : 'Подкинуть') : staged[0].type === 'transfer' ? 'Перевести' : 'Покрыть',
-          tone: 'primary',
-          onClick: confirm,
-        }
-      : take && myTurn
-        ? { label: 'Беру', tone: 'danger', onClick: () => play(take) }
-        : pass && myTurn
-          ? { label: passLabel, tone: 'primary', onClick: () => play(pass) }
-          : { label: myTurn ? 'Выберите карту' : game.over ? 'Партия окончена' : 'Ход соперника', tone: 'primary' }
+    staged[0]?.type === 'transfer'
+      ? { label: 'Перевести', tone: 'primary', onClick: confirm }
+      : autoThrow
+        ? { label: 'Кладём…', tone: 'primary' }
+        : take && myTurn
+          ? { label: 'Беру', tone: 'danger', onClick: () => play(take) }
+          : pass && myTurn
+            ? { label: passLabel, tone: 'primary', onClick: () => play(pass) }
+            : { label: myTurn ? 'Ваш ход' : game.over ? 'Конец' : 'Ждём', tone: 'primary' }
 
   const n = game.players.length
   const opponents = Array.from({ length: n - 1 }, (_, k) => game.players[(me + 1 + k) % n])
@@ -397,7 +467,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                   </div>
                   <motion.div className="mini-hand" animate={{ width: miniW + step * Math.max(0, cards.length - 1) }} transition={{ type: 'spring', stiffness: 400, damping: 34 }}>
                     {cards.map((c, i) => (
-                      <CardView key={c.id} card={c} faceUp={false} trump={game.trump} size="mini" style={{ left: i * step }} />
+                      <CardView key={c.id} card={c} faceUp={false} trump={game.trump} size="mini" style={{ left: i * step }} flight={flights.get(c.id)} />
                     ))}
                   </motion.div>
                   <AnimatePresence mode="wait" initial={false}>
@@ -434,7 +504,8 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               </AnimatePresence>
             </div>
             <span className="zone-label">
-              {game.deck.length > 0 ? `${deckCards.length + 1} в колоде` : 'Колода пуста'} · козырь {SUIT_NAME[game.trump]}
+              <b>{game.deck.length > 0 ? `${deckCards.length + 1} в колоде` : 'Колода пуста'}</b>
+              <span>козырь {SUIT_NAME[game.trump]}</span>
             </span>
           </div>
 
@@ -476,7 +547,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
             <div className="discard">
               {game.discard.map((c) => {
                 const t = hashTilt(c.id)
-                return <CardView key={c.id} card={c} faceUp={false} trump={game.trump} className="stacked" style={{ rotate: (t - 0.5) * 50, x: (t - 0.5) * 10, y: (0.5 - t) * 8 }} />
+                return <CardView key={c.id} card={c} faceUp={false} trump={game.trump} className="stacked" style={{ rotate: (t - 0.5) * 50, x: (t - 0.5) * 10, y: (0.5 - t) * 8 }} flight={flights.get(c.id)} />
               })}
             </div>
             <span className="zone-label">{game.discard.length ? `Бито: ${game.discard.length}` : 'Бито'}</span>
@@ -567,6 +638,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                     faceUp
                     trump={game.trump}
                     className={`${can ? 'playable' : actor === me ? 'dim' : ''} ${isSel ? 'selected' : ''} ${hint ? 'beats' : ''}`}
+                    flight={flights.get(c.id)}
                     animate={{ rotate: isDrag ? 0 : off * Math.min(3, 14 / hand.length), y: isDrag ? 0 : Math.min(10, off * off * 0.7) + (isSel ? -hw * 0.2 : 0) }}
                     onClick={() => onCard(c)}
                     disabled={!can}
@@ -649,13 +721,9 @@ function Counter({ value }: { value: number }) {
 
 function planText(plan: Action[], g: GameState): string {
   const first = plan[0]
-  if (first.type === 'throw') {
-    const n = first.cardIds.length
-    return `${n === 1 ? 'Карта' : `${n} карты`} на столе. ${g.table.length === 0 ? 'Сходить' : 'Подкинуть'}? Можно добавить ещё`
-  }
+  if (first.type === 'throw') return 'Можно добавить ещё карту того же достоинства'
   if (first.type === 'transfer') return 'Переводим ход дальше. Подтвердите кнопкой'
-  const open = g.table.length - g.table.filter((p) => p.defense).length - plan.length
-  return open > 0 ? `Покрыто ${plan.length}, осталось ${open}. Можно покрыть всё сразу` : 'Всё покрыто. Подтвердите кнопкой'
+  return g.table.length ? 'Подтвердите кнопкой' : ''
 }
 
 /** Who would defend after a transfer: the next player still in the game. */

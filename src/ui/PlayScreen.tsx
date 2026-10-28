@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useState } from 'react'
 import { maxPlayers } from '../engine/game'
-import { DeckPicker, ModePicker, OpponentsPicker } from './pickers'
+import { CheatPicker, DeckPicker, ModePicker, OpponentsPicker } from './pickers'
 import type { Settings } from './settings'
 import { withValidOpponents } from './SettingsPanel'
 import { sheetList } from './Sheet'
@@ -79,6 +79,7 @@ export function PlayScreen({ settings, onChange, onBots, onOnline, onBack }: Pro
                 <ModePicker value={settings.mode} onChange={(mode) => set({ mode })} />
                 <OpponentsPicker value={settings.opponents} max={maxPlayers(settings.deckSize) - 1} onChange={(opponents) => set({ opponents })} />
                 <DeckPicker value={settings.deckSize} onChange={(deckSize) => set({ deckSize })} />
+                <CheatPicker value={settings.cheat} onChange={(cheat) => set({ cheat })} />
                 <motion.button type="button" className="primary big" whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={onBots}>
                   Начать партию
                 </motion.button>

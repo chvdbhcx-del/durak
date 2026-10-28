@@ -9,6 +9,8 @@ export interface Options {
   deckSize: DeckSize
   mode: Mode
   names: string[]
+  /** "cheater" mode: people may cover with any card, never mind its rank or suit. Bots stay honest. */
+  cheat?: boolean
   /** index of the human player, or -1 for an all-bot game */
   human: number
   seed?: number
@@ -176,7 +178,8 @@ export function legalActions(s: GameState, player: number): Action[] {
     const actions: Action[] = []
     s.table.forEach((p, i) => {
       if (p.defense) return
-      for (const c of hand) if (beats(c, p.attack, s.trump)) actions.push({ type: 'defend', cardId: c.id, pair: i })
+      const anything = !!s.options.cheat && s.players[player].human
+      for (const c of hand) if (anything || beats(c, p.attack, s.trump)) actions.push({ type: 'defend', cardId: c.id, pair: i })
     })
     if (canTransfer(s)) {
       const rank = s.table[0].attack.rank
