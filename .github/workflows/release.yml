@@ -68,9 +68,12 @@ jobs:
       - name: Publish the release
         run: |
           MIN_NATIVE=$(node -p "require('./update.json').minNativeBuild")
+          # The updater plugin refuses a download without the zip's SHA-256, so the app reads it from the notes.
+          SHA=$(sha256sum "durak-web-$VERSION_NAME.zip" | cut -d' ' -f1)
           gh release create "v$VERSION_NAME" --repo ${{ github.repository }} --target "$GITHUB_SHA" \
             --title "Дурак $VERSION_NAME" --latest \
             --notes "Скачайте APK ниже и установите на Android. Уже установленное приложение обновит игру само.
 
-          minNativeBuild: $MIN_NATIVE" \
+          minNativeBuild: $MIN_NATIVE
+          sha256: $SHA" \
             Durak-*.apk "durak-web-$VERSION_NAME.zip" update.json
