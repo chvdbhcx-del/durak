@@ -316,7 +316,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     const transfer = options.find((a) => a.type === 'transfer')
     let move: Action | undefined
     if (zone?.startsWith('pair-')) move = defends.find((a) => a.type === 'defend' && a.pair === Number(zone.slice(5)))
-    else if (zone === `seat-${transferSeat}`) move = transfer
+    else if (zone === `seat-${transferSeat}` || zone === 'transfer') move = transfer
     else if (zone === 'table') move = transfer ?? (defends.length === 1 ? defends[0] : undefined)
     else if (!zone) {
       if (defends.length === 1) move = defends[0]
@@ -354,6 +354,12 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const focusOptions = focus ? optionsFor(focus) : []
   const targetPairs = new Set(focusOptions.flatMap((a) => (a.type === 'defend' ? [a.pair] : [])))
   const focusTransfers = focusOptions.some((a) => a.type === 'transfer')
+  // The dashed "+" slot that says a card of this rank can be passed on to the next player.
+  const transferCards = staged.length === 0 ? hand.filter((c) => viewLegal.some((a) => a.type === 'transfer' && a.cardId === c.id)) : []
+  const useTransferSlot = () => {
+    const pick = (selected && transferCards.find((c) => c.id === selected)) || transferCards.slice().sort((a, b) => Number(a.suit === game.trump) - Number(b.suit === game.trump) || a.rank - b.rank)[0]
+    if (pick) place(pick.id, 'transfer')
+  }
   const tableTarget = !!dragging && (!!throwWith(dragging) || focusTransfers || targetPairs.size === 1)
 
   const onCard = (card: Card) => {
@@ -568,6 +574,29 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                 </motion.div>
               )
             })}
+            <AnimatePresence>
+              {transferCards.length > 0 && (
+                <motion.button
+                  key="transfer-slot"
+                  type="button"
+                  layout
+                  data-drop="transfer"
+                  className={`transfer-slot ${focusTransfers && dragging ? 'target' : ''} ${hot === 'transfer' ? 'drop-hot' : ''}`}
+                  aria-label="Перевести: положите карту того же достоинства"
+                  onClick={useTransferSlot}
+                  initial={{ opacity: 0, scale: 0.85 }}
+                  animate={{ opacity: 1, scale: hot === 'transfer' ? 1.06 : 1 }}
+                  exit={{ opacity: 0, scale: 0.85 }}
+                  whileTap={{ scale: 0.95 }}
+                  transition={{ type: 'spring', stiffness: 260, damping: 30 }}
+                >
+                  <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+                    <path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M12 5v14M5 12h14" />
+                  </svg>
+                  <span>Перевести</span>
+                </motion.button>
+              )}
+            </AnimatePresence>
           </div>
 
           <div className="discard-zone">
@@ -640,7 +669,10 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                 <motion.div
                   key={c.id}
                   className={`hand-slot ${can ? 'can-drag' : ''}`}
-                  style={{ left: i * handStep, zIndex: isDrag ? 200 : i + 1 }}
+                  style={{ zIndex: isDrag ? 200 : i + 1 }}
+                  initial={false}
+                  animate={{ left: i * handStep }}
+                  transition={{ type: 'spring', stiffness: 260, damping: 32 }}
                   drag={can}
                   dragSnapToOrigin
                   dragElastic={0.18}

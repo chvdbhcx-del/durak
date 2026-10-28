@@ -23,9 +23,9 @@ export interface Flight {
   kind: 'draw' | 'discard' | 'take'
 }
 
-export const cardSpring = { type: 'spring', stiffness: 380, damping: 32, mass: 0.85 } as const
-const flightSpring = { type: 'spring', stiffness: 130, damping: 21, mass: 1 } as const
-const flipSpring = { type: 'spring', stiffness: 260, damping: 24 } as const
+export const cardSpring = { type: 'spring', stiffness: 260, damping: 30, mass: 0.9 } as const
+const flightSpring = { type: 'spring', stiffness: 105, damping: 22, mass: 1 } as const
+const flipSpring = { type: 'spring', stiffness: 200, damping: 26 } as const
 
 /**
  * A card keeps its layoutId while it moves between deck, hands, table and discard, so the
