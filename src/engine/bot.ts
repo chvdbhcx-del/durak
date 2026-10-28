@@ -74,7 +74,7 @@ export function chooseAction(s: GameState, player: number): Action {
 
 /** Deterministic from the game state, so a replayed game bluffs the same way. */
 function bluffOrTake(s: GameState, player: number): Action {
-  const watched = s.options.cheat && attackOrder(s).some((id) => s.players[id].human && !s.players[id].out)
+  const watched = s.options.cheat && !s.caught?.includes(player) && attackOrder(s).some((id) => s.players[id].human && !s.players[id].out)
   const pair = s.table.findIndex((p) => !p.defense)
   if (!watched || pair < 0) return { type: 'take' }
   const roll = mulberry32(((s.options.seed ?? 1) + s.deck.length * 11 + s.discard.length * 5 + s.table.length * 19 + s.players[player].hand.length * 23) >>> 0)

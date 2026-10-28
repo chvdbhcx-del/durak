@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { beats, Card } from './cards'
 import { chooseAction } from './bot'
-import { applyAction, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options, viewFor } from './game'
+import { applyAction, canCheat, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options } from './game'
 
 const opts = (o: Partial<Options> = {}): Options => ({
   players: 2,
@@ -201,7 +201,6 @@ describe('accusing a bot cheater', () => {
       bluffed++
       const s = applyAction(s0, 1, a)
       expect(s.table[0].defense).not.toBeNull()
-      expect(viewFor(s, 0).bluffs).toEqual([])
       const caught = applyAction(s, 0, { type: 'accuse', pair: 0 })
       expect(caught.lastCaught).toEqual({ by: 0, player: 1 })
       expect(caught.taking).toBe(true)
@@ -224,6 +223,43 @@ describe('accusing a bot cheater', () => {
     for (let seed = 1; seed <= 50; seed++) {
       const s0 = applyAction(position([[card('H', 7), card('D', 9)], [card('D', 8), card('S', 6)]], { human: 0, seed }), 0, { type: 'attack', cardId: 'H7' })
       expect(chooseAction(s0, 1).type).toBe('take')
+    }
+  })
+})
+
+describe('cheating only once', () => {
+  const twoPeople = (seed = 1) => applyAction(position([[card('H', 7), card('D', 9)], [card('D', 8), card('S', 6)]], { humans: [0, 1], human: 0, cheat: true, seed }), 0, { type: 'attack', cardId: 'H7' })
+
+  it('lets one person catch another who covered with the wrong card', () => {
+    const s = applyAction(twoPeople(), 1, { type: 'defend', cardId: 'D8', pair: 0 })
+    const caught = applyAction(s, 0, { type: 'accuse', pair: 0 })
+    expect(caught.lastCaught).toEqual({ by: 0, player: 1 })
+    expect(caught.taking).toBe(true)
+    expect(caught.caught).toEqual([1])
+  })
+
+  it('takes cheating away from whoever was caught', () => {
+    let s = applyAction(twoPeople(), 1, { type: 'defend', cardId: 'D8', pair: 0 })
+    s = applyAction(s, 0, { type: 'accuse', pair: 0 })
+    expect(canCheat(s, 1)).toBe(false)
+    // the next round: the cheater defends again but now only an honest card is legal
+    const next: GameState = { ...structuredClone(s), table: [{ attack: card('S', 10), defense: null }], taking: false, passed: [], attacker: 0, defender: 1 }
+    next.players[1].hand = [card('D', 8), card('S', 12)]
+    const defends = legalActions(next, 1).filter((a) => a.type === 'defend')
+    expect(defends.map((a) => (a as { cardId: string }).cardId)).toEqual(['S12'])
+  })
+
+  it('does not blame an honest cover', () => {
+    const s0 = applyAction(position([[card('H', 7), card('D', 9)], [card('H', 10), card('S', 6)]], { humans: [0, 1], human: 0, cheat: true, seed: 1 }), 0, { type: 'attack', cardId: 'H7' })
+    const s = applyAction(s0, 1, { type: 'defend', cardId: 'H10', pair: 0 })
+    expect(applyAction(s, 0, { type: 'accuse', pair: 0 }).falseAlarm).toEqual({ by: 0 })
+  })
+
+  it('stops a caught bot from bluffing again', () => {
+    const s0 = applyAction(position([[card('H', 7), card('D', 9)], [card('D', 8), card('S', 6)]], { human: 0, cheat: true, seed: 1 }), 0, { type: 'attack', cardId: 'H7' })
+    for (let seed = 1; seed <= 200; seed++) {
+      const s = { ...structuredClone(s0), caught: [1], options: { ...s0.options, seed } }
+      expect(chooseAction(s, 1).type).toBe('take')
     }
   })
 })

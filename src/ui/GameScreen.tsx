@@ -104,6 +104,9 @@ function zoneMap(g: GameState): Map<string, string> {
   return zones
 }
 
+/** How many cards of the deck and the discard pile are actually drawn. */
+const PILE_SHOWN = 9
+
 export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, onExit, onOpenSettings, onPlayAgain, room }: Props) {
   const { table: cw, hand: hw, flat } = useCardSizes()
   const { dealt, dealing } = useDealing(game)
@@ -118,6 +121,8 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const [bubble, setBubble] = useState<{ seat: number; text: string; key: number } | null>(null)
   const [dragging, setDragging] = useState<string | null>(null)
   const [hot, setHot] = useState<string | null>(null)
+  const [resetKey, setResetKey] = useState(0)
+  const handIds = useRef<string[]>([])
   const prev = useRef<GameState>(game)
   const counted = useRef<number | null>(null)
   const lastDragEnd = useRef(0)
@@ -213,7 +218,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     const show = (text: string, tone: Banner['tone']) => setBanner({ key: Date.now(), text, tone })
     const c = game.lastCaught
     if (c && JSON.stringify(c) !== JSON.stringify(before.lastCaught)) {
-      show(c.player === me ? `${game.players[c.by].name} заметил обман! Вы берёте` : c.by === me ? `Поймали! ${game.players[c.player].name} берёт` : `${game.players[c.player].name} пойман на обмане`, c.player === me ? 'bad' : 'good')
+      show(c.player === me ? `${game.players[c.by].name} заметил обман! Вы берёте и больше не мухлюете` : c.by === me ? `Поймали! ${game.players[c.player].name} берёт и больше не мухлюет` : `${game.players[c.player].name} пойман на обмане`, c.player === me ? 'bad' : 'good')
     }
     if (game.falseAlarm && JSON.stringify(game.falseAlarm) !== JSON.stringify(before.falseAlarm)) show(game.falseAlarm.by === me ? 'Всё честно' : `${game.players[game.falseAlarm.by].name} ошибся, всё честно`, 'info')
     const a = game.lastAction
@@ -395,6 +400,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const n = game.players.length
   const opponents = Array.from({ length: n - 1 }, (_, k) => game.players[(me + 1 + k) % n])
   const handStep = hand.length > 1 ? Math.min(hw * 0.92, (Math.min(window.innerWidth - 32 - (flat ? 240 : 0), 860) - hw) / (hand.length - 1)) : 0
+  handIds.current = hand.map((c) => c.id)
   const miniW = Math.round(cw * 0.42)
   const deckCards = [...game.deck.slice(1), ...undealt]
   const status = dealing ? 'Раздача…' : staged.length ? planText(staged, game) : selected ? 'Выберите карту на столе, которую покрыть' : statusText(game, actor, me)
@@ -522,9 +528,11 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
           <div className="deck-zone">
             <div className="deck">
               {game.deck.length > 0 && <CardView key={game.deck[0].id} card={game.deck[0]} faceUp={!dealing} trump={game.trump} className="trump-card" style={{ rotate: 90 }} />}
-              {deckCards.map((c, i) => (
-                <CardView key={c.id} card={c} faceUp={false} trump={game.trump} className="stacked" style={{ x: -Math.min(i, 8) * 0.6, y: -Math.min(i, 8) * 0.6 }} />
-              ))}
+              {/* Only the top of the pile is drawn: the rest is hidden underneath, and every card on screen costs a layout measurement on each move. */}
+              {deckCards.slice(-PILE_SHOWN).map((c, j) => {
+                const i = Math.max(0, deckCards.length - PILE_SHOWN) + j
+                return <CardView key={c.id} card={c} faceUp={false} trump={game.trump} className="stacked" style={{ x: -Math.min(i, 8) * 0.6, y: -Math.min(i, 8) * 0.6 }} />
+              })}
               <AnimatePresence>
                 {game.deck.length === 0 && !dealing && (
                   <motion.span className="trump-ghost" aria-label={`Козырь: ${SUIT_NAME[game.trump]}`} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 0.35, scale: 1 }} exit={{ opacity: 0 }}>
@@ -599,9 +607,13 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
             </AnimatePresence>
           </div>
 
+          {game.options.cheat && me !== game.defender && game.players[me]?.human && !game.taking && !game.over && view.table.some((p) => p.defense) && (
+            <span className="cheat-hint">Подозрительная карта? Нажмите на неё</span>
+          )}
+
           <div className="discard-zone">
             <div className="discard">
-              {game.discard.map((c) => {
+              {game.discard.slice(-PILE_SHOWN).map((c) => {
                 const t = hashTilt(c.id)
                 return <CardView key={c.id} card={c} faceUp={false} trump={game.trump} className="stacked" style={{ rotate: (t - 0.5) * 50, x: (t - 0.5) * 10, y: (0.5 - t) * 8 }} flight={flights.get(c.id)} />
               })}
@@ -667,14 +679,14 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               const hint = defenseHint(view, c, can, me)
               return (
                 <motion.div
-                  key={c.id}
+                  key={`${c.id}:${resetKey}`}
                   className={`hand-slot ${can ? 'can-drag' : ''}`}
                   style={{ zIndex: isDrag ? 200 : i + 1 }}
                   initial={false}
                   animate={{ left: i * handStep }}
                   transition={{ type: 'spring', stiffness: 260, damping: 32 }}
                   drag={can}
-                  dragSnapToOrigin
+                  dragSnapToOrigin={!(isDrag && hot)}
                   dragElastic={0.18}
                   dragMomentum={false}
                   whileDrag={{ scale: 1.08 }}
@@ -689,7 +701,13 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                     const zone = zoneAt(info)
                     setDragging(null)
                     setHot(null)
-                    if (zone) place(c.id, zone)
+                    if (zone) {
+                      place(c.id, zone)
+                      // a refused drop must not leave the card floating where it was released
+                      setTimeout(() => {
+                        if (handIds.current.includes(c.id)) setResetKey((k) => k + 1)
+                      }, 80)
+                    }
                   }}
                 >
                   <CardView
