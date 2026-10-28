@@ -115,6 +115,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   /** moves lined up on the table, made only when the player confirms */
   const [plan, setPlan] = useState<Action[]>([])
   const [banner, setBanner] = useState<Banner | null>(null)
+  const [bubble, setBubble] = useState<{ seat: number; text: string; key: number } | null>(null)
   const [dragging, setDragging] = useState<string | null>(null)
   const [hot, setHot] = useState<string | null>(null)
   const prev = useRef<GameState>(game)
@@ -210,19 +211,35 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     prev.current = game
     if (before === game || before.options.seed !== game.options.seed) return
     const show = (text: string, tone: Banner['tone']) => setBanner({ key: Date.now(), text, tone })
+    const c = game.lastCaught
+    if (c && JSON.stringify(c) !== JSON.stringify(before.lastCaught)) {
+      show(c.player === me ? `${game.players[c.by].name} заметил обман! Вы берёте` : c.by === me ? `Поймали! ${game.players[c.player].name} берёт` : `${game.players[c.player].name} пойман на обмане`, c.player === me ? 'bad' : 'good')
+    }
+    if (game.falseAlarm && JSON.stringify(game.falseAlarm) !== JSON.stringify(before.falseAlarm)) show(game.falseAlarm.by === me ? 'Всё честно' : `${game.players[game.falseAlarm.by].name} ошибся, всё честно`, 'info')
     const a = game.lastAction
     if (a && JSON.stringify(a) !== JSON.stringify(before.lastAction)) {
       // A throw of my own already made its sound when the cards were put down.
-      if (['attack', 'defend', 'transfer', 'throw'].includes(a.action.type) && !(a.player === me && a.action.type === 'throw')) playCard()
+      if (['attack', 'defend', 'bluff', 'transfer', 'throw'].includes(a.action.type) && !(a.player === me && a.action.type === 'throw')) playCard()
       const who = game.players[a.player]
       if (a.action.type === 'transfer') show(a.player === me ? 'Вы перевели' : `${who.name} переводит`, 'info')
       else if (a.action.type === 'take') show(a.player === me ? 'Вы берёте' : `${who.name} берёт`, a.player === me ? 'bad' : 'good')
     }
     if (before.table.length > 0 && game.table.length === 0 && game.lastRound?.end === 'beaten') show('Бито', 'info')
+    // A short speech bubble over the seat that just spoke, as at a real table.
+    if (a && JSON.stringify(a) !== JSON.stringify(before.lastAction) && a.player !== me) {
+      const word = a.action.type === 'take' ? 'Беру' : a.action.type === 'pass' ? (game.table.length === 0 ? 'Бито' : 'Пас') : null
+      if (word) setBubble({ seat: a.player, text: word, key: Date.now() })
+    }
     if (currentActor(game) === me && currentActor(before) !== me) tap('light')
     setSelected(null)
     setPlan([])
   }, [game, me])
+
+  useEffect(() => {
+    if (!bubble) return
+    const t = setTimeout(() => setBubble(null), 1600)
+    return () => clearTimeout(t)
+  }, [bubble])
 
   useEffect(() => {
     if (!banner) return
@@ -453,6 +470,13 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                     </motion.span>
                     <span className="seat-name">{p.name}</span>
                     <AnimatePresence>
+                      {bubble?.seat === p.id && (
+                        <motion.span key={bubble.key} className="bubble" initial={{ opacity: 0, y: 6, scale: 0.7 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.9 }} transition={{ type: 'spring', stiffness: 500, damping: 26 }}>
+                          {bubble.text}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                    <AnimatePresence>
                       {botThinking && actor === p.id && (
                         <motion.span key="think" className="thinking" aria-label="думает" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }}>
                           {[0, 1, 2].map((i) => (
@@ -521,7 +545,9 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               const target = targetPairs.has(i)
               const attackPending = pending.has(pair.attack.id)
               const coverPending = !!pair.defense && pending.has(pair.defense.id)
-              const onPair = target && selected ? () => place(selected, `pair-${i}`) : attackPending ? () => unstage(pair.attack.id) : coverPending ? () => unstage(pair.defense!.id) : undefined
+              // Cheater mode: tapping a cover someone else laid down says "that's a trick".
+              const accusable = !!game.options.cheat && !!pair.defense && me !== game.defender && game.players[me]?.human && !game.over && !game.taking && !coverPending
+              const onPair = target && selected ? () => place(selected, `pair-${i}`) : attackPending ? () => unstage(pair.attack.id) : coverPending ? () => unstage(pair.defense!.id) : accusable ? () => play({ type: 'accuse', pair: i }) : undefined
               return (
                 <motion.div
                   key={pair.attack.id}
@@ -531,7 +557,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                   onClick={onPair}
                   role={onPair ? 'button' : undefined}
                   tabIndex={onPair ? 0 : undefined}
-                  aria-label={target ? `Покрыть ${rankLabel(pair.attack.rank)} ${SUIT_NAME[pair.attack.suit]}` : onPair ? 'Вернуть карту в руку' : undefined}
+                  aria-label={target ? `Покрыть ${rankLabel(pair.attack.rank)} ${SUIT_NAME[pair.attack.suit]}` : accusable ? 'Обвинить в обмане' : onPair ? 'Вернуть карту в руку' : undefined}
                   onKeyDown={onPair ? (e) => (e.key === 'Enter' || e.key === ' ') && onPair() : undefined}
                   animate={target && !dragging ? { y: [0, -4, 0] } : { y: 0, scale: target && hot === `pair-${i}` ? 1.06 : 1 }}
                   transition={target && !dragging ? { duration: 1, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 400, damping: 30 }}

@@ -2197,3 +2197,22 @@ button.card:disabled {
 .cheat-art.off .art-badge {
   background: var(--good);
 }
+
+/* Speech bubble over a seat: "Беру", "Пас", "Бито" */
+.seat-head { position: relative; }
+.bubble {
+  position: absolute;
+  left: 50%;
+  top: -22px;
+  translate: -50% 0;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+}
+.pair.tappable .card.cover { cursor: pointer; }
