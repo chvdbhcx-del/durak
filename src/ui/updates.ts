@@ -13,7 +13,7 @@ import { isNative } from './native'
 export const WEB_VERSION: string = __WEB_VERSION__
 export const RELEASES_URL = 'https://github.com/chvdbhcx-del/durak/releases/latest'
 const MANIFEST_URL = `${RELEASES_URL}/download/update.json`
-const CHECK_EVERY_MS = 30 * 60 * 1000
+const CHECK_EVERY_MS = 2 * 60 * 1000
 
 interface Manifest {
   version: string
