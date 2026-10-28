@@ -5,9 +5,13 @@ import { chooseAction } from '../engine/bot'
 import { Action, applyAction, currentActor, GameState, HAND_SIZE, legalActions, maxPlayers, newGame } from '../engine/game'
 import { CardView } from './CardView'
 import { notify, syncStatusBar, tap } from './native'
+import { RulesPanel, StatsPanel } from './InfoPanels'
+import { MainMenu } from './MainMenu'
 import { SettingsPanel } from './SettingsPanel'
 import { applyTheme, BOT_DELAY, loadSettings, loadStats, saveSettings, saveStats, Settings, Stats } from './settings'
 import { SuitIcon } from './SuitIcon'
+import { UpdateToast } from './UpdateToast'
+import { startUpdates, UpdateState } from './updates'
 
 const ME = 0
 const BOT_NAMES = ['Лиса', 'Мишка', 'Сова', 'Ёж', 'Волк']
@@ -62,7 +66,10 @@ export function App() {
   const [game, setGame] = useState<GameState>(() => startGame(loadSettings()))
   const [dealt, setDealt] = useState(0)
   const [selected, setSelected] = useState<string | null>(null)
-  const [panel, setPanel] = useState<'settings' | null>(null)
+  const [panel, setPanel] = useState<'settings' | 'rules' | 'stats' | null>(null)
+  const [screen, setScreen] = useState<'menu' | 'game'>('menu')
+  const [update, setUpdate] = useState<UpdateState>({ kind: 'idle' })
+  const inGame = screen === 'game'
   const [banner, setBanner] = useState<Banner | null>(null)
   const cw = useCardWidth()
   const prev = useRef<GameState>(game)
@@ -73,15 +80,16 @@ export function App() {
     syncStatusBar()
   }, [settings.theme])
   useEffect(() => saveSettings(settings), [settings])
+  useEffect(() => startUpdates(setUpdate), [])
 
   // Deal the opening hands one card at a time, round-robin, like a real dealer.
   const dealTotal = game.players.length * HAND_SIZE
   const dealing = dealt < dealTotal
   useEffect(() => {
-    if (!dealing) return
-    const t = setTimeout(() => setDealt((d) => d + 1), dealt === 0 ? 350 : DEAL_STEP_MS)
+    if (!dealing || !inGame) return
+    const t = setTimeout(() => setDealt((d) => d + 1), dealt === 0 ? 450 : DEAL_STEP_MS)
     return () => clearTimeout(t)
-  }, [dealt, dealing])
+  }, [dealt, dealing, inGame])
   const undealt = useMemo(() => {
     if (!dealing) return [] as Card[]
     const n = game.players.length
@@ -100,12 +108,12 @@ export function App() {
 
   // Bots move on a timer so their plays can be followed.
   useEffect(() => {
-    if (actor === null || actor === ME) return
+    if (actor === null || actor === ME || !inGame || panel) return
     const t = setTimeout(() => {
       setGame((g) => (currentActor(g) === actor ? applyAction(g, actor, chooseAction(g, actor)) : g))
     }, BOT_DELAY[settings.speed])
     return () => clearTimeout(t)
-  }, [game, actor, settings.speed])
+  }, [game, actor, settings.speed, inGame, panel])
 
   // Round results and notable moves become a short banner over the table.
   useEffect(() => {
@@ -170,7 +178,59 @@ export function App() {
     setBanner(null)
     setDealt(0)
     setGame(startGame(s))
+    setScreen('game')
   }
+
+  const panels = (
+    <AnimatePresence>
+      {panel === 'settings' && (
+        <SettingsPanel
+          key="settings"
+          settings={settings}
+          inGame={inGame}
+          onClose={() => setPanel(null)}
+          onChange={(s) => setSettings(s)}
+          onStart={(s) => {
+            setSettings(s)
+            setPanel(null)
+            newRound(s)
+          }}
+        />
+      )}
+      {panel === 'rules' && <RulesPanel key="rules" onClose={() => setPanel(null)} />}
+      {panel === 'stats' && (
+        <StatsPanel
+          key="stats"
+          stats={stats}
+          onClose={() => setPanel(null)}
+          onReset={() => {
+            const zero = { wins: 0, losses: 0, draws: 0 }
+            saveStats(zero)
+            setStats(zero)
+          }}
+        />
+      )}
+    </AnimatePresence>
+  )
+
+  if (!inGame)
+    return (
+      <>
+        <AnimatePresence mode="wait">
+          <MainMenu
+            key="menu"
+            settings={settings}
+            stats={stats}
+            canContinue={!game.over && (dealt > 0 || game.discard.length > 0 || game.table.length > 0)}
+            onContinue={() => setScreen('game')}
+            onNewGame={() => newRound()}
+            onOpen={setPanel}
+          />
+        </AnimatePresence>
+        {panels}
+        <UpdateToast state={update} />
+      </>
+    )
 
   const take = legal.find((a) => a.type === 'take')
   const pass = legal.find((a) => a.type === 'pass')
@@ -183,9 +243,20 @@ export function App() {
   const status = dealing ? 'Раздача…' : statusText(game, actor)
 
   return (
-    <div className="app" style={{ ['--cw' as string]: `${cw}px`, ['--mini' as string]: `${miniW}px` }}>
+    <motion.div
+      className="app"
+      style={{ ['--cw' as string]: `${cw}px`, ['--mini' as string]: `${miniW}px` }}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
       <motion.header className="bar" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
         <div className="brand">
+          <motion.button type="button" className="icon" aria-label="Главное меню" whileTap={{ scale: 0.9 }} whileHover={{ x: -2 }} onClick={() => setScreen('menu')}>
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <path fill="currentColor" d="M14.7 5.3a1 1 0 0 1 0 1.4L9.4 12l5.3 5.3a1 1 0 1 1-1.4 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0z" />
+            </svg>
+          </motion.button>
           <span className="logo">Дурак</span>
           <AnimatePresence mode="wait" initial={false}>
             <motion.span key={`${game.options.mode}${game.options.deckSize}`} className="chip" {...fade}>
@@ -422,27 +493,9 @@ export function App() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {panel === 'settings' && (
-          <SettingsPanel
-            settings={settings}
-            stats={stats}
-            onClose={() => setPanel(null)}
-            onChange={(s) => setSettings(s)}
-            onStart={(s) => {
-              setSettings(s)
-              setPanel(null)
-              newRound(s)
-            }}
-            onResetStats={() => {
-              const zero = { wins: 0, losses: 0, draws: 0 }
-              saveStats(zero)
-              setStats(zero)
-            }}
-          />
-        )}
-      </AnimatePresence>
-    </div>
+      {panels}
+      <UpdateToast state={update} />
+    </motion.div>
   )
 }
 

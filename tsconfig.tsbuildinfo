@@ -1,1 +1,0 @@
-{"root":["./src/main.tsx","./src/engine/bot.ts","./src/engine/cards.ts","./src/engine/game.test.ts","./src/engine/game.ts","./src/ui/App.tsx","./src/ui/CardView.tsx","./src/ui/SettingsPanel.tsx","./src/ui/SuitIcon.tsx","./src/ui/native.ts","./src/ui/settings.ts"],"version":"5.6.3"}

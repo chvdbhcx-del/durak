@@ -1,72 +1,65 @@
-import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect } from 'react'
+import { motion } from 'framer-motion'
+import type { ReactNode } from 'react'
 import type { DeckSize } from '../engine/cards'
 import { maxPlayers, Mode } from '../engine/game'
-import type { Settings, Speed, Stats, Theme } from './settings'
+import type { Settings, Speed, Theme } from './settings'
+import { Sheet, sheetItem } from './Sheet'
+import { SuitIcon } from './SuitIcon'
 
 interface Props {
   settings: Settings
-  stats: Stats
   onChange: (s: Settings) => void
   onStart: (s: Settings) => void
   onClose: () => void
-  onResetStats: () => void
+  inGame: boolean
 }
 
-// The sheet reveals its rows one after another.
-const list = { hidden: {}, shown: { transition: { staggerChildren: 0.04, delayChildren: 0.08 } } }
-const item = {
-  hidden: { opacity: 0, y: 12 },
-  shown: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 420, damping: 32 } },
-} as const
+const BOT_NAMES = ['Лиса', 'Мишка', 'Сова', 'Ёж', 'Волк']
 
-function Segmented<T extends string | number>({
-  id,
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  id: string
-  label: string
-  value: T
-  options: { value: T; label: string; disabled?: boolean; hint?: string }[]
-  onChange: (v: T) => void
-}) {
+function plural(n: number, one: string, few: string, many: string) {
+  const m10 = n % 10
+  const m100 = n % 100
+  if (m10 === 1 && m100 !== 11) return one
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few
+  return many
+}
+
+/** A selectable tile; the highlight ring slides between tiles of the same group. */
+function Tile({ group, on, disabled, onClick, children, label }: { group: string; on: boolean; disabled?: boolean; onClick: () => void; children: ReactNode; label: string }) {
   return (
-    <motion.div className="field" role="radiogroup" aria-labelledby={`${id}-label`} variants={item}>
-      <span id={`${id}-label`} className="field-label">
-        {label}
-      </span>
-      <div className="segmented">
-        {options.map((o) => (
-          <button
-            key={String(o.value)}
-            id={`${id}-${o.value}`}
-            type="button"
-            role="radio"
-            aria-checked={o.value === value}
-            className={o.value === value ? 'on' : ''}
-            disabled={o.disabled}
-            title={o.hint}
-            onClick={() => onChange(o.value)}
-          >
-            {o.value === value && <motion.span layoutId={`seg-${id}`} className="seg-pill" transition={{ type: 'spring', stiffness: 500, damping: 36 }} />}
-            <span className="seg-label">{o.label}</span>
-          </button>
-        ))}
-      </div>
-    </motion.div>
+    <motion.button type="button" className={`tile ${on ? 'on' : ''}`} aria-pressed={on} aria-label={label} disabled={disabled} onClick={onClick} whileTap={disabled ? undefined : { scale: 0.96 }} whileHover={disabled ? undefined : { y: -2 }}>
+      {on && <motion.span layoutId={`ring-${group}`} className="tile-ring" transition={{ type: 'spring', stiffness: 480, damping: 36 }} />}
+      {children}
+    </motion.button>
   )
 }
 
-export function SettingsPanel({ settings, stats, onChange, onStart, onClose, onResetStats }: Props) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+function Group({ title, value, children }: { title: string; value?: string; children: ReactNode }) {
+  return (
+    <motion.section className="group" variants={sheetItem}>
+      <header className="group-head">
+        <span className="group-title">{title}</span>
+        {value && (
+          <motion.span key={value} className="group-value" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}>
+            {value}
+          </motion.span>
+        )}
+      </header>
+      {children}
+    </motion.section>
+  )
+}
 
+function MiniCard({ rank, suit, red, tilt = 0, x = 0 }: { rank: string; suit: 'S' | 'H' | 'D' | 'C'; red?: boolean; tilt?: number; x?: number }) {
+  return (
+    <span className={`mini-face ${red ? 'red' : ''}`} style={{ rotate: `${tilt}deg`, translate: `${x}px 0` }}>
+      <b>{rank}</b>
+      <SuitIcon suit={suit} />
+    </span>
+  )
+}
+
+export function SettingsPanel({ settings, onChange, onStart, onClose, inGame }: Props) {
   const set = (patch: Partial<Settings>) => {
     const next = { ...settings, ...patch }
     next.opponents = Math.min(next.opponents, maxPlayers(next.deckSize) - 1)
@@ -75,105 +68,142 @@ export function SettingsPanel({ settings, stats, onChange, onStart, onClose, onR
   const maxOpp = maxPlayers(settings.deckSize) - 1
 
   return (
-    <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
-      <motion.div
-        className="sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="settings-title"
-        initial={{ y: 40, scale: 0.96, opacity: 0 }}
-        animate={{ y: 0, scale: 1, opacity: 1 }}
-        exit={{ y: 30, scale: 0.97, opacity: 0 }}
-        transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <motion.div className="sheet-body" variants={list} initial="hidden" animate="shown">
-        <motion.div className="sheet-head" variants={item}>
-          <h2 id="settings-title">Настройки партии</h2>
-          <motion.button type="button" className="icon" aria-label="Закрыть" whileTap={{ scale: 0.88, rotate: 90 }} whileHover={{ rotate: 90 }} onClick={onClose}>
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-              <path fill="currentColor" d="M6.3 5 12 10.6 17.7 5 19 6.3 13.4 12l5.6 5.7-1.3 1.3-5.7-5.6L6.3 19 5 17.7l5.6-5.7L5 6.3z" />
-            </svg>
+    <Sheet
+      title="Настройки"
+      onClose={onClose}
+      footer={
+        <>
+          <p className="foot-note">{inGame ? 'Тема и скорость меняются сразу. Режим, колода и соперники вступят в силу в новой партии.' : 'Всё сохраняется само.'}</p>
+          <motion.button type="button" className="primary big" whileTap={{ scale: 0.96 }} onClick={() => onStart(settings)}>
+            {inGame ? 'Новая партия' : 'Играть'}
           </motion.button>
-        </motion.div>
+        </>
+      }
+    >
+      <Group title="Игра">
+        <div className="tiles two">
+          {(
+            [
+              { value: 'podkidnoy', title: 'Подкидной', note: 'Подкидывайте карты того же достоинства' },
+              { value: 'perevodnoy', title: 'Переводной', note: 'Отбивающийся может перевести ход дальше' },
+            ] as { value: Mode; title: string; note: string }[]
+          ).map((m) => (
+            <Tile key={m.value} group="mode" on={settings.mode === m.value} onClick={() => set({ mode: m.value })} label={m.title}>
+              <span className="mode-art" aria-hidden="true">
+                {m.value === 'podkidnoy' ? (
+                  <>
+                    <MiniCard rank="7" suit="H" red tilt={-8} x={-10} />
+                    <MiniCard rank="7" suit="S" tilt={8} x={10} />
+                    <span className="art-badge">+</span>
+                  </>
+                ) : (
+                  <>
+                    <MiniCard rank="9" suit="D" red tilt={-6} x={-14} />
+                    <span className="art-arrow">→</span>
+                    <MiniCard rank="9" suit="C" tilt={6} x={14} />
+                  </>
+                )}
+              </span>
+              <span className="tile-title">{m.title}</span>
+              <span className="tile-note">{m.note}</span>
+            </Tile>
+          ))}
+        </div>
+      </Group>
 
-        <Segmented<Mode>
-          id="mode"
-          label="Игра"
-          value={settings.mode}
-          onChange={(mode) => set({ mode })}
-          options={[
-            { value: 'podkidnoy', label: 'Подкидной' },
-            { value: 'perevodnoy', label: 'Переводной' },
-          ]}
-        />
-        <motion.div variants={item}>
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.p key={settings.mode} className="field-note" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
-              {settings.mode === 'podkidnoy'
-                ? 'Подкидывать можно карты того же достоинства, что уже лежат на столе.'
-                : 'Пока карты не покрыты, отбивающийся может перевести ход картой того же достоинства.'}
-            </motion.p>
-          </AnimatePresence>
-        </motion.div>
+      <Group title="Соперники" value={`${settings.opponents} ${plural(settings.opponents, 'соперник', 'соперника', 'соперников')}`}>
+        <div className="avatars" role="radiogroup" aria-label="Число соперников">
+          {BOT_NAMES.map((name, i) => {
+            const n = i + 1
+            const on = n <= settings.opponents
+            const disabled = n > maxOpp
+            return (
+              <motion.button
+                key={name}
+                type="button"
+                role="radio"
+                aria-checked={n === settings.opponents}
+                aria-label={`${n} ${plural(n, 'соперник', 'соперника', 'соперников')}`}
+                className={`avatar-pick ${on ? 'on' : ''}`}
+                disabled={disabled}
+                onClick={() => set({ opponents: n })}
+                whileTap={disabled ? undefined : { scale: 0.9 }}
+                animate={{ scale: on ? 1 : 0.88, opacity: disabled ? 0.25 : on ? 1 : 0.55 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 26, delay: on ? i * 0.03 : 0 }}
+              >
+                <span className="avatar-circle">{name[0]}</span>
+                <span className="avatar-name">{name}</span>
+              </motion.button>
+            )
+          })}
+        </div>
+        {maxOpp < 5 && <p className="hint">В колоде на {settings.deckSize} карт поместится не больше {maxOpp + 1} игроков.</p>}
+      </Group>
 
-        <Segmented<number>
-          id="opponents"
-          label="Соперники"
-          value={settings.opponents}
-          onChange={(opponents) => set({ opponents })}
-          options={[1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n), disabled: n > maxOpp, hint: n > maxOpp ? 'Для такой колоды слишком много игроков' : undefined }))}
-        />
+      <Group title="Колода">
+        <div className="tiles three">
+          {(
+            [
+              { value: 24, from: '9' },
+              { value: 36, from: '6' },
+              { value: 52, from: '2' },
+            ] as { value: DeckSize; from: string }[]
+          ).map((d) => (
+            <Tile key={d.value} group="deck" on={settings.deckSize === d.value} onClick={() => set({ deckSize: d.value })} label={`${d.value} карт`}>
+              <span className="deck-art" aria-hidden="true">
+                {[0, 1, 2].map((k) => (
+                  <span key={k} className="deck-art-card" style={{ translate: `${k * 3}px ${-k * 3}px` }} />
+                ))}
+              </span>
+              <span className="tile-big">{d.value}</span>
+              <span className="tile-note">
+                от {d.from} до туза
+              </span>
+            </Tile>
+          ))}
+        </div>
+      </Group>
 
-        <Segmented<DeckSize>
-          id="deck"
-          label="Колода"
-          value={settings.deckSize}
-          onChange={(deckSize) => set({ deckSize })}
-          options={[
-            { value: 24, label: '24 карты' },
-            { value: 36, label: '36 карт' },
-            { value: 52, label: '52 карты' },
-          ]}
-        />
+      <Group title="Скорость ботов">
+        <div className="tiles three">
+          {(
+            [
+              { value: 'calm', title: 'Спокойно', bars: 1 },
+              { value: 'normal', title: 'Обычно', bars: 2 },
+              { value: 'fast', title: 'Быстро', bars: 3 },
+            ] as { value: Speed; title: string; bars: number }[]
+          ).map((s) => (
+            <Tile key={s.value} group="speed" on={settings.speed === s.value} onClick={() => set({ speed: s.value })} label={s.title}>
+              <span className="speed-art" aria-hidden="true">
+                {[1, 2, 3].map((b) => (
+                  <span key={b} className={b <= s.bars ? 'lit' : ''} />
+                ))}
+              </span>
+              <span className="tile-title">{s.title}</span>
+            </Tile>
+          ))}
+        </div>
+      </Group>
 
-        <Segmented<Speed>
-          id="speed"
-          label="Скорость ботов"
-          value={settings.speed}
-          onChange={(speed) => set({ speed })}
-          options={[
-            { value: 'calm', label: 'Спокойно' },
-            { value: 'normal', label: 'Обычно' },
-            { value: 'fast', label: 'Быстро' },
-          ]}
-        />
-
-        <Segmented<Theme>
-          id="theme"
-          label="Тема"
-          value={settings.theme}
-          onChange={(theme) => set({ theme })}
-          options={[
-            { value: 'system', label: 'Как в системе' },
-            { value: 'dark', label: 'Тёмная' },
-            { value: 'light', label: 'Светлая' },
-          ]}
-        />
-
-        <motion.div className="sheet-foot" variants={item}>
-          <span className="muted">
-            {stats.wins} побед · {stats.losses} поражений · {stats.draws} ничьих{' '}
-            <button type="button" className="link" onClick={onResetStats}>
-              Сбросить
-            </button>
-          </span>
-          <motion.button type="button" className="primary" whileTap={{ scale: 0.95 }} onClick={() => onStart(settings)}>
-            Начать заново
-          </motion.button>
-        </motion.div>
-        </motion.div>
-      </motion.div>
-    </motion.div>
+      <Group title="Тема">
+        <div className="tiles three">
+          {(
+            [
+              { value: 'system', title: 'Авто' },
+              { value: 'dark', title: 'Тёмная' },
+              { value: 'light', title: 'Светлая' },
+            ] as { value: Theme; title: string }[]
+          ).map((t) => (
+            <Tile key={t.value} group="theme" on={settings.theme === t.value} onClick={() => set({ theme: t.value })} label={t.title}>
+              <span className={`theme-art ${t.value}`} aria-hidden="true">
+                <span className="theme-felt" />
+                <span className="theme-card" />
+              </span>
+              <span className="tile-title">{t.title}</span>
+            </Tile>
+          ))}
+        </div>
+      </Group>
+    </Sheet>
   )
 }
