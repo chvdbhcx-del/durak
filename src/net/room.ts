@@ -51,6 +51,10 @@ export function normalizeCode(raw: string) {
 
 const peerOptions = { debug: 0 as const }
 
+/** How long the first link to the room broker may take before we say so instead of spinning forever. */
+const BROKER_TIMEOUT_MS = 15000
+const BROKER_SLOW = 'Сервер комнат не отвечает. Проверьте интернет или попробуйте через минуту. Если не помогает, возможно, ваша сеть его блокирует (попробуйте другой Wi-Fi или мобильный интернет).'
+
 function describe(err: { type?: string }) {
   switch (err.type) {
     case 'peer-unavailable':
@@ -101,7 +105,13 @@ export class HostRoom {
     if (this.closed) return
     const peer = new Peer(PREFIX + this.code, peerOptions)
     this.peer = peer
+    const slow = this.ready || keepCode ? null : setTimeout(() => {
+      if (this.closed || this.peer !== peer || this.ready) return
+      peer.destroy()
+      this.events.onError(BROKER_SLOW)
+    }, BROKER_TIMEOUT_MS)
     peer.on('open', () => {
+      if (slow) clearTimeout(slow)
       this.events.onReconnecting(false)
       if (!this.ready) {
         this.ready = true
@@ -110,6 +120,7 @@ export class HostRoom {
     })
     peer.on('error', (err) => {
       if (this.closed || this.peer !== peer) return
+      if (slow && err.type !== 'unavailable-id') clearTimeout(slow)
       if (err.type === 'unavailable-id') {
         peer.destroy()
         // Our own old registration may linger for a minute after a reload: wait it out.
@@ -235,7 +246,16 @@ export class GuestRoom {
 
   private makePeer() {
     const peer = new Peer(peerOptions)
-    peer.on('open', () => this.connect())
+    const slow = this.everConnected ? null : setTimeout(() => {
+      if (this.done || this.peer !== peer || peer.open) return
+      this.done = true
+      peer.destroy()
+      this.events.onLost(BROKER_SLOW)
+    }, BROKER_TIMEOUT_MS)
+    peer.on('open', () => {
+      if (slow) clearTimeout(slow)
+      this.connect()
+    })
     peer.on('disconnected', () => {
       if (!this.done && this.everConnected) this.later(() => !peer.destroyed && peer.disconnected && peer.reconnect(), 1000)
     })
