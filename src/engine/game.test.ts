@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { beats, Card } from './cards'
 import { chooseAction } from './bot'
-import { applyAction, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options } from './game'
+import { applyAction, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options, viewFor } from './game'
 
 const opts = (o: Partial<Options> = {}): Options => ({
   players: 2,
@@ -151,5 +151,79 @@ describe('cheater mode', () => {
 
     const bot = applyAction(position(hands, { human: 0, cheat: true }), 0, { type: 'attack', cardId: 'H7' })
     expect(legalActions(bot, 1)).not.toContainEqual({ type: 'defend', cardId: 'D8', pair: 0 })
+  })
+})
+
+describe('catching a cheater', () => {
+  const hands = () => [[card('H', 7), card('D', 9)], [card('D', 8), card('S', 6)]]
+
+  it('sometimes sends the cheat back and makes the cheater take the table', () => {
+    let caught = 0
+    const runs = 200
+    for (let seed = 1; seed <= runs; seed++) {
+      const start = applyAction(position(hands(), { human: 1, cheat: true, seed }), 0, { type: 'attack', cardId: 'H7' })
+      const s = applyAction(start, 1, { type: 'defend', cardId: 'D8', pair: 0 })
+      if (s.lastCaught) {
+        caught++
+        expect(s.lastCaught).toEqual({ by: 0, player: 1 })
+        // The round closed as a take: the cheater holds the attack and the returned card.
+        expect(s.players[1].hand.map((c) => c.id).sort()).toEqual(expect.arrayContaining(['D8', 'H7', 'S6']))
+        expect(s.discard.length).toBe(0)
+      } else expect(s.discard.map((c) => c.id).sort()).toEqual(['D8', 'H7'])
+    }
+    expect(caught / runs).toBeGreaterThan(0.18)
+    expect(caught / runs).toBeLessThan(0.42)
+  })
+
+  it('never catches an honest cover or a game without bots', () => {
+    const honest = hands()
+    honest[1] = [card('H', 10), card('S', 6)]
+    for (let seed = 1; seed <= 50; seed++) {
+      const start = applyAction(position(honest, { human: 1, cheat: true, seed }), 0, { type: 'attack', cardId: 'H7' })
+      expect(applyAction(start, 1, { type: 'defend', cardId: 'H10', pair: 0 }).lastCaught).toBeFalsy()
+    }
+    for (let seed = 1; seed <= 50; seed++) {
+      const start = applyAction(position(hands(), { humans: [0, 1], human: 1, cheat: true, seed }), 0, { type: 'attack', cardId: 'H7' })
+      expect(applyAction(start, 1, { type: 'defend', cardId: 'D8', pair: 0 }).lastCaught).toBeFalsy()
+    }
+  })
+})
+
+describe('accusing a bot cheater', () => {
+  const start = (seed: number) => applyAction(position([[card('H', 7), card('D', 9)], [card('D', 8), card('S', 6)]], { human: 0, cheat: true, seed }), 0, { type: 'attack', cardId: 'H7' })
+
+  it('lets a bot bluff and a person catch it', () => {
+    let bluffed = 0
+    for (let seed = 1; seed <= 200; seed++) {
+      const s0 = start(seed)
+      const a = chooseAction(s0, 1)
+      if (a.type !== 'bluff') continue
+      bluffed++
+      const s = applyAction(s0, 1, a)
+      expect(s.table[0].defense).not.toBeNull()
+      expect(viewFor(s, 0).bluffs).toEqual([])
+      const caught = applyAction(s, 0, { type: 'accuse', pair: 0 })
+      expect(caught.lastCaught).toEqual({ by: 0, player: 1 })
+      expect(caught.taking).toBe(true)
+      expect(caught.players[1].hand.length).toBe(2)
+    }
+    expect(bluffed / 200).toBeGreaterThan(0.18)
+    expect(bluffed / 200).toBeLessThan(0.42)
+  })
+
+  it('treats a wrong accusation as a false alarm', () => {
+    const base = position([[card('H', 7), card('D', 9)], [card('H', 10), card('S', 6)]], { human: 0, cheat: true, seed: 1 })
+    const s0 = applyAction(base, 0, { type: 'attack', cardId: 'H7' })
+    const s = applyAction(s0, 1, { type: 'defend', cardId: 'H10', pair: 0 })
+    const r = applyAction(s, 0, { type: 'accuse', pair: 0 })
+    expect(r.falseAlarm).toEqual({ by: 0 })
+    expect(r.table[0].defense).not.toBeNull()
+  })
+
+  it('does not let bots bluff in an honest game', () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      const s0 = applyAction(position([[card('H', 7), card('D', 9)], [card('D', 8), card('S', 6)]], { human: 0, seed }), 0, { type: 'attack', cardId: 'H7' })
+      expect(chooseAction(s0, 1).type).toBe('take')
+    }
   })
 })

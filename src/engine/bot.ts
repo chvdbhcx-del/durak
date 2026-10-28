@@ -1,5 +1,9 @@
 import { beats, Card, Suit } from './cards'
-import { Action, GameState, legalActions } from './game'
+import { mulberry32 } from './cards'
+import { Action, attackOrder, GameState, legalActions } from './game'
+
+/** Chance that a bot in cheater mode covers with a card that doesn't beat instead of taking. */
+export const BLUFF_CHANCE = 0.3
 
 const value = (c: Card, trump: Suit) => c.rank + (c.suit === trump ? 20 : 0)
 
@@ -50,7 +54,7 @@ export function chooseAction(s: GameState, player: number): Action {
       if (c.suit !== trump || endgame) return transfers[0]
     }
     const plan = planDefense(s, player)
-    if (!plan) return { type: 'take' }
+    if (!plan) return bluffOrTake(s, player)
     // Don't burn a high trump on a cheap card early in the game.
     const spend = plan.reduce((n, step) => n + value(cardById(s, player, step.cardId), trump), 0)
     const cheapTable = s.table.every((p) => p.attack.suit !== trump && p.attack.rank <= 9)
@@ -66,4 +70,15 @@ export function chooseAction(s: GameState, player: number): Action {
     if (cheap || endgame) return t
   }
   return { type: 'pass' }
+}
+
+/** Deterministic from the game state, so a replayed game bluffs the same way. */
+function bluffOrTake(s: GameState, player: number): Action {
+  const watched = s.options.cheat && attackOrder(s).some((id) => s.players[id].human && !s.players[id].out)
+  const pair = s.table.findIndex((p) => !p.defense)
+  if (!watched || pair < 0) return { type: 'take' }
+  const roll = mulberry32(((s.options.seed ?? 1) + s.deck.length * 11 + s.discard.length * 5 + s.table.length * 19 + s.players[player].hand.length * 23) >>> 0)
+  if (roll() >= BLUFF_CHANCE) return { type: 'take' }
+  const hand = s.players[player].hand.slice().sort((a, b) => value(a, s.trump) - value(b, s.trump))
+  return { type: 'bluff', cardId: hand[0].id, pair }
 }

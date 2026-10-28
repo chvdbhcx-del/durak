@@ -9,7 +9,7 @@ export interface Options {
   deckSize: DeckSize
   mode: Mode
   names: string[]
-  /** "cheater" mode: people may cover with any card, never mind its rank or suit. Bots stay honest. */
+  /** "cheater" mode: people may cover with any card, never mind its rank or suit. Bots may cheat too, and people can catch them. */
   cheat?: boolean
   /** index of the human player, or -1 for an all-bot game */
   human: number
@@ -37,6 +37,10 @@ export type Action =
   | { type: 'transfer'; cardId: string }
   | { type: 'take' }
   | { type: 'pass' }
+  /** cheater mode, bots only: a cover that doesn't beat, hoping nobody notices */
+  | { type: 'bluff'; cardId: string; pair: number }
+  /** cheater mode: a person taps a cover they think is a trick */
+  | { type: 'accuse'; pair: number }
 
 export type RoundEnd = 'beaten' | 'taken'
 
@@ -61,7 +65,16 @@ export interface GameState {
   loser: number | null
   lastRound: { end: RoundEnd; defender: number } | null
   lastAction: { player: number; action: Action } | null
+  /** a bot noticed a cheater: `player` was caught by bot `by` and must take the table */
+  lastCaught?: { by: number; player: number } | null
+  /** a person accused a bot of a trick on `pair` and was wrong */
+  falseAlarm?: { by: number } | null
+  /** ids of covers that don't really beat; hidden from every view */
+  bluffs?: string[]
 }
+
+/** Chance that a bot spots a person covering with a card that doesn't beat. */
+export const CATCH_CHANCE = 0.3
 
 export const HAND_SIZE = 6
 
@@ -218,7 +231,25 @@ export function canThrow(s: GameState, player: number, cardIds: string[]): boole
 }
 
 export function applyAction(prev: GameState, player: number, action: Action): GameState {
-  return settle(previewAction(prev, player, action))
+  const s = previewAction(prev, player, action)
+  if (action.type === 'defend' && s.options.cheat && s.players[player].human) {
+    const pair = s.table[action.pair]
+    const card = pair.defense
+    if (card && !beats(card, pair.attack, s.trump)) {
+      const watchers = s.players.filter((p) => !p.human && !p.out && p.id !== player)
+      // Deterministic from the game's own state, so a replay of the same game catches the same cheats.
+      const roll = mulberry32(((s.options.seed ?? 1) + s.deck.length * 7 + s.discard.length * 13 + s.table.length * 17 + card.rank * 31) >>> 0)
+      if (watchers.length > 0 && roll() < CATCH_CHANCE) {
+        const by = watchers[Math.floor(roll() * watchers.length)].id
+        pair.defense = null
+        s.players[player].hand.push(card)
+        s.taking = true
+        s.passed = []
+        s.lastCaught = { by, player }
+      }
+    }
+  }
+  return settle(s)
 }
 
 /**
@@ -232,12 +263,17 @@ export function previewAction(prev: GameState, player: number, action: Action): 
     for (const id of action.cardIds) s.table.push({ attack: removeFromHand(s.players[player], id), defense: null })
     s.passed = []
     s.lastAction = { player, action }
+    s.lastCaught = null
     return s
   }
+  if (action.type === 'accuse') return accuse(prev, player, action.pair)
+  if (action.type === 'bluff') return bluff(prev, player, action)
   if (!legalActions(prev, player).some((a) => sameAction(a, action))) throw new Error(`Illegal action ${JSON.stringify(action)} by ${player}`)
   const s: GameState = structuredClone(prev)
   const p = s.players[player]
   s.lastAction = { player, action }
+  s.lastCaught = null
+  s.falseAlarm = null
 
   switch (action.type) {
     case 'attack':
@@ -267,6 +303,42 @@ export function previewAction(prev: GameState, player: number, action: Action): 
   return s
 }
 
+function bluff(prev: GameState, player: number, action: Extract<Action, { type: 'bluff' }>): GameState {
+  const pl = prev.players[player]
+  const open = prev.table[action.pair]
+  if (!prev.options.cheat || pl.human || currentActor(prev) !== player || player !== prev.defender || prev.taking || !open || open.defense) throw new Error('Illegal bluff')
+  const s: GameState = structuredClone(prev)
+  s.lastAction = { player, action }
+  s.lastCaught = null
+  s.falseAlarm = null
+  const card = removeFromHand(s.players[player], action.cardId)
+  s.table[action.pair].defense = card
+  if (!beats(card, open.attack, s.trump)) s.bluffs = [...(s.bluffs ?? []), card.id]
+  s.passed = []
+  return s
+}
+
+/** A person taps a cover: a real trick returns it to the cheater, who takes the table; a wrong guess is only noted. */
+function accuse(prev: GameState, player: number, pair: number): GameState {
+  const open = prev.table[pair]
+  if (!prev.options.cheat || !prev.players[player].human || player === prev.defender || !open?.defense) throw new Error('Illegal accusation')
+  const s: GameState = structuredClone(prev)
+  s.lastCaught = null
+  s.falseAlarm = null
+  const card = s.table[pair].defense!
+  if (s.bluffs?.includes(card.id)) {
+    s.table[pair].defense = null
+    s.players[s.defender].hand.push(card)
+    s.bluffs = s.bluffs.filter((id) => id !== card.id)
+    s.taking = true
+    s.passed = []
+    s.lastCaught = { by: player, player: s.defender }
+  } else {
+    s.falseAlarm = { by: player }
+  }
+  return s
+}
+
 /** Skip attackers with nothing to throw and close the round once everyone is done. */
 function settle(s: GameState): GameState {
   if (s.table.length === 0 || (!s.taking && unbeaten(s) > 0)) return s
@@ -285,6 +357,7 @@ function endRound(s: GameState): GameState {
   if (took) s.players[s.defender].hand.push(...cards)
   else s.discard.push(...cards)
   s.lastRound = { end: took ? 'taken' : 'beaten', defender: s.defender }
+  s.bluffs = []
   s.table = []
 
   const drawOrder = [...attackOrder(s), s.defender]
@@ -324,5 +397,6 @@ export function viewFor(s: GameState, seat: number): GameState {
     players: s.players.map((p) => (p.id === seat ? p : { ...p, hand: p.hand.map(hide) })),
     deck: s.deck.map((c, i) => (i === 0 ? c : hide(c))),
     discard: s.discard.map(hide),
+    bluffs: [],
   }
 }
