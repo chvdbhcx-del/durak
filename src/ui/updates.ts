@@ -108,7 +108,9 @@ async function check() {
     if (!zip) throw new Error('в релизе нет веб-сборки')
     emit({ kind: 'downloading', version })
     note(`Скачиваем версию ${version}…`)
-    const bundle = await CapacitorUpdater.download({ url: zip.browser_download_url, version })
+    const checksum = /sha256:\s*([0-9a-f]{64})/i.exec(release.body ?? '')?.[1]?.toLowerCase()
+    if (!checksum) throw new Error('в релизе нет контрольной суммы')
+    const bundle = await CapacitorUpdater.download({ url: zip.browser_download_url, version, checksum })
     await CapacitorUpdater.next({ id: bundle.id })
     // Otherwise the updater would swap bundles the moment the app goes to the background, mid-game included.
     await CapacitorUpdater.setMultiDelay({ delayConditions: [{ kind: 'kill' }] })
