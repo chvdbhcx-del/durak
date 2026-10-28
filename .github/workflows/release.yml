@@ -1,0 +1,73 @@
+name: Release
+
+# Every merge to main publishes a release: a signed APK, the web bundle for
+# over-the-air updates, and update.json that installed apps poll.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      VERSION_NAME: 1.0.${{ github.run_number }}
+      VERSION_CODE: ${{ github.run_number }}
+      WEB_VERSION: 1.0.${{ github.run_number }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      # Without a release key, keep the debug key stable between runs so debug APKs still upgrade.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+      - name: Package the over-the-air bundle
+        run: |
+          (cd dist && zip -qr ../durak-web-$VERSION_NAME.zip .)
+          gh release download --repo ${{ github.repository }} --pattern update.json --output previous-update.json 2>/dev/null || true
+          node scripts/release-manifest.mjs "$VERSION_NAME" "$VERSION_CODE" \
+            "https://github.com/${{ github.repository }}/releases/download/v$VERSION_NAME/durak-web-$VERSION_NAME.zip" previous-update.json
+
+      - name: Build the Android APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          npx cap sync android
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/release.jks"
+            (cd android && ./gradlew assembleRelease --no-daemon)
+            cp android/app/build/outputs/apk/release/app-release.apk "Durak-$VERSION_NAME.apk"
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set, publishing a debug-signed APK"
+            (cd android && ./gradlew assembleDebug --no-daemon)
+            cp android/app/build/outputs/apk/debug/app-debug.apk "Durak-$VERSION_NAME-debug.apk"
+          fi
+
+      - name: Publish the release
+        run: |
+          gh release create "v$VERSION_NAME" --repo ${{ github.repository }} --target "$GITHUB_SHA" \
+            --title "Дурак $VERSION_NAME" --latest \
+            --notes "Скачайте APK ниже и установите на Android. Уже установленное приложение обновит игру само." \
+            Durak-*.apk "durak-web-$VERSION_NAME.zip" update.json
