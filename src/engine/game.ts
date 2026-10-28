@@ -4,6 +4,8 @@ export type Mode = 'podkidnoy' | 'perevodnoy'
 
 export interface Options {
   players: number
+  /** seats played by people; the rest are bots. Defaults to just `human`. */
+  humans?: number[]
   deckSize: DeckSize
   mode: Mode
   names: string[]
@@ -65,13 +67,14 @@ export function maxPlayers(deckSize: DeckSize) {
 
 export function newGame(options: Options): GameState {
   const rng = mulberry32(options.seed ?? Date.now())
-  const deck = shuffle(makeDeck(options.deckSize), rng)
+  // Ids are opaque per game so an online view can hide a card's face without hiding which card moved.
+  const deck = shuffle(makeDeck(options.deckSize), rng).map((c, i) => ({ ...c, id: `${Math.floor(rng() * 1e9).toString(36)}${i}` }))
   const trumpCard = deck[0]
   const players: Player[] = Array.from({ length: options.players }, (_, id) => ({
     id,
     name: options.names[id] ?? `Игрок ${id + 1}`,
     hand: [],
-    human: id === options.human,
+    human: options.humans ? options.humans.includes(id) : id === options.human,
     out: false,
   }))
   for (let round = 0; round < HAND_SIZE; round++) for (const p of players) p.hand.push(deck.pop()!)
@@ -274,4 +277,15 @@ function endRound(s: GameState): GameState {
 
 export function cardCount(s: GameState) {
   return s.deck.length + s.discard.length + s.table.reduce((n, p) => n + (p.defense ? 2 : 1), 0) + s.players.reduce((n, p) => n + p.hand.length, 0)
+}
+
+/** What one seat may see: other hands and the closed deck lose their faces, ids stay. */
+export function viewFor(s: GameState, seat: number): GameState {
+  const hide = (c: Card): Card => ({ id: c.id, suit: 'S', rank: 0 })
+  return {
+    ...s,
+    players: s.players.map((p) => (p.id === seat ? p : { ...p, hand: p.hand.map(hide) })),
+    deck: s.deck.map((c, i) => (i === 0 ? c : hide(c))),
+    discard: s.discard.map(hide),
+  }
 }
