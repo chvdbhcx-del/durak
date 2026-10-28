@@ -5,7 +5,7 @@ import { applyNow, RELEASES_URL, UpdateState } from './updates'
 /** Floating pill that tells the player a new version is ready. */
 export function UpdateToast({ state }: { state: UpdateState }) {
   const [hidden, setHidden] = useState<string | null>(null)
-  const visible = (state.kind === 'ready' || state.kind === 'needs-app') && hidden !== state.version
+  const visible = (state.kind === 'ready' || state.kind === 'applying' || state.kind === 'needs-app') && hidden !== state.version
   return (
     <AnimatePresence>
       {visible && (
@@ -19,11 +19,11 @@ export function UpdateToast({ state }: { state: UpdateState }) {
         >
           <span className="toast-dot" aria-hidden="true" />
           <span className="toast-text">
-            {state.kind === 'ready' ? `Версия ${state.version} скачана` : `Вышло приложение ${state.version}`}
+            {state.kind === 'applying' ? `Обновляем до ${state.version}…` : state.kind === 'ready' ? `Версия ${state.version} скачана, включится после партии` : `Вышло приложение ${state.version}`}
           </span>
-          {state.kind === 'ready' ? (
+          {state.kind === 'applying' ? null : state.kind === 'ready' ? (
             <motion.button type="button" className="primary small" whileTap={{ scale: 0.94 }} onClick={() => applyNow(state.bundle)}>
-              Обновить
+              Сейчас
             </motion.button>
           ) : (
             <a className="primary small" href={RELEASES_URL} target="_blank" rel="noreferrer">

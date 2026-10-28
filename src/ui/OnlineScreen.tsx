@@ -136,6 +136,13 @@ export function OnlineScreen({ online, settings, onChange, initialCode, onBack }
       </header>
 
       <div className="screen-body">
+        <AnimatePresence>
+          {online.reconnecting && (
+            <motion.p key="reconnecting" className="reconnecting inline" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
+              Восстанавливаем связь…
+            </motion.p>
+          )}
+        </AnimatePresence>
         <AnimatePresence mode="wait">
           {phase === 'idle' && (
             <motion.div key={`idle-${mode}`} className="online-block" variants={sheetList} initial="hidden" animate="shown" exit={{ opacity: 0, y: -10 }}>

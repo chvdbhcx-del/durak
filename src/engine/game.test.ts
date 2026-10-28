@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { beats, Card } from './cards'
 import { chooseAction } from './bot'
-import { applyAction, cardCount, currentActor, GameState, legalActions, newGame, Options } from './game'
+import { applyAction, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options } from './game'
 
 const opts = (o: Partial<Options> = {}): Options => ({
   players: 2,
@@ -108,4 +108,31 @@ describe('full games', () => {
           }
         }
       })
+})
+
+describe('throwing several cards', () => {
+  it('leads with a pair of one rank and refuses mixed ranks', () => {
+    const s = position([[card('H', 7), card('D', 7), card('S', 12)], [card('S', 6), card('S', 8), card('D', 10)]])
+    expect(canThrow(s, 0, ['H7', 'D7'])).toBe(true)
+    expect(canThrow(s, 0, ['H7', 'S12'])).toBe(false)
+    const next = applyAction(s, 0, { type: 'throw', cardIds: ['H7', 'D7'] })
+    expect(next.table.length).toBe(2)
+    expect(currentActor(next)).toBe(1)
+  })
+
+  it('never throws more than the defender can cover', () => {
+    const s = position([[card('H', 7), card('D', 7), card('S', 7)], [card('S', 6), card('S', 8)]])
+    expect(canThrow(s, 0, ['H7', 'D7'])).toBe(true)
+    expect(canThrow(s, 0, ['H7', 'D7', 'S7'])).toBe(false)
+  })
+
+  it('waits for a person to say "bito" even with nothing to throw', () => {
+    let s = position([[card('H', 7), card('D', 9)], [card('H', 10), card('S', 6)]], { human: 0 })
+    s = applyAction(s, 0, { type: 'attack', cardId: 'H7' })
+    s = applyAction(s, 1, { type: 'defend', cardId: 'H10', pair: 0 })
+    expect(currentActor(s)).toBe(0)
+    expect(legalActions(s, 0)).toEqual([{ type: 'pass' }])
+    s = applyAction(s, 0, { type: 'pass' })
+    expect(s.discard.length).toBe(2)
+  })
 })

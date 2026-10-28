@@ -29,6 +29,8 @@ export interface Pair {
 
 export type Action =
   | { type: 'attack'; cardId: string }
+  /** several cards at once: an opening lead of one rank, or a batch of throw-ins */
+  | { type: 'throw'; cardIds: string[] }
   | { type: 'defend'; cardId: string; pair: number }
   | { type: 'transfer'; cardId: string }
   | { type: 'take' }
@@ -197,7 +199,38 @@ function sameAction(a: Action, b: Action) {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
+/** Whether `player` may put all of `cardIds` down in one go, checked card by card. */
+export function canThrow(s: GameState, player: number, cardIds: string[]): boolean {
+  if (cardIds.length === 0 || new Set(cardIds).size !== cardIds.length) return false
+  if (!legalActions(s, player).some((a) => a.type === 'attack')) return false
+  const t: GameState = structuredClone(s)
+  const hand = t.players[player].hand
+  for (const id of cardIds) {
+    const card = hand.find((c) => c.id === id)
+    if (!card) return false
+    if (t.table.length > 0 && (!tableRanks(t).has(card.rank) || !canThrowMore(t))) return false
+    t.table.push({ attack: removeFromHand(t.players[player], id), defense: null })
+  }
+  return true
+}
+
 export function applyAction(prev: GameState, player: number, action: Action): GameState {
+  return settle(previewAction(prev, player, action))
+}
+
+/**
+ * The move on its own, without closing the round afterwards: what the table looks like
+ * while a player is still lining up cards before confirming them.
+ */
+export function previewAction(prev: GameState, player: number, action: Action): GameState {
+  if (action.type === 'throw') {
+    if (!canThrow(prev, player, action.cardIds)) throw new Error(`Illegal throw ${JSON.stringify(action.cardIds)} by ${player}`)
+    const s: GameState = structuredClone(prev)
+    for (const id of action.cardIds) s.table.push({ attack: removeFromHand(s.players[player], id), defense: null })
+    s.passed = []
+    s.lastAction = { player, action }
+    return s
+  }
   if (!legalActions(prev, player).some((a) => sameAction(a, action))) throw new Error(`Illegal action ${JSON.stringify(action)} by ${player}`)
   const s: GameState = structuredClone(prev)
   const p = s.players[player]
@@ -228,7 +261,7 @@ export function applyAction(prev: GameState, player: number, action: Action): Ga
       s.passed.push(player)
       break
   }
-  return settle(s)
+  return s
 }
 
 /** Skip attackers with nothing to throw and close the round once everyone is done. */
@@ -236,7 +269,8 @@ function settle(s: GameState): GameState {
   if (s.table.length === 0 || (!s.taking && unbeaten(s) > 0)) return s
   for (const id of attackOrder(s)) {
     if (s.passed.includes(id)) continue
-    if (throwInCards(s, id).length > 0) return s
+    // People always confirm with a button, even when they have nothing to add.
+    if (s.players[id].human || throwInCards(s, id).length > 0) return s
     s.passed.push(id)
   }
   return endRound(s)

@@ -2,7 +2,8 @@ import { motion } from 'framer-motion'
 import type { Card } from '../engine/cards'
 import { CardView } from './CardView'
 import type { Settings, Stats } from './settings'
-import { WEB_VERSION } from './updates'
+import { useEffect, useState } from 'react'
+import { UpdateLog, watchUpdateLog, WEB_VERSION } from './updates'
 
 interface Props {
   settings: Settings
@@ -41,8 +42,15 @@ const enter = (delay: number) => ({
   transition: { delay, type: 'spring', stiffness: 380, damping: 30 },
 })
 
+function useUpdateLog() {
+  const [log, setLog] = useState<UpdateLog | null>(null)
+  useEffect(() => watchUpdateLog(setLog), [])
+  return log
+}
+
 export function MainMenu({ settings, stats, canContinue, onContinue, onPlay, onOpen }: Props) {
   const setup = `${settings.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'} · ${settings.deckSize} карт · ${settings.opponents} ${settings.opponents === 1 ? 'соперник' : settings.opponents < 5 ? 'соперника' : 'соперников'}`
+  const updateLog = useUpdateLog()
   return (
     <motion.main className="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.25 }}>
       <div className="menu-hero">
@@ -99,6 +107,7 @@ export function MainMenu({ settings, stats, canContinue, onContinue, onPlay, onO
 
       <motion.p className="menu-version" {...enter(0.9)}>
         Версия {WEB_VERSION}
+        {updateLog && <span className="update-log">{updateLog.text}</span>}
       </motion.p>
     </motion.main>
   )
