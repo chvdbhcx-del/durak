@@ -42,17 +42,23 @@ function burst(c: AudioContext, at: number, { dur, freq, q, gain, flutter = 0 }:
   filter.Q.value = q
   filter.frequency.setValueAtTime(freq * 0.7, at)
   filter.frequency.exponentialRampToValueAtTime(freq * 1.25, at + dur)
+  // Everything above a few kHz is what makes noise sound like a tick, so it is rolled off.
+  const soft = c.createBiquadFilter()
+  soft.type = 'lowpass'
+  soft.frequency.value = 3200
+  soft.Q.value = 0.4
   const amp = c.createGain()
   amp.gain.setValueAtTime(0.0001, at)
-  amp.gain.exponentialRampToValueAtTime(gain, at + Math.min(0.012, dur / 4))
+  // A slow swell, not a click: the sound grows into the middle and fades out.
+  amp.gain.exponentialRampToValueAtTime(gain, at + dur * 0.35)
   // A few small dips make a sweep sound like several cards instead of one hiss.
   for (let i = 1; i <= flutter; i++) {
-    const t = at + (dur * i) / (flutter + 1)
+    const t = at + dur * (0.35 + (0.55 * i) / (flutter + 1))
     amp.gain.exponentialRampToValueAtTime(gain * 0.35, t - dur * 0.04)
     amp.gain.exponentialRampToValueAtTime(gain * 0.9, t + dur * 0.03)
   }
   amp.gain.exponentialRampToValueAtTime(0.0001, at + dur)
-  src.connect(filter).connect(amp).connect(c.destination)
+  src.connect(filter).connect(soft).connect(amp).connect(c.destination)
   src.start(at, Math.random() * 0.5)
   src.stop(at + dur + 0.02)
 }
@@ -77,8 +83,8 @@ export function playCard(delay = 0) {
   const c = audio()
   if (!c) return
   const t = c.currentTime + delay
-  burst(c, t, { dur: 0.11, freq: 2600, q: 0.9, gain: 0.5 })
-  burst(c, t + 0.015, { dur: 0.07, freq: 900, q: 1.4, gain: 0.35 })
+  burst(c, t, { dur: 0.22, freq: 1500, q: 0.45, gain: 0.2, flutter: 2 })
+  burst(c, t + 0.03, { dur: 0.16, freq: 700, q: 0.6, gain: 0.12 })
 }
 
 /** A card flicked out of the deck to a hand. */
@@ -86,7 +92,7 @@ export function playDeal(delay = 0) {
   const c = audio()
   if (!c) return
   const t = c.currentTime + delay
-  burst(c, t, { dur: 0.085, freq: 3600, q: 1.1, gain: 0.34 })
+  burst(c, t, { dur: 0.17, freq: 1900, q: 0.5, gain: 0.14, flutter: 1 })
 }
 
 /** The table swept into the discard pile or into a hand: a longer shuffle. */
@@ -94,5 +100,5 @@ export function playSweep(delay = 0, cards = 4) {
   const c = audio()
   if (!c) return
   const t = c.currentTime + delay
-  burst(c, t, { dur: Math.min(0.55, 0.28 + cards * 0.05), freq: 2200, q: 0.7, gain: 0.5, flutter: Math.min(4, cards) })
+  burst(c, t, { dur: Math.min(0.8, 0.4 + cards * 0.07), freq: 1400, q: 0.4, gain: 0.2, flutter: Math.min(5, cards + 1) })
 }

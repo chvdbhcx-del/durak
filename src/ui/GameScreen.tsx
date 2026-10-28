@@ -527,10 +527,11 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                 )}
               </AnimatePresence>
             </div>
-            <span className="zone-label">
-              <b>{game.deck.length > 0 ? `${deckCards.length + 1} в колоде` : 'Колода пуста'}</b>
-              <span>козырь {SUIT_NAME[game.trump]}</span>
-            </span>
+            {game.deck.length > 0 && (
+              <span className="zone-label">
+                <b>{deckCards.length + 1} в колоде</b>
+              </span>
+            )}
           </div>
 
           <div className="battle">
