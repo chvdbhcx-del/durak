@@ -136,3 +136,20 @@ describe('throwing several cards', () => {
     expect(s.discard.length).toBe(2)
   })
 })
+
+describe('cheater mode', () => {
+  it('lets a person cover with a card that does not beat, but never a bot', () => {
+    const hands = [[card('H', 7), card('D', 9)], [card('D', 8), card('S', 6)]]
+    const honest = applyAction(position(hands, { human: 1 }), 0, { type: 'attack', cardId: 'H7' })
+    expect(legalActions(honest, 1)).not.toContainEqual({ type: 'defend', cardId: 'D8', pair: 0 })
+
+    const person = applyAction(position(hands, { human: 1, cheat: true }), 0, { type: 'attack', cardId: 'H7' })
+    expect(legalActions(person, 1)).toContainEqual({ type: 'defend', cardId: 'D8', pair: 0 })
+    const covered = applyAction(person, 1, { type: 'defend', cardId: 'D8', pair: 0 })
+    // Nothing more to throw in, so the covered round goes straight to the discard.
+    expect(covered.discard.map((c) => c.id).sort()).toEqual(['D8', 'H7'])
+
+    const bot = applyAction(position(hands, { human: 0, cheat: true }), 0, { type: 'attack', cardId: 'H7' })
+    expect(legalActions(bot, 1)).not.toContainEqual({ type: 'defend', cardId: 'D8', pair: 0 })
+  })
+})

@@ -14,9 +14,17 @@ interface Props {
   onClick?: MouseEventHandler
   disabled?: boolean
   label?: string
+  /** a slow, staggered flight, used when cards are dealt out of the deck or swept away */
+  flight?: Flight
+}
+
+export interface Flight {
+  delay: number
+  kind: 'draw' | 'discard' | 'take'
 }
 
 export const cardSpring = { type: 'spring', stiffness: 380, damping: 32, mass: 0.85 } as const
+const flightSpring = { type: 'spring', stiffness: 130, damping: 21, mass: 1 } as const
 const flipSpring = { type: 'spring', stiffness: 260, damping: 24 } as const
 
 /**
@@ -26,7 +34,8 @@ const flipSpring = { type: 'spring', stiffness: 260, damping: 24 } as const
  */
 const lastFace = new Map<string, boolean>()
 
-export function CardView({ card, faceUp, trump, size = 'full', className = '', style, animate, onClick, disabled, label }: Props) {
+export function CardView({ card, faceUp, trump, size = 'full', className = '', style, animate, onClick, disabled, label, flight }: Props) {
+  const transition = flight ? { ...flightSpring, delay: flight.delay } : cardSpring
   const name = `${rankLabel(card.rank)} ${SUIT_NAME[card.suit]}`
   const was = lastFace.get(card.id) ?? faceUp
   useEffect(() => {
@@ -44,10 +53,6 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
         <span className="pip">
           <SuitIcon suit={card.suit} size="100%" />
         </span>
-        <span className="corner br">
-          <b>{rankLabel(card.rank)}</b>
-          <SuitIcon suit={card.suit} />
-        </span>
       </span>
       <span className="side back">
         <span className="back-art" />
@@ -60,7 +65,7 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
       <motion.button
         type="button"
         layoutId={card.id}
-        transition={cardSpring}
+        transition={transition}
         className={classes}
         style={style}
         animate={animate}
@@ -73,7 +78,7 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
       </motion.button>
     )
   return (
-    <motion.div layoutId={card.id} transition={cardSpring} className={classes} style={style} animate={animate} aria-label={faceUp ? name : undefined} role={faceUp ? 'img' : undefined}>
+    <motion.div layoutId={card.id} transition={transition} className={classes} style={style} animate={animate} aria-label={faceUp ? name : undefined} role={faceUp ? 'img' : undefined}>
       {inner}
     </motion.div>
   )

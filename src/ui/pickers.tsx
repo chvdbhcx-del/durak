@@ -197,3 +197,56 @@ export function ThemePicker({ value, onChange }: { value: Theme; onChange: (t: T
     </Group>
   )
 }
+
+export function CheatPicker({ value, onChange }: { value: boolean; onChange: (on: boolean) => void }) {
+  const options: { value: boolean; title: string; note: string }[] = [
+    { value: false, title: 'По правилам', note: 'Покрывать можно только старшей картой' },
+    { value: true, title: 'Шулер', note: 'Можно покрыть любой картой, даже неподходящей' },
+  ]
+  return (
+    <Group title="Шулер">
+      <div className="tiles two">
+        {options.map((o) => (
+          <Tile key={String(o.value)} group="cheat" on={value === o.value} onClick={() => onChange(o.value)} label={o.title}>
+            <span className={`cheat-art ${o.value ? 'on' : 'off'}`} aria-hidden="true">
+              <MiniCard rank="6" suit="H" red tilt={-8} x={-10} />
+              <MiniCard rank={o.value ? '6' : 'Т'} suit={o.value ? 'C' : 'H'} red={!o.value} tilt={8} x={10} />
+              <span className="art-badge">{o.value ? '!' : '✓'}</span>
+            </span>
+            <span className="tile-title">{o.title}</span>
+            <span className="tile-note">{o.note}</span>
+          </Tile>
+        ))}
+      </div>
+    </Group>
+  )
+}
+
+export function SoundPicker({ value, onChange }: { value: boolean; onChange: (on: boolean) => void }) {
+  const options: { value: boolean; title: string; note: string }[] = [
+    { value: true, title: 'Вкл', note: 'Шуршание карт' },
+    { value: false, title: 'Выкл', note: 'Без звука' },
+  ]
+  return (
+    <Group title="Звук">
+      <div className="tiles two">
+        {options.map((o) => (
+          <Tile key={String(o.value)} group="sound" on={value === o.value} onClick={() => onChange(o.value)} label={o.title}>
+            <span className={`sound-art ${o.value ? 'on' : 'off'}`} aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="28" height="28">
+                <path fill="currentColor" d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4H4z" />
+                {o.value ? (
+                  <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11" />
+                ) : (
+                  <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" d="M16 9.5l5 5M21 9.5l-5 5" />
+                )}
+              </svg>
+            </span>
+            <span className="tile-title">{o.title}</span>
+            <span className="tile-note">{o.note}</span>
+          </Tile>
+        ))}
+      </div>
+    </Group>
+  )
+}

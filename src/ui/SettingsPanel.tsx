@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { maxPlayers } from '../engine/game'
-import { DeckPicker, ModePicker, OpponentsPicker, SpeedPicker, ThemePicker } from './pickers'
+import { CheatPicker, DeckPicker, ModePicker, OpponentsPicker, SoundPicker, SpeedPicker, ThemePicker } from './pickers'
 import type { Settings } from './settings'
 import { Sheet } from './Sheet'
 
@@ -25,7 +25,7 @@ export function SettingsPanel({ settings, onChange, onStart, onClose, inGame }: 
       onClose={onClose}
       footer={
         <>
-          <p className="foot-note">{inGame ? 'Тема и скорость меняются сразу. Режим, колода и соперники вступят в силу в новой партии.' : 'Всё сохраняется само.'}</p>
+          <p className="foot-note">{inGame ? 'Тема, звук и скорость меняются сразу. Режим, колода и соперники вступят в силу в новой партии.' : 'Всё сохраняется само.'}</p>
           <motion.button type="button" className="primary big" whileTap={{ scale: 0.96 }} onClick={() => onStart(settings)}>
             {inGame ? 'Новая партия с ботами' : 'Играть с ботами'}
           </motion.button>
@@ -35,7 +35,9 @@ export function SettingsPanel({ settings, onChange, onStart, onClose, inGame }: 
       <ModePicker value={settings.mode} onChange={(mode) => set({ mode })} />
       <OpponentsPicker value={settings.opponents} max={maxPlayers(settings.deckSize) - 1} onChange={(opponents) => set({ opponents })} />
       <DeckPicker value={settings.deckSize} onChange={(deckSize) => set({ deckSize })} />
+      <CheatPicker value={settings.cheat} onChange={(cheat) => set({ cheat })} />
       <SpeedPicker value={settings.speed} onChange={(speed) => set({ speed })} />
+      <SoundPicker value={settings.sound} onChange={(sound) => set({ sound })} />
       <ThemePicker value={settings.theme} onChange={(theme) => set({ theme })} />
     </Sheet>
   )

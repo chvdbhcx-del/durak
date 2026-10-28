@@ -4,7 +4,7 @@ import { maxPlayers } from '../engine/game'
 import { CODE_LENGTH, normalizeCode } from '../net/room'
 import type { Online } from '../net/useOnline'
 import { BackButton } from './PlayScreen'
-import { BOT_NAMES, DeckPicker, Group, ModePicker, plural } from './pickers'
+import { BOT_NAMES, CheatPicker, DeckPicker, Group, ModePicker, plural } from './pickers'
 import type { Settings } from './settings'
 import { sheetList } from './Sheet'
 
@@ -157,7 +157,7 @@ export function OnlineScreen({ online, settings, onChange, initialCode, onBack }
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
-                    onClick={() => online.create({ name: settings.name.trim() || 'Игрок', mode: settings.mode, deckSize: settings.deckSize })}
+                    onClick={() => online.create({ name: settings.name.trim() || 'Игрок', mode: settings.mode, deckSize: settings.deckSize, cheat: settings.cheat })}
                   >
                     <span className="way-art plus" aria-hidden="true">
                       +
@@ -277,6 +277,7 @@ export function OnlineScreen({ online, settings, onChange, initialCode, onBack }
                 <>
                   <ModePicker value={lobby.mode} onChange={(m) => online.setLobby({ mode: m })} />
                   <DeckPicker value={lobby.deckSize} onChange={(d) => online.setLobby({ deckSize: d })} />
+                  <CheatPicker value={!!lobby.cheat} onChange={(c) => online.setLobby({ cheat: c })} />
                   <motion.button type="button" className="primary big" disabled={players < 2} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={online.start}>
                     {players < 2 ? 'Ждём хотя бы одного игрока' : 'Начать игру'}
                   </motion.button>

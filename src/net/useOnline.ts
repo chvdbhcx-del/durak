@@ -17,12 +17,12 @@ export interface Online {
   notice: string | null
   /** the connection dropped (e.g. the app was in the background) and is coming back */
   reconnecting: boolean
-  create: (opts: { name: string; mode: Mode; deckSize: DeckSize }) => void
+  create: (opts: { name: string; mode: Mode; deckSize: DeckSize; cheat?: boolean }) => void
   join: (code: string, name: string) => void
   leave: () => void
   start: () => void
   act: (action: Action) => void
-  setLobby: (patch: Partial<Pick<LobbyInfo, 'bots' | 'mode' | 'deckSize'>>) => void
+  setLobby: (patch: Partial<Pick<LobbyInfo, 'bots' | 'mode' | 'deckSize' | 'cheat'>>) => void
   kick: (token: string) => void
   /** host only: let the bot in `actor`'s seat make its move */
   stepBot: (actor: number) => void
@@ -139,7 +139,7 @@ export function useOnline(token: string): Online {
     }
   }, [])
 
-  const openHost = (name: string, restore: Saved | null, fresh?: { mode: Mode; deckSize: DeckSize }) => {
+  const openHost = (name: string, restore: Saved | null, fresh?: { mode: Mode; deckSize: DeckSize; cheat?: boolean }) => {
     nameRef.current = name
     setRole('host')
     setPhase('connecting')
@@ -155,7 +155,7 @@ export function useOnline(token: string): Online {
       onReady: (code) => {
         const l: LobbyInfo = restore?.lobby
           ? { ...restore.lobby, members: restore.lobby.members.map((m) => ({ ...m, online: m.token === token })) }
-          : { code, members: [{ token, name, host: true, online: true }], bots: 0, mode: fresh!.mode, deckSize: fresh!.deckSize }
+          : { code, members: [{ token, name, host: true, online: true }], bots: 0, mode: fresh!.mode, deckSize: fresh!.deckSize, cheat: fresh!.cheat }
         lobbyRef.current = l
         setLobbyState(l)
         setPhase(restore?.game && !restore.game.over ? 'playing' : 'lobby')
@@ -222,7 +222,7 @@ export function useOnline(token: string): Online {
     }, restore?.code)
   }
 
-  const create: Online['create'] = ({ name, mode, deckSize }) => openHost(name, null, { mode, deckSize })
+  const create: Online['create'] = ({ name, mode, deckSize, cheat }) => openHost(name, null, { mode, deckSize, cheat })
 
   const join: Online['join'] = (code, name) => {
     nameRef.current = name
@@ -292,6 +292,7 @@ export function useOnline(token: string): Online {
       players,
       deckSize: l.deckSize,
       mode: l.mode,
+      cheat: l.cheat,
       names,
       human: 0,
       humans: online.map((_, i) => i),

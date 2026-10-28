@@ -24,6 +24,7 @@ export interface LobbyInfo {
   bots: number
   mode: GameState['options']['mode']
   deckSize: GameState['options']['deckSize']
+  cheat?: boolean
 }
 
 export type ToGuest =
