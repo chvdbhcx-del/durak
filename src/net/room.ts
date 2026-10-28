@@ -66,44 +66,75 @@ function describe(err: { type?: string }) {
   }
 }
 
+/** Errors that mean "the line dropped" (a phone app sent to the background, a flaky network), not "this can't work". */
+const TRANSIENT = new Set(['network', 'server-error', 'socket-error', 'socket-closed', 'disconnected', 'webrtc'])
+
 export interface HostEvents {
   onReady: (code: string) => void
   onJoin: (token: string, name: string) => void
   onLeave: (token: string) => void
   onAction: (token: string, action: Action) => void
   onError: (message: string) => void
+  /** true while the link to the room broker is down and being restored */
+  onReconnecting: (on: boolean) => void
 }
 
 export class HostRoom {
   private peer: Peer | null = null
   private conns = new Map<string, DataConnection>()
+  private ready = false
+  private closed = false
+  private retry: ReturnType<typeof setTimeout> | null = null
   code = ''
 
-  constructor(private events: HostEvents) {
-    this.open(0)
+  /** `code` reopens a room that already exists, e.g. after the app was reloaded. */
+  constructor(
+    private events: HostEvents,
+    code?: string,
+  ) {
+    this.code = code ?? randomCode()
+    this.open(0, !!code)
   }
 
-  private open(attempt: number) {
-    this.code = randomCode()
+  private open(attempt: number, keepCode: boolean) {
+    if (this.closed) return
     const peer = new Peer(PREFIX + this.code, peerOptions)
     this.peer = peer
-    peer.on('open', () => this.events.onReady(this.code))
-    peer.on('error', (err) => {
-      // Someone already holds this code: pick another.
-      if (err.type === 'unavailable-id' && attempt < 5) {
-        peer.destroy()
-        this.open(attempt + 1)
-      } else this.events.onError(describe(err))
+    peer.on('open', () => {
+      this.events.onReconnecting(false)
+      if (!this.ready) {
+        this.ready = true
+        this.events.onReady(this.code)
+      }
     })
-    peer.on('disconnected', () => peer.reconnect())
+    peer.on('error', (err) => {
+      if (this.closed || this.peer !== peer) return
+      if (err.type === 'unavailable-id') {
+        peer.destroy()
+        // Our own old registration may linger for a minute after a reload: wait it out.
+        if (keepCode || this.ready) {
+          if (attempt < 25) this.later(() => this.open(attempt + 1, true), 3000)
+          else this.events.onError('Не получилось снова открыть комнату. Создайте новую.')
+        } else if (attempt < 5) {
+          this.code = randomCode()
+          this.open(attempt + 1, false)
+        } else this.events.onError(describe(err))
+        return
+      }
+      if (err.type === 'peer-unavailable') return // a guest left mid-handshake
+      if (TRANSIENT.has(err.type) && (this.ready || keepCode)) return this.recover()
+      this.events.onError(describe(err))
+    })
+    peer.on('disconnected', () => this.recover())
     peer.on('connection', (conn) => {
       let token = ''
       conn.on('data', (raw) => {
         const msg = raw as ToHost
         if (msg.t === 'hello') {
           token = msg.token
-          this.conns.get(token)?.close()
+          const old = this.conns.get(token)
           this.conns.set(token, conn)
+          if (old && old !== conn) old.close()
           this.events.onJoin(token, msg.name.slice(0, 16) || 'Гость')
         } else if (msg.t === 'act' && token) this.events.onAction(token, msg.action)
       })
@@ -114,6 +145,42 @@ export class HostRoom {
         }
       })
     })
+  }
+
+  private later(fn: () => void, ms: number) {
+    if (this.retry) clearTimeout(this.retry)
+    this.retry = setTimeout(() => {
+      this.retry = null
+      fn()
+    }, ms)
+  }
+
+  /** Restores the link to the broker; friends already connected keep playing meanwhile. */
+  private recover() {
+    const peer = this.peer
+    if (this.closed || !peer) return
+    this.events.onReconnecting(true)
+    if (peer.destroyed) return this.later(() => this.open(0, true), 1000)
+    this.later(() => {
+      if (this.peer !== peer || this.closed) return
+      if (peer.destroyed) this.open(0, true)
+      else if (peer.disconnected) {
+        try {
+          peer.reconnect()
+        } catch {
+          peer.destroy()
+          this.open(0, true)
+          return
+        }
+        // Still down a bit later: try again.
+        this.later(() => this.peer === peer && peer.disconnected && this.recover(), 5000)
+      } else this.events.onReconnecting(false)
+    }, 800)
+  }
+
+  /** Call when the app comes back to the foreground. */
+  resume() {
+    if (this.peer && (this.peer.disconnected || this.peer.destroyed)) this.recover()
   }
 
   send(token: string, msg: ToGuest) {
@@ -131,6 +198,8 @@ export class HostRoom {
   }
 
   close() {
+    this.closed = true
+    if (this.retry) clearTimeout(this.retry)
     this.broadcast({ t: 'closed', reason: 'Хозяин закрыл комнату.' })
     setTimeout(() => this.peer?.destroy(), 300)
   }
@@ -140,12 +209,19 @@ export interface GuestEvents {
   onConnected: () => void
   onMessage: (msg: ToGuest) => void
   onLost: (message: string) => void
+  onReconnecting: (on: boolean) => void
 }
+
+/** How long a guest keeps trying to get back into the room before giving up. */
+const GUEST_PATIENCE_MS = 90_000
 
 export class GuestRoom {
   private peer: Peer
   private conn: DataConnection | null = null
-  private closedByHost = false
+  private done = false
+  private everConnected = false
+  private lostAt = 0
+  private retry: ReturnType<typeof setTimeout> | null = null
 
   constructor(
     public code: string,
@@ -153,26 +229,80 @@ export class GuestRoom {
     private token: string,
     private events: GuestEvents,
   ) {
-    this.peer = new Peer(peerOptions)
-    this.peer.on('open', () => this.connect())
-    this.peer.on('error', (err) => this.events.onLost(describe(err)))
+    this.peer = this.makePeer()
+  }
+
+  private makePeer() {
+    const peer = new Peer(peerOptions)
+    peer.on('open', () => this.connect())
+    peer.on('disconnected', () => {
+      if (!this.done && this.everConnected) this.later(() => !peer.destroyed && peer.disconnected && peer.reconnect(), 1000)
+    })
+    peer.on('error', (err) => {
+      if (this.done || this.peer !== peer) return
+      if (this.everConnected && (TRANSIENT.has(err.type) || err.type === 'peer-unavailable')) return this.dropped()
+      this.done = true
+      this.events.onLost(describe(err))
+    })
+    return peer
   }
 
   private connect() {
+    if (this.done) return
+    this.conn?.close()
     const conn = this.peer.connect(PREFIX + this.code, { reliable: true })
     this.conn = conn
     conn.on('open', () => {
       conn.send({ t: 'hello', name: this.name, token: this.token } satisfies ToHost)
+      this.everConnected = true
+      this.lostAt = 0
+      this.events.onReconnecting(false)
       this.events.onConnected()
     })
     conn.on('data', (raw) => {
       const msg = raw as ToGuest
-      if (msg.t === 'closed') this.closedByHost = true
+      if (msg.t === 'closed') this.done = true
       this.events.onMessage(msg)
     })
     conn.on('close', () => {
-      if (!this.closedByHost) this.events.onLost('Связь с хозяином комнаты потеряна.')
+      if (this.conn === conn) this.dropped()
     })
+  }
+
+  private later(fn: () => void, ms: number) {
+    if (this.retry) clearTimeout(this.retry)
+    this.retry = setTimeout(() => {
+      this.retry = null
+      fn()
+    }, ms)
+  }
+
+  /** The link to the host broke: keep knocking until it answers or patience runs out. */
+  private dropped() {
+    if (this.done) return
+    if (!this.lostAt) this.lostAt = Date.now()
+    if (Date.now() - this.lostAt > GUEST_PATIENCE_MS) {
+      this.done = true
+      this.events.onLost('Связь с хозяином комнаты потеряна.')
+      return
+    }
+    this.events.onReconnecting(true)
+    this.later(() => {
+      if (this.done) return
+      if (this.peer.destroyed) this.peer = this.makePeer()
+      else if (this.peer.disconnected) this.peer.reconnect()
+      else this.connect()
+      // No answer: try again.
+      this.later(() => !this.conn?.open && this.dropped(), 6000)
+    }, 1500)
+  }
+
+  /** Call when the app comes back to the foreground. */
+  resume() {
+    if (!this.done && this.everConnected && !this.conn?.open) {
+      this.lostAt = this.lostAt || Date.now()
+      this.dropped()
+    }
   }
 
   act(action: Action) {
@@ -180,7 +310,8 @@ export class GuestRoom {
   }
 
   close() {
-    this.closedByHost = true
+    this.done = true
+    if (this.retry) clearTimeout(this.retry)
     this.conn?.close()
     setTimeout(() => this.peer.destroy(), 200)
   }

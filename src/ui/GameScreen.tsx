@@ -1,7 +1,7 @@
 import { AnimatePresence, LayoutGroup, motion, type PanInfo } from 'framer-motion'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { beats, Card, rankLabel, sortHand, SUIT_NAME } from '../engine/cards'
-import { Action, currentActor, GameState, HAND_SIZE, legalActions } from '../engine/game'
+import { Action, canThrow, currentActor, GameState, HAND_SIZE, legalActions, previewAction } from '../engine/game'
 import { CardView } from './CardView'
 import { notify, tap } from './native'
 import type { Stats } from './settings'
@@ -39,7 +39,7 @@ interface Props {
   onOpenSettings: () => void
   /** left out when this player can't start the next game (an online guest) */
   onPlayAgain?: () => void
-  room?: { code: string; notice: string | null }
+  room?: { code: string; notice: string | null; reconnecting?: boolean }
 }
 
 /** Card sizes in px: table cards and the bigger cards in your own hand. */
@@ -47,9 +47,11 @@ function useCardSizes() {
   const calc = () => {
     const w = window.innerWidth
     const h = window.innerHeight
-    const table = Math.round(Math.max(62, Math.min(118, Math.min(w * 0.2, h * 0.118))))
-    const hand = Math.round(Math.max(76, Math.min(132, Math.min(w * 0.25, h * 0.14))))
-    return { table, hand }
+    // Short landscape screens (a phone on its side) size cards by height, everything else mostly by width.
+    const flat = w > h && h < 560
+    const table = Math.round(flat ? Math.max(46, h * 0.15) : Math.max(52, Math.min(128, Math.min(w * 0.185, h * 0.105))))
+    const hand = Math.round(flat ? Math.max(54, h * 0.17) : Math.max(62, Math.min(130, Math.min(w * 0.232, h * 0.122))))
+    return { table, hand, flat }
   }
   const [s, setS] = useState(calc)
   useEffect(() => {
@@ -89,9 +91,12 @@ function useDealing(game: GameState) {
 }
 
 export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, onExit, onOpenSettings, onPlayAgain, room }: Props) {
-  const { table: cw, hand: hw } = useCardSizes()
+  const { table: cw, hand: hw, flat } = useCardSizes()
   const { dealt, dealing } = useDealing(game)
+  /** a card waiting for the player to pick which attack it covers */
   const [selected, setSelected] = useState<string | null>(null)
+  /** moves lined up on the table, made only when the player confirms */
+  const [plan, setPlan] = useState<Action[]>([])
   const [banner, setBanner] = useState<Banner | null>(null)
   const [dragging, setDragging] = useState<string | null>(null)
   const [hot, setHot] = useState<string | null>(null)
@@ -112,7 +117,24 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
 
   const actor = dealing ? null : currentActor(game)
   const legal = useMemo(() => (dealing ? [] : legalActions(game, me)), [game, dealing, me])
-  const mine = game.players[me]
+
+  // The table and hand as they would be after the lined-up moves; a plan that no longer fits is dropped.
+  const preview = useMemo(() => {
+    if (plan.length === 0 || dealing) return null
+    try {
+      return plan.reduce((s, a) => previewAction(s, me, a), game)
+    } catch {
+      return null
+    }
+  }, [game, plan, me, dealing])
+  const staged = preview ? plan : []
+  const view = preview ?? game
+  const pending = useMemo(() => new Set(staged.flatMap((a) => (a.type === 'throw' ? a.cardIds : 'cardId' in a ? [a.cardId] : []))), [staged])
+  const throwIds = staged[0]?.type === 'throw' ? staged[0].cardIds : []
+  const thrower = legal.some((a) => a.type === 'attack')
+  const viewLegal = useMemo(() => (dealing || !preview ? legal : legalActions(view, me)), [dealing, preview, legal, view, me])
+
+  const mine = view.players[me]
   const hand = useMemo(() => sortHand(mine.hand, game.trump).filter((c) => !hiddenIds.has(c.id)), [mine.hand, game.trump, hiddenIds])
 
   // Bots "think" before each move, longer when there is more on the table, so their plays can be followed.
@@ -139,6 +161,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     if (before.table.length > 0 && game.table.length === 0 && game.lastRound?.end === 'beaten') show('Бито', 'info')
     if (currentActor(game) === me && currentActor(before) !== me) tap('light')
     setSelected(null)
+    setPlan([])
   }, [game, me])
 
   useEffect(() => {
@@ -162,29 +185,95 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
 
   const play = (action: Action) => {
     setSelected(null)
+    setPlan([])
     tap(action.type === 'take' ? 'medium' : 'light')
     act(action)
   }
 
-  const actionsFor = (cardId: string) => legal.filter((a) => 'cardId' in a && a.cardId === cardId)
-  const playable = new Set(legal.flatMap((a) => ('cardId' in a ? [a.cardId] : [])))
+  const confirm = () => {
+    const moves = staged
+    setSelected(null)
+    setPlan([])
+    tap('medium')
+    for (const m of moves) act(m)
+  }
+
+  const transferSeat = nextDefender(game)
+  const optionsFor = (cardId: string) => viewLegal.filter((a) => 'cardId' in a && a.cardId === cardId)
+  const throwWith = (cardId: string): string[] | null => {
+    if (!thrower || staged.some((a) => a.type !== 'throw')) return null
+    const more = [...throwIds, cardId]
+    if (canThrow(game, me, more)) return more
+    return canThrow(game, me, [cardId]) ? [cardId] : null
+  }
+  const canStage = (cardId: string) => !!throwWith(cardId) || optionsFor(cardId).length > 0
+
+  const stage = (move: Action) => {
+    tap('light')
+    setSelected(null)
+    setPlan(move.type === 'throw' ? [move] : [...staged, move])
+  }
+
+  /** Puts a card from the hand on the table, aimed at `zone` when it was dragged somewhere. */
+  const place = (cardId: string, zone?: string | null): boolean => {
+    const ids = throwWith(cardId)
+    if (ids) {
+      if (zone && zone !== 'table' && !zone.startsWith('pair-')) return false
+      stage({ type: 'throw', cardIds: ids })
+      return true
+    }
+    const options = optionsFor(cardId)
+    const defends = options.filter((a) => a.type === 'defend')
+    const transfer = options.find((a) => a.type === 'transfer')
+    let move: Action | undefined
+    if (zone?.startsWith('pair-')) move = defends.find((a) => a.type === 'defend' && a.pair === Number(zone.slice(5)))
+    else if (zone === `seat-${transferSeat}`) move = transfer
+    else if (zone === 'table') move = transfer ?? (defends.length === 1 ? defends[0] : undefined)
+    else if (!zone) {
+      if (defends.length === 1) move = defends[0]
+      else if (defends.length > 1) {
+        tap('light')
+        setSelected((s) => (s === cardId ? null : cardId))
+        return true
+      } else move = transfer
+    }
+    if (!move) return false
+    stage(move)
+    return true
+  }
+
+  /** Takes a lined-up card back into the hand. */
+  const unstage = (cardId: string) => {
+    tap('light')
+    const first = staged[0]
+    if (first?.type === 'throw') {
+      const rest = first.cardIds.filter((id) => id !== cardId)
+      setPlan(rest.length && canThrow(game, me, rest) ? [{ type: 'throw', cardIds: rest }] : [])
+      return
+    }
+    const rest = staged.filter((a) => !('cardId' in a && a.cardId === cardId))
+    try {
+      rest.reduce((s, a) => previewAction(s, me, a), game)
+      setPlan(rest)
+    } catch {
+      setPlan([])
+    }
+  }
+
+  const playable = new Set(hand.filter((c) => canStage(c.id)).map((c) => c.id))
   const focus = dragging ?? selected
-  const focusActions = focus ? actionsFor(focus) : []
-  const targetPairs = new Set(focusActions.flatMap((a) => (a.type === 'defend' ? [a.pair] : [])))
-  const canTransferFocus = focusActions.some((a) => a.type === 'transfer')
-  const tableTarget = !!dragging && focusActions.some((a) => a.type === 'attack' || a.type === 'transfer')
-  const transferSeat = canTransferFocus ? nextDefender(game) : null
+  const focusOptions = focus ? optionsFor(focus) : []
+  const targetPairs = new Set(focusOptions.flatMap((a) => (a.type === 'defend' ? [a.pair] : [])))
+  const focusTransfers = focusOptions.some((a) => a.type === 'transfer')
+  const tableTarget = !!dragging && (!!throwWith(dragging) || focusTransfers || targetPairs.size === 1)
 
   const onCard = (card: Card) => {
     if (Date.now() - lastDragEnd.current < 300) return
-    const options = actionsFor(card.id)
-    if (options.length === 0) return
-    if (options.length === 1) return play(options[0])
-    tap('light')
-    setSelected((s) => (s === card.id ? null : card.id))
+    if (selected === card.id) return setSelected(null)
+    place(card.id)
   }
 
-  // Drag and drop: the drop zone under the finger decides the move.
+  // Drag and drop: the drop zone under the finger decides where the card goes.
   const zoneAt = (info: PanInfo) => {
     for (const el of document.elementsFromPoint(info.point.x - window.scrollX, info.point.y - window.scrollY)) {
       const zone = (el as HTMLElement).closest?.('[data-drop]') as HTMLElement | null
@@ -193,41 +282,35 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     return null
   }
 
-  const actionForDrop = (cardId: string, zone: string | null): Action | null => {
-    if (!zone) return null
-    const options = actionsFor(cardId)
-    if (zone.startsWith('pair-')) {
-      const pair = Number(zone.slice(5))
-      return options.find((a) => a.type === 'defend' && a.pair === pair) ?? null
-    }
-    const transfer = options.find((a) => a.type === 'transfer')
-    if (transfer && (zone === 'table' || zone === `seat-${transferSeat}`)) return transfer
-    if (zone === 'table') {
-      const attack = options.find((a) => a.type === 'attack')
-      if (attack) return attack
-      // Dropped on the cloth while defending a single open card: cover that one.
-      const defends = options.filter((a) => a.type === 'defend')
-      if (defends.length === 1) return defends[0]
-    }
-    return null
-  }
-
   const take = legal.find((a) => a.type === 'take')
   const pass = legal.find((a) => a.type === 'pass')
   const passLabel = game.taking ? 'Пусть берёт' : me === game.attacker ? 'Бито' : 'Пас'
+  const myTurn = actor === me && !game.over
+  const main: { label: string; tone: 'primary' | 'danger'; onClick?: () => void } =
+    staged.length > 0
+      ? {
+          label: staged[0].type === 'throw' ? (game.table.length === 0 ? 'Сходить' : 'Подкинуть') : staged[0].type === 'transfer' ? 'Перевести' : 'Покрыть',
+          tone: 'primary',
+          onClick: confirm,
+        }
+      : take && myTurn
+        ? { label: 'Беру', tone: 'danger', onClick: () => play(take) }
+        : pass && myTurn
+          ? { label: passLabel, tone: 'primary', onClick: () => play(pass) }
+          : { label: myTurn ? 'Выберите карту' : game.over ? 'Партия окончена' : 'Ход соперника', tone: 'primary' }
 
   const n = game.players.length
   const opponents = Array.from({ length: n - 1 }, (_, k) => game.players[(me + 1 + k) % n])
-  const handStep = hand.length > 1 ? Math.min(hw * 0.92, (Math.min(window.innerWidth - 32, 860) - hw) / (hand.length - 1)) : 0
+  const handStep = hand.length > 1 ? Math.min(hw * 0.92, (Math.min(window.innerWidth - 32 - (flat ? 240 : 0), 860) - hw) / (hand.length - 1)) : 0
   const miniW = Math.round(cw * 0.42)
   const deckCards = [...game.deck.slice(1), ...undealt]
-  const status = dealing ? 'Раздача…' : statusText(game, actor, me)
+  const status = dealing ? 'Раздача…' : staged.length ? planText(staged, game) : selected ? 'Выберите карту на столе, которую покрыть' : statusText(game, actor, me)
   const resultTitle = game.loser === null ? 'Ничья' : game.loser === me ? 'Вы дурак' : 'Вы не дурак'
 
   return (
     <motion.div
       className={`app ${dragging ? 'is-dragging' : ''}`}
-      style={{ ['--cw' as string]: `${cw}px`, ['--hw' as string]: `${hw}px`, ['--mini' as string]: `${miniW}px` }}
+      style={{ ['--cw' as string]: `${cw}px`, ['--hw' as string]: `${hw}px`, ['--mini' as string]: `${miniW}px`, ['--zone-cw' as string]: `${Math.round(cw * 0.74)}px` }}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 12 }}
@@ -266,6 +349,15 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
         </div>
       </motion.header>
 
+      <AnimatePresence>
+        {room?.reconnecting && (
+          <motion.div key="reconnecting" className="reconnecting" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <motion.span className="toast-dot" animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1.2, repeat: Infinity }} />
+            Восстанавливаем связь…
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <LayoutGroup>
         <section className="opponents" aria-label="Соперники">
           <AnimatePresence initial>
@@ -273,7 +365,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               const cards = p.hand.filter((c) => !hiddenIds.has(c.id))
               const step = cards.length > 1 ? Math.min(miniW * 0.42, (miniW * 2.6 - miniW) / (cards.length - 1)) : 0
               const role = p.out ? 'Вышел' : dealing ? null : p.id === game.defender ? (game.taking ? 'Берёт' : 'Отбивается') : p.id === game.attacker ? 'Ходит' : null
-              const isTransferTarget = dragging !== null && transferSeat === p.id
+              const isTransferTarget = dragging !== null && focusTransfers && transferSeat === p.id
               return (
                 <motion.div
                   key={`${game.options.seed}-${p.id}`}
@@ -346,37 +438,39 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
             </span>
           </div>
 
-          <motion.div className="battle" layout>
+          <div className="battle">
             <AnimatePresence>
-              {game.table.length === 0 && !game.over && (
+              {view.table.length === 0 && !game.over && (
                 <motion.span key="hint" className="empty-hint" {...fade}>
-                  {dealing ? 'Раздаём карты…' : actor === me ? 'Ваш ход: перетащите карту сюда' : `${game.players[game.attacker].name} ходит…`}
+                  {dealing ? 'Раздаём карты…' : actor === me ? 'Ваш ход: нажмите или перетащите карты' : `${game.players[game.attacker].name} ходит…`}
                 </motion.span>
               )}
             </AnimatePresence>
-            {game.table.map((pair, i) => {
+            {view.table.map((pair, i) => {
               const target = targetPairs.has(i)
-              const defend = target && selected ? () => play({ type: 'defend', cardId: selected, pair: i }) : undefined
+              const attackPending = pending.has(pair.attack.id)
+              const coverPending = !!pair.defense && pending.has(pair.defense.id)
+              const onPair = target && selected ? () => place(selected, `pair-${i}`) : attackPending ? () => unstage(pair.attack.id) : coverPending ? () => unstage(pair.defense!.id) : undefined
               return (
                 <motion.div
                   key={pair.attack.id}
                   layout
                   data-drop={`pair-${i}`}
-                  className={`pair ${target ? 'target' : ''} ${target && hot === `pair-${i}` ? 'drop-hot' : ''}`}
-                  onClick={defend}
-                  role={defend ? 'button' : undefined}
-                  tabIndex={defend ? 0 : undefined}
-                  aria-label={defend ? `Покрыть ${rankLabel(pair.attack.rank)} ${SUIT_NAME[pair.attack.suit]}` : undefined}
-                  onKeyDown={defend ? (e) => (e.key === 'Enter' || e.key === ' ') && defend() : undefined}
+                  className={`pair ${target ? 'target' : ''} ${target && hot === `pair-${i}` ? 'drop-hot' : ''} ${onPair ? 'tappable' : ''}`}
+                  onClick={onPair}
+                  role={onPair ? 'button' : undefined}
+                  tabIndex={onPair ? 0 : undefined}
+                  aria-label={target ? `Покрыть ${rankLabel(pair.attack.rank)} ${SUIT_NAME[pair.attack.suit]}` : onPair ? 'Вернуть карту в руку' : undefined}
+                  onKeyDown={onPair ? (e) => (e.key === 'Enter' || e.key === ' ') && onPair() : undefined}
                   animate={target && !dragging ? { y: [0, -4, 0] } : { y: 0, scale: target && hot === `pair-${i}` ? 1.06 : 1 }}
                   transition={target && !dragging ? { duration: 1, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 400, damping: 30 }}
                 >
-                  <CardView card={pair.attack} faceUp trump={game.trump} />
-                  {pair.defense && <CardView card={pair.defense} faceUp trump={game.trump} className="cover" style={{ rotate: 7 }} />}
+                  <CardView card={pair.attack} faceUp trump={game.trump} className={attackPending ? 'pending' : ''} />
+                  {pair.defense && <CardView card={pair.defense} faceUp trump={game.trump} className={`cover ${coverPending ? 'pending' : ''}`} style={{ rotate: 7 }} />}
                 </motion.div>
               )
             })}
-          </motion.div>
+          </div>
 
           <div className="discard-zone">
             <div className="discard">
@@ -411,34 +505,39 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                 {status}
               </motion.p>
             </AnimatePresence>
-            <motion.div className="buttons" layout>
-              <AnimatePresence mode="popLayout">
-                {canTransferFocus && selected && !dragging && (
-                  <motion.button key="transfer" layout type="button" className="primary" whileTap={{ scale: 0.94 }} onClick={() => play({ type: 'transfer', cardId: selected })} {...pop}>
-                    Перевести
-                  </motion.button>
-                )}
-                {take && (
-                  <motion.button key="take" layout type="button" className="danger" whileTap={{ scale: 0.94 }} onClick={() => play(take)} {...pop}>
-                    Беру
-                  </motion.button>
-                )}
-                {pass && (
-                  <motion.button key={`pass-${passLabel}`} layout type="button" className="primary" whileTap={{ scale: 0.94 }} onClick={() => play(pass)} {...pop}>
-                    {passLabel}
+            <div className="buttons">
+              <AnimatePresence>
+                {staged.length > 0 && (
+                  <motion.button key="cancel" type="button" className="icon cancel" aria-label="Вернуть карты в руку" whileTap={{ scale: 0.9 }} onClick={() => setPlan([])} {...pop}>
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                      <path fill="currentColor" d="M6.3 6.3a1 1 0 0 1 1.4 0L12 10.6l4.3-4.3a1 1 0 1 1 1.4 1.4L13.4 12l4.3 4.3a1 1 0 0 1-1.4 1.4L12 13.4l-4.3 4.3a1 1 0 0 1-1.4-1.4l4.3-4.3-4.3-4.3a1 1 0 0 1 0-1.4z" />
+                    </svg>
                   </motion.button>
                 )}
               </AnimatePresence>
-            </motion.div>
+              <motion.button
+                type="button"
+                className={`main-action ${main.tone} ${main.onClick ? 'ready' : ''}`}
+                disabled={!main.onClick}
+                whileTap={main.onClick ? { scale: 0.95 } : undefined}
+                onClick={main.onClick}
+              >
+                <AnimatePresence mode="popLayout" initial={false}>
+                  <motion.span key={main.label} initial={{ y: 14, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -14, opacity: 0 }} transition={{ type: 'spring', stiffness: 520, damping: 34 }}>
+                    {main.label}
+                  </motion.span>
+                </AnimatePresence>
+              </motion.button>
+            </div>
           </div>
-          <motion.div className="hand" animate={{ width: hand.length ? hw + handStep * (hand.length - 1) : hw }} transition={{ type: 'spring', stiffness: 380, damping: 34 }}>
+          <div className="hand" style={{ width: hand.length ? hw + handStep * (hand.length - 1) : hw }}>
             {hand.map((c, i) => {
               const mid = (hand.length - 1) / 2
               const off = i - mid
               const can = playable.has(c.id)
               const isSel = selected === c.id
               const isDrag = dragging === c.id
-              const hint = defenseHint(game, c, can, me)
+              const hint = defenseHint(view, c, can, me)
               return (
                 <motion.div
                   key={c.id}
@@ -457,10 +556,10 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                   onDrag={(_, info) => setHot(zoneAt(info))}
                   onDragEnd={(_, info) => {
                     lastDragEnd.current = Date.now()
-                    const action = actionForDrop(c.id, zoneAt(info))
+                    const zone = zoneAt(info)
                     setDragging(null)
                     setHot(null)
-                    if (action) play(action)
+                    if (zone) place(c.id, zone)
                   }}
                 >
                   <CardView
@@ -475,7 +574,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                 </motion.div>
               )
             })}
-          </motion.div>
+          </div>
         </section>
       </LayoutGroup>
 
@@ -548,6 +647,17 @@ function Counter({ value }: { value: number }) {
   )
 }
 
+function planText(plan: Action[], g: GameState): string {
+  const first = plan[0]
+  if (first.type === 'throw') {
+    const n = first.cardIds.length
+    return `${n === 1 ? 'Карта' : `${n} карты`} на столе. ${g.table.length === 0 ? 'Сходить' : 'Подкинуть'}? Можно добавить ещё`
+  }
+  if (first.type === 'transfer') return 'Переводим ход дальше. Подтвердите кнопкой'
+  const open = g.table.length - g.table.filter((p) => p.defense).length - plan.length
+  return open > 0 ? `Покрыто ${plan.length}, осталось ${open}. Можно покрыть всё сразу` : 'Всё покрыто. Подтвердите кнопкой'
+}
+
 /** Who would defend after a transfer: the next player still in the game. */
 function nextDefender(g: GameState): number | null {
   const n = g.players.length
@@ -568,11 +678,16 @@ function statusText(g: GameState, actor: number | null, me: number): string {
   if (g.over) return 'Партия окончена'
   if (g.players[me].out) return 'Вы вышли из игры. Остальные доигрывают'
   if (actor === me) {
-    if (g.table.length === 0) return 'Ваш ход. Перетащите или нажмите карту'
-    if (g.defender === me && !g.taking)
-      return legalActions(g, me).some((a) => a.type === 'transfer') ? 'Покройте, переведите или возьмите' : 'Покройте карты или возьмите'
-    if (g.taking) return `${g.players[g.defender].name} берёт. Можно подкинуть`
-    return g.attacker === me ? 'Подкиньте карту или скажите «Бито»' : 'Подкиньте карту или пасуйте'
+    const legal = legalActions(g, me)
+    if (g.table.length === 0) return 'Ваш ход. Выберите карты одного достоинства'
+    if (g.defender === me && !g.taking) {
+      if (!legal.some((a) => a.type === 'defend' || a.type === 'transfer')) return 'Отбиться нечем. Нажмите «Беру»'
+      return legal.some((a) => a.type === 'transfer') ? 'Покройте, переведите или возьмите' : 'Покройте карты или возьмите'
+    }
+    const canAdd = legal.some((a) => a.type === 'attack')
+    if (g.taking) return canAdd ? `${g.players[g.defender].name} берёт. Можно подкинуть` : `${g.players[g.defender].name} берёт. Подкинуть нечего`
+    if (!canAdd) return g.attacker === me ? 'Подкинуть нечего. Нажмите «Бито»' : 'Подкинуть нечего. Нажмите «Пас»'
+    return g.attacker === me ? 'Подкиньте карты или нажмите «Бито»' : 'Подкиньте карты или нажмите «Пас»'
   }
   if (actor === null) return ''
   const who = g.players[actor].name

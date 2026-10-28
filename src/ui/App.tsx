@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { chooseAction } from '../engine/bot'
 import { Action, applyAction, currentActor, GameState, maxPlayers, newGame } from '../engine/game'
 import { normalizeCode } from '../net/room'
-import { useOnline } from '../net/useOnline'
+import { hasSavedRoom, useOnline } from '../net/useOnline'
 import { GameScreen, Result } from './GameScreen'
 import { RulesPanel, StatsPanel } from './InfoPanels'
 import { MainMenu } from './MainMenu'
@@ -14,11 +14,31 @@ import { PlayScreen } from './PlayScreen'
 import { SettingsPanel } from './SettingsPanel'
 import { applyTheme, BOT_DELAY, deviceToken, loadSettings, loadStats, saveSettings, saveStats, Settings, Stats } from './settings'
 import { UpdateToast } from './UpdateToast'
-import { startUpdates, UpdateState } from './updates'
+import { applyIfIdle, startUpdates, UpdateState } from './updates'
 
 const ME = 0
 type Screen = 'menu' | 'play' | 'online' | 'game'
 type Panel = 'settings' | 'rules' | 'stats'
+
+// The bot game is saved as it goes, so closing or reloading the app never loses a hand.
+const GAME_KEY = 'durak.game'
+function loadGame(): GameState | null {
+  try {
+    const raw = localStorage.getItem(GAME_KEY)
+    const g = raw ? (JSON.parse(raw) as GameState) : null
+    return g && !g.over ? g : null
+  } catch {
+    return null
+  }
+}
+function saveGame(g: GameState | null) {
+  try {
+    if (g && !g.over) localStorage.setItem(GAME_KEY, JSON.stringify(g))
+    else localStorage.removeItem(GAME_KEY)
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 function startGame(s: Settings): GameState {
   const players = Math.min(s.opponents + 1, maxPlayers(s.deckSize))
@@ -34,10 +54,11 @@ function codeFromHash(): string {
 export function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings)
   const [stats, setStats] = useState<Stats>(loadStats)
-  const [game, setGame] = useState<GameState | null>(null)
+  const [game, setGame] = useState<GameState | null>(loadGame)
   const [panel, setPanel] = useState<Panel | null>(null)
   const [inviteCode] = useState(codeFromHash)
-  const [screen, setScreen] = useState<Screen>(inviteCode ? 'online' : 'menu')
+  const [resumeRoom] = useState(() => !inviteCode && hasSavedRoom())
+  const [screen, setScreen] = useState<Screen>(inviteCode || resumeRoom ? 'online' : 'menu')
   const [update, setUpdate] = useState<UpdateState>({ kind: 'idle' })
   const [token] = useState(deviceToken)
   const online = useOnline(token)
@@ -47,7 +68,19 @@ export function App() {
     syncStatusBar()
   }, [settings.theme])
   useEffect(() => saveSettings(settings), [settings])
-  useEffect(() => startUpdates(setUpdate), [])
+  // A downloaded update switches in only while nobody is mid-game (and right away if the player taps it).
+  const busyRef = useRef(false)
+  const inRound = screen === 'game' || (screen === 'online' && online.phase === 'playing')
+  busyRef.current = inRound
+  useEffect(() => startUpdates(setUpdate, () => busyRef.current), [])
+  useEffect(() => {
+    if (!busyRef.current) applyIfIdle()
+  }, [inRound])
+  useEffect(() => saveGame(game), [game])
+  useEffect(() => {
+    if (resumeRoom) online.restore()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   useEffect(() => {
     if (inviteCode) history.replaceState(null, '', window.location.pathname + window.location.search)
   }, [inviteCode])
@@ -139,7 +172,7 @@ export function App() {
         onExit={() => online.leave()}
         onOpenSettings={() => setPanel('settings')}
         onPlayAgain={host ? () => online.start() : undefined}
-        room={{ code: online.lobby?.code ?? '', notice: online.notice }}
+        room={{ code: online.lobby?.code ?? '', notice: online.notice, reconnecting: online.reconnecting }}
       />
     )
   } else if (screen === 'game' && game) {

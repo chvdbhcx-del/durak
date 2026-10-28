@@ -115,6 +115,7 @@ button:focus-visible,
   height: 100%;
   display: grid;
   grid-template-rows: auto auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr);
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-block: max(8px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-bottom, 0px));
@@ -259,8 +260,19 @@ button:focus-visible,
 .opponents {
   display: flex;
   justify-content: center;
-  gap: clamp(8px, 2.5vw, 28px);
-  flex-wrap: wrap;
+  gap: clamp(4px, 2.5vw, 28px);
+  min-width: 0;
+}
+
+.opponents .seat {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.seat-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .seat {
@@ -494,12 +506,13 @@ button:focus-visible,
   gap: 12px;
   width: 100%;
   max-width: 780px;
-  min-height: 42px;
-  flex-wrap: wrap;
+  min-height: 48px;
 }
 
 .status {
+  flex: 1;
   margin: 0;
+  line-height: 1.3;
   color: var(--muted);
   font-size: 14px;
   min-width: 0;
@@ -512,8 +525,73 @@ button:focus-visible,
 
 .buttons {
   display: flex;
+  align-items: center;
   gap: 8px;
-  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* The one confirm button: always in the same spot, only its label changes. */
+.main-action {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(120px, 30vw, 170px);
+  height: 48px;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s, opacity 0.2s;
+}
+
+.main-action > span {
+  grid-area: 1 / 1;
+}
+
+.main-action.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.main-action.danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.main-action:disabled {
+  background: var(--raise);
+  border-color: var(--line);
+  color: var(--muted);
+  opacity: 1;
+  font-weight: 600;
+  cursor: default;
+}
+
+.main-action.ready {
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.main-action.danger.ready {
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--danger) 28%, transparent);
+}
+
+.icon.cancel {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+}
+
+/* Cards lined up on the table but not confirmed yet */
+.card.pending {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 8px 22px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.pair.tappable {
+  cursor: pointer;
 }
 
 .hand {
@@ -554,8 +632,11 @@ button:focus-visible,
   cursor: grabbing !important;
 }
 
-.hand .card.dim {
-  filter: saturate(0.4) brightness(0.72);
+.hand .card.dim .side.front::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--bg) 45%, transparent);
 }
 
 .hand .card.beats {
@@ -1373,6 +1454,9 @@ button.card:disabled {
 }
 
 .menu-version {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
   margin: 0;
   font-size: 12px;
   color: var(--muted);
@@ -1536,12 +1620,12 @@ button.card:disabled {
 
 /* Full-page screens: play, online */
 .screen {
-  min-height: 100%;
+  height: 100%;
   display: grid;
   grid-template-rows: auto 1fr;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: max(12px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-bottom, 0px));
+  padding-block: max(12px, env(safe-area-inset-top, 0px)) calc(24px + env(safe-area-inset-bottom, 0px));
   background: radial-gradient(90% 50% at 50% 0%, var(--felt-glow), transparent 70%), var(--bg);
   overflow-y: auto;
 }
@@ -1959,4 +2043,133 @@ button.card:disabled {
   height: 4px;
   border-radius: 50%;
   background: var(--accent);
+}
+
+/* Scrolling stays possible on short screens, but without a visible bar. */
+.screen,
+.menu,
+.sheet-body {
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+}
+.screen::-webkit-scrollbar,
+.menu::-webkit-scrollbar,
+.sheet-body::-webkit-scrollbar {
+  display: none;
+}
+
+/* Connection coming back after the app was in the background */
+.reconnecting {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top, 0px));
+  left: 50%;
+  translate: -50% 0;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--raise);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 24px var(--shadow);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reconnecting.inline {
+  position: static;
+  translate: none;
+  justify-self: center;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* Deck and discard sit a little smaller than the cards in play on narrow screens. */
+@media (max-width: 560px) {
+  .deck-zone,
+  .discard-zone {
+    --cw: var(--zone-cw);
+  }
+  .zone-label {
+    font-size: 11px;
+  }
+}
+
+/* Short screens: opponents shrink to one line, their card fans become a count. */
+@media (max-height: 680px) {
+  .seat .mini-hand {
+    display: none;
+  }
+  .seat {
+    gap: 2px;
+    padding: 4px 8px;
+  }
+  .app {
+    gap: 6px;
+  }
+}
+
+/* A phone on its side: buttons move beside the hand to leave room for the table. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .app {
+    padding-block: max(6px, env(safe-area-inset-top, 0px)) max(6px, env(safe-area-inset-bottom, 0px));
+  }
+  .bar {
+    min-height: 36px;
+  }
+  .bar .icon {
+    width: 34px;
+    height: 34px;
+  }
+  .role {
+    display: none;
+  }
+  .me {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 12px;
+  }
+  .me .hand {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: center;
+  }
+  .me .controls {
+    grid-column: 2;
+    grid-row: 1;
+    flex-direction: column;
+    align-items: stretch;
+    width: clamp(150px, 22vw, 210px);
+    padding-bottom: 6px;
+  }
+  .me .status {
+    font-size: 12px;
+  }
+  .main-action {
+    width: 100%;
+  }
+  .felt {
+    padding: 8px 14px;
+  }
+}
+
+@media (max-width: 380px) {
+  .bar .chip {
+    display: none;
+  }
+  .main-action {
+    width: 112px;
+    font-size: 14px;
+  }
+  .status {
+    font-size: 13px;
+  }
+}
+
+.update-log {
+  font-size: 11px;
+  max-width: 300px;
+  text-align: center;
+  text-wrap: balance;
 }

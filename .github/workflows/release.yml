@@ -67,7 +67,10 @@ jobs:
 
       - name: Publish the release
         run: |
+          MIN_NATIVE=$(node -p "require('./update.json').minNativeBuild")
           gh release create "v$VERSION_NAME" --repo ${{ github.repository }} --target "$GITHUB_SHA" \
             --title "Дурак $VERSION_NAME" --latest \
-            --notes "Скачайте APK ниже и установите на Android. Уже установленное приложение обновит игру само." \
+            --notes "Скачайте APK ниже и установите на Android. Уже установленное приложение обновит игру само.
+
+          minNativeBuild: $MIN_NATIVE" \
             Durak-*.apk "durak-web-$VERSION_NAME.zip" update.json
