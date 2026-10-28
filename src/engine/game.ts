@@ -69,8 +69,8 @@ export interface GameState {
   lastCaught?: { by: number; player: number } | null
   /** a person accused a bot of a trick on `pair` and was wrong */
   falseAlarm?: { by: number } | null
-  /** ids of covers that don't really beat; hidden from every view */
-  bluffs?: string[]
+  /** seats caught cheating: from then on they may only cover honestly */
+  caught?: number[]
 }
 
 /** Chance that a bot spots a person covering with a card that doesn't beat. */
@@ -182,6 +182,11 @@ function canTransfer(s: GameState): boolean {
   return target !== s.defender && s.players[target].hand.length >= s.table.length + 1 && s.table.length + 1 <= HAND_SIZE
 }
 
+/** Whether `player` may still cover with a card that doesn't beat: a person in cheater mode who hasn't been caught yet. */
+export function canCheat(s: GameState, player: number) {
+  return !!s.options.cheat && s.players[player].human && !s.caught?.includes(player)
+}
+
 export function legalActions(s: GameState, player: number): Action[] {
   if (currentActor(s) !== player) return []
   const hand = s.players[player].hand
@@ -191,7 +196,7 @@ export function legalActions(s: GameState, player: number): Action[] {
     const actions: Action[] = []
     s.table.forEach((p, i) => {
       if (p.defense) return
-      const anything = !!s.options.cheat && s.players[player].human
+      const anything = canCheat(s, player)
       for (const c of hand) if (anything || beats(c, p.attack, s.trump)) actions.push({ type: 'defend', cardId: c.id, pair: i })
     })
     if (canTransfer(s)) {
@@ -232,7 +237,7 @@ export function canThrow(s: GameState, player: number, cardIds: string[]): boole
 
 export function applyAction(prev: GameState, player: number, action: Action): GameState {
   const s = previewAction(prev, player, action)
-  if (action.type === 'defend' && s.options.cheat && s.players[player].human) {
+  if (action.type === 'defend' && canCheat(prev, player)) {
     const pair = s.table[action.pair]
     const card = pair.defense
     if (card && !beats(card, pair.attack, s.trump)) {
@@ -246,6 +251,7 @@ export function applyAction(prev: GameState, player: number, action: Action): Ga
         s.taking = true
         s.passed = []
         s.lastCaught = { by, player }
+        s.caught = [...(s.caught ?? []), player]
       }
     }
   }
@@ -306,19 +312,17 @@ export function previewAction(prev: GameState, player: number, action: Action): 
 function bluff(prev: GameState, player: number, action: Extract<Action, { type: 'bluff' }>): GameState {
   const pl = prev.players[player]
   const open = prev.table[action.pair]
-  if (!prev.options.cheat || pl.human || currentActor(prev) !== player || player !== prev.defender || prev.taking || !open || open.defense) throw new Error('Illegal bluff')
+  if (!prev.options.cheat || pl.human || prev.caught?.includes(player) || currentActor(prev) !== player || player !== prev.defender || prev.taking || !open || open.defense) throw new Error('Illegal bluff')
   const s: GameState = structuredClone(prev)
   s.lastAction = { player, action }
   s.lastCaught = null
   s.falseAlarm = null
-  const card = removeFromHand(s.players[player], action.cardId)
-  s.table[action.pair].defense = card
-  if (!beats(card, open.attack, s.trump)) s.bluffs = [...(s.bluffs ?? []), card.id]
+  s.table[action.pair].defense = removeFromHand(s.players[player], action.cardId)
   s.passed = []
   return s
 }
 
-/** A person taps a cover: a real trick returns it to the cheater, who takes the table; a wrong guess is only noted. */
+/** A person taps a cover: a real trick returns it to the cheater, who takes the table and may not cheat again; a wrong guess is only noted. */
 function accuse(prev: GameState, player: number, pair: number): GameState {
   const open = prev.table[pair]
   if (!prev.options.cheat || !prev.players[player].human || player === prev.defender || !open?.defense) throw new Error('Illegal accusation')
@@ -326,10 +330,11 @@ function accuse(prev: GameState, player: number, pair: number): GameState {
   s.lastCaught = null
   s.falseAlarm = null
   const card = s.table[pair].defense!
-  if (s.bluffs?.includes(card.id)) {
+  // A cover that doesn't beat its attack is a trick, whoever laid it: a bot's bluff or a person's cheat.
+  if (!beats(card, s.table[pair].attack, s.trump)) {
     s.table[pair].defense = null
     s.players[s.defender].hand.push(card)
-    s.bluffs = s.bluffs.filter((id) => id !== card.id)
+    s.caught = [...(s.caught ?? []), s.defender]
     s.taking = true
     s.passed = []
     s.lastCaught = { by: player, player: s.defender }
@@ -357,7 +362,6 @@ function endRound(s: GameState): GameState {
   if (took) s.players[s.defender].hand.push(...cards)
   else s.discard.push(...cards)
   s.lastRound = { end: took ? 'taken' : 'beaten', defender: s.defender }
-  s.bluffs = []
   s.table = []
 
   const drawOrder = [...attackOrder(s), s.defender]
@@ -397,6 +401,5 @@ export function viewFor(s: GameState, seat: number): GameState {
     players: s.players.map((p) => (p.id === seat ? p : { ...p, hand: p.hand.map(hide) })),
     deck: s.deck.map((c, i) => (i === 0 ? c : hide(c))),
     discard: s.discard.map(hide),
-    bluffs: [],
   }
 }

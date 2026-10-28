@@ -625,7 +625,6 @@ button:focus-visible,
   position: absolute;
   top: 16px;
   touch-action: none;
-  will-change: left, transform;
 }
 
 .hand-slot.can-drag {
@@ -672,7 +671,6 @@ button:focus-visible,
 
 /* Cards: the outer box moves (layout animations), the flipper turns it over. */
 .card {
-  will-change: transform;
   position: relative;
   display: block;
   width: var(--cw);
@@ -2254,4 +2252,15 @@ button.card:disabled {
 .transfer-slot.drop-hot {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.cheat-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  translate: -50% 0;
+  color: var(--muted);
+  font-size: 12px;
+  pointer-events: none;
+  white-space: nowrap;
 }
