@@ -9,7 +9,7 @@ interface Props {
   stats: Stats
   canContinue: boolean
   onContinue: () => void
-  onNewGame: () => void
+  onPlay: () => void
   onOpen: (panel: 'settings' | 'rules' | 'stats') => void
 }
 
@@ -41,7 +41,7 @@ const enter = (delay: number) => ({
   transition: { delay, type: 'spring', stiffness: 380, damping: 30 },
 })
 
-export function MainMenu({ settings, stats, canContinue, onContinue, onNewGame, onOpen }: Props) {
+export function MainMenu({ settings, stats, canContinue, onContinue, onPlay, onOpen }: Props) {
   const setup = `${settings.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'} · ${settings.deckSize} карт · ${settings.opponents} ${settings.opponents === 1 ? 'соперник' : settings.opponents < 5 ? 'соперника' : 'соперников'}`
   return (
     <motion.main className="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.25 }}>
@@ -67,7 +67,7 @@ export function MainMenu({ settings, stats, canContinue, onContinue, onNewGame, 
           Дурак
         </motion.h1>
         <motion.p className="menu-tag" {...enter(0.42)}>
-          Подкидной и переводной против ботов
+          Подкидной и переводной. С ботами или с друзьями онлайн
         </motion.p>
       </div>
 
@@ -77,7 +77,7 @@ export function MainMenu({ settings, stats, canContinue, onContinue, onNewGame, 
             Продолжить партию
           </motion.button>
         )}
-        <motion.button type="button" className={canContinue ? 'ghost big' : 'primary big'} {...enter(canContinue ? 0.56 : 0.5)} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={onNewGame}>
+        <motion.button type="button" className={canContinue ? 'ghost big' : 'primary big'} {...enter(canContinue ? 0.56 : 0.5)} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={onPlay}>
           {canContinue ? 'Новая партия' : 'Играть'}
         </motion.button>
         <motion.button type="button" className="setup-chip" {...enter(0.62)} whileTap={{ scale: 0.97 }} onClick={() => onOpen('settings')}>

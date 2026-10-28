@@ -10,6 +10,8 @@ export interface Settings {
   mode: Mode
   theme: Theme
   speed: Speed
+  /** shown to friends in online games */
+  name: string
 }
 
 export interface Stats {
@@ -18,8 +20,16 @@ export interface Stats {
   draws: number
 }
 
-export const DEFAULT_SETTINGS: Settings = { opponents: 2, deckSize: 36, mode: 'podkidnoy', theme: 'system', speed: 'normal' }
-export const BOT_DELAY: Record<Speed, number> = { calm: 1100, normal: 700, fast: 380 }
+export const DEFAULT_SETTINGS: Settings = {
+  opponents: 2,
+  deckSize: 36,
+  mode: 'podkidnoy',
+  theme: 'system',
+  speed: 'normal',
+  name: `Игрок ${10 + Math.floor(Math.random() * 90)}`,
+}
+/** How long a bot "thinks" before a move, in ms. Each move varies around this. */
+export const BOT_DELAY: Record<Speed, number> = { calm: 2600, normal: 1800, fast: 1000 }
 
 // Storage can be missing or blocked (private windows, embedded previews), so every access is guarded.
 function read<T>(key: string, fallback: T): T {
@@ -48,4 +58,18 @@ export function applyTheme(theme: Theme) {
   const root = document.documentElement
   if (theme === 'system') root.removeAttribute('data-theme')
   else root.setAttribute('data-theme', theme)
+}
+
+/** Identifies this device to a room host, so a dropped player gets their seat back. */
+export function deviceToken(): string {
+  try {
+    let t = localStorage.getItem('durak.token')
+    if (!t) {
+      t = Math.random().toString(36).slice(2) + Date.now().toString(36)
+      localStorage.setItem('durak.token', t)
+    }
+    return t
+  } catch {
+    return Math.random().toString(36).slice(2)
+  }
 }
