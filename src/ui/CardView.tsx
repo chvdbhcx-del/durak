@@ -1,0 +1,80 @@
+import { motion, type MotionStyle, type TargetAndTransition } from 'framer-motion'
+import { useEffect, type MouseEventHandler } from 'react'
+import { Card, isRed, rankLabel, Suit, SUIT_NAME } from '../engine/cards'
+import { SuitIcon } from './SuitIcon'
+
+interface Props {
+  card: Card
+  faceUp: boolean
+  trump: Suit
+  size?: 'full' | 'mini'
+  className?: string
+  style?: MotionStyle
+  animate?: TargetAndTransition
+  onClick?: MouseEventHandler
+  disabled?: boolean
+  label?: string
+}
+
+export const cardSpring = { type: 'spring', stiffness: 380, damping: 32, mass: 0.85 } as const
+const flipSpring = { type: 'spring', stiffness: 260, damping: 24 } as const
+
+/**
+ * A card keeps its layoutId while it moves between deck, hands, table and discard, so the
+ * component remounts in each new spot. Remembering which side was last shown lets the
+ * new instance start from that side and flip over during the flight.
+ */
+const lastFace = new Map<string, boolean>()
+
+export function CardView({ card, faceUp, trump, size = 'full', className = '', style, animate, onClick, disabled, label }: Props) {
+  const name = `${rankLabel(card.rank)} ${SUIT_NAME[card.suit]}`
+  const was = lastFace.get(card.id) ?? faceUp
+  useEffect(() => {
+    lastFace.set(card.id, faceUp)
+  }, [card.id, faceUp])
+
+  const classes = ['card', size, faceUp && isRed(card.suit) ? 'red' : '', faceUp && card.suit === trump ? 'trump' : '', className].filter(Boolean).join(' ')
+  const inner = (
+    <motion.span className="flipper" initial={{ rotateY: was ? 0 : 180 }} animate={{ rotateY: faceUp ? 0 : 180 }} transition={flipSpring}>
+      <span className={`side front ${isRed(card.suit) ? 'red' : ''} ${card.suit === trump ? 'trump' : ''}`}>
+        <span className="corner tl">
+          <b>{rankLabel(card.rank)}</b>
+          <SuitIcon suit={card.suit} />
+        </span>
+        <span className="pip">
+          <SuitIcon suit={card.suit} size="100%" />
+        </span>
+        <span className="corner br">
+          <b>{rankLabel(card.rank)}</b>
+          <SuitIcon suit={card.suit} />
+        </span>
+      </span>
+      <span className="side back">
+        <span className="back-art" />
+      </span>
+    </motion.span>
+  )
+
+  if (onClick)
+    return (
+      <motion.button
+        type="button"
+        layoutId={card.id}
+        transition={cardSpring}
+        className={classes}
+        style={style}
+        animate={animate}
+        whileTap={disabled ? undefined : { scale: 0.94 }}
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={label ?? name}
+      >
+        {inner}
+      </motion.button>
+    )
+  return (
+    <motion.div layoutId={card.id} transition={cardSpring} className={classes} style={style} animate={animate} aria-label={faceUp ? name : undefined} role={faceUp ? 'img' : undefined}>
+      {inner}
+    </motion.div>
+  )
+}
