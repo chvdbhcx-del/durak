@@ -1,11 +1,35 @@
 /**
- * Card sounds made on the fly with the Web Audio API, so the app ships no audio files.
- * Each sound is a short burst of filtered noise shaped like paper and cardboard sliding.
+ * Card sounds: real recordings (Kenney's CC0 Casino Audio, see src/assets/sounds/CREDITS.md).
+ * They are decoded once and each play picks a random take at a slightly different speed, so
+ * a run of cards never sounds like the same clip repeated.
  */
+import slide1 from '../assets/sounds/card-slide-1.mp3'
+import slide2 from '../assets/sounds/card-slide-2.mp3'
+import slide3 from '../assets/sounds/card-slide-3.mp3'
+import slide4 from '../assets/sounds/card-slide-4.mp3'
+import slide5 from '../assets/sounds/card-slide-5.mp3'
+import slide6 from '../assets/sounds/card-slide-6.mp3'
+import place1 from '../assets/sounds/card-place-1.mp3'
+import place2 from '../assets/sounds/card-place-2.mp3'
+import place3 from '../assets/sounds/card-place-3.mp3'
+import place4 from '../assets/sounds/card-place-4.mp3'
+import shove1 from '../assets/sounds/card-shove-1.mp3'
+import shove2 from '../assets/sounds/card-shove-2.mp3'
+import shove3 from '../assets/sounds/card-shove-3.mp3'
+import shove4 from '../assets/sounds/card-shove-4.mp3'
+
+const FILES = {
+  slide: [slide1, slide2, slide3, slide4, slide5, slide6],
+  place: [place1, place2, place3, place4],
+  shove: [shove1, shove2, shove3, shove4],
+}
+type Kind = keyof typeof FILES
 
 let ctx: AudioContext | null = null
-let noise: AudioBuffer | null = null
+let master: GainNode | null = null
 let enabled = true
+const buffers: Record<Kind, AudioBuffer[]> = { slide: [], place: [], shove: [] }
+let loading = false
 
 type AudioWindow = typeof window & { webkitAudioContext?: typeof AudioContext }
 
@@ -16,58 +40,49 @@ function audio(): AudioContext | null {
     if (!Ctor) return null
     try {
       ctx = new Ctor()
+      master = ctx.createGain()
+      master.gain.value = 0.7
+      master.connect(ctx.destination)
     } catch {
       return null
     }
   }
   if (ctx.state === 'suspended') ctx.resume().catch(() => {})
+  if (!loading) {
+    loading = true
+    load(ctx)
+  }
   return ctx
 }
 
-function noiseBuffer(c: AudioContext) {
-  if (!noise) {
-    noise = c.createBuffer(1, c.sampleRate * 1.2, c.sampleRate)
-    const data = noise.getChannelData(0)
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1
-  }
-  return noise
+function load(c: AudioContext) {
+  for (const kind of Object.keys(FILES) as Kind[])
+    for (const url of FILES[kind])
+      fetch(url)
+        .then((r) => r.arrayBuffer())
+        .then((data) => c.decodeAudioData(data))
+        .then((buf) => buffers[kind].push(buf))
+        .catch(() => {})
 }
 
-/** One rustle: noise through a band-pass, with an envelope of attack and decay. */
-function burst(c: AudioContext, at: number, { dur, freq, q, gain, flutter = 0 }: { dur: number; freq: number; q: number; gain: number; flutter?: number }) {
+function play(kind: Kind, delay: number, { gain = 1, rate = 1 } = {}) {
+  const c = audio()
+  const pool = buffers[kind]
+  if (!c || !master || pool.length === 0) return
   const src = c.createBufferSource()
-  src.buffer = noiseBuffer(c)
-  const filter = c.createBiquadFilter()
-  filter.type = 'bandpass'
-  filter.Q.value = q
-  filter.frequency.setValueAtTime(freq * 0.7, at)
-  filter.frequency.exponentialRampToValueAtTime(freq * 1.25, at + dur)
-  // Everything above a few kHz is what makes noise sound like a tick, so it is rolled off.
-  const soft = c.createBiquadFilter()
-  soft.type = 'lowpass'
-  soft.frequency.value = 3200
-  soft.Q.value = 0.4
+  src.buffer = pool[Math.floor(Math.random() * pool.length)]
+  src.playbackRate.value = rate * (0.94 + Math.random() * 0.14)
   const amp = c.createGain()
-  amp.gain.setValueAtTime(0.0001, at)
-  // A slow swell, not a click: the sound grows into the middle and fades out.
-  amp.gain.exponentialRampToValueAtTime(gain, at + dur * 0.35)
-  // A few small dips make a sweep sound like several cards instead of one hiss.
-  for (let i = 1; i <= flutter; i++) {
-    const t = at + dur * (0.35 + (0.55 * i) / (flutter + 1))
-    amp.gain.exponentialRampToValueAtTime(gain * 0.35, t - dur * 0.04)
-    amp.gain.exponentialRampToValueAtTime(gain * 0.9, t + dur * 0.03)
-  }
-  amp.gain.exponentialRampToValueAtTime(0.0001, at + dur)
-  src.connect(filter).connect(soft).connect(amp).connect(c.destination)
-  src.start(at, Math.random() * 0.5)
-  src.stop(at + dur + 0.02)
+  amp.gain.value = gain
+  src.connect(amp).connect(master)
+  src.start(c.currentTime + delay)
 }
 
 export function setSoundEnabled(on: boolean) {
   enabled = on
 }
 
-/** Browsers only start audio after a touch, so the first one wakes it up. */
+/** Browsers only start audio after a touch, so the first one wakes it up and loads the clips. */
 export function unlockSound() {
   const wake = () => {
     audio()
@@ -80,25 +95,16 @@ export function unlockSound() {
 
 /** A card put down on the table. */
 export function playCard(delay = 0) {
-  const c = audio()
-  if (!c) return
-  const t = c.currentTime + delay
-  burst(c, t, { dur: 0.22, freq: 1500, q: 0.45, gain: 0.2, flutter: 2 })
-  burst(c, t + 0.03, { dur: 0.16, freq: 700, q: 0.6, gain: 0.12 })
+  play('place', delay, { gain: 0.9 })
 }
 
 /** A card flicked out of the deck to a hand. */
 export function playDeal(delay = 0) {
-  const c = audio()
-  if (!c) return
-  const t = c.currentTime + delay
-  burst(c, t, { dur: 0.17, freq: 1900, q: 0.5, gain: 0.14, flutter: 1 })
+  play('slide', delay, { gain: 0.75 })
 }
 
-/** The table swept into the discard pile or into a hand: a longer shuffle. */
+/** The table swept into the discard pile or into a hand: a few shoves, one per couple of cards. */
 export function playSweep(delay = 0, cards = 4) {
-  const c = audio()
-  if (!c) return
-  const t = c.currentTime + delay
-  burst(c, t, { dur: Math.min(0.8, 0.4 + cards * 0.07), freq: 1400, q: 0.4, gain: 0.2, flutter: Math.min(5, cards + 1) })
+  const shoves = Math.min(3, Math.max(1, Math.ceil(cards / 2)))
+  for (let i = 0; i < shoves; i++) play('shove', delay + i * 0.16, { gain: 0.85 })
 }
