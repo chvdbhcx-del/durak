@@ -32,11 +32,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      # Without a release key, keep the debug key stable between runs so debug APKs still upgrade.
-      - uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: android-debug-keystore
       - run: npm ci
       - run: npm test
       - run: npm run build
