@@ -621,9 +621,15 @@ button:focus-visible,
 }
 
 /* Each hand card sits in a slot that can be dragged onto the table. */
-.hand-slot {
+.hand-pos {
   position: absolute;
   top: 16px;
+  left: 0;
+}
+
+.hand-slot {
+  position: relative;
+  top: 0;
   touch-action: none;
 }
 
@@ -637,7 +643,7 @@ button:focus-visible,
     transition: top 0.2s ease;
   }
   .hand-slot.can-drag:hover {
-    top: 4px;
+    top: -12px;
   }
 }
 
@@ -646,8 +652,8 @@ button:focus-visible,
 }
 
 .is-dragging,
-.is-dragging * {
-  cursor: grabbing !important;
+.is-dragging .hand-slot.can-drag {
+  cursor: grabbing;
 }
 
 .hand .card.dim .side.front::after {

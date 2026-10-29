@@ -396,12 +396,23 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   }
 
   // Drag and drop: the drop zone under the finger decides where the card goes.
+  // The zones' boxes are read once per drag (not hit-tested on every pointer move, which is slow on phones).
+  const zoneBoxes = useRef<{ name: string; r: DOMRect; area: number }[]>([])
+  const readZones = () => {
+    zoneBoxes.current = [...document.querySelectorAll<HTMLElement>('[data-drop]')]
+      .filter((el) => !el.closest('.hand'))
+      .map((el) => {
+        const r = el.getBoundingClientRect()
+        return { name: el.dataset.drop ?? '', r, area: r.width * r.height }
+      })
+      .sort((a, b) => a.area - b.area)
+  }
   const zoneAt = (info: PanInfo) => {
-    for (const el of document.elementsFromPoint(info.point.x - window.scrollX, info.point.y - window.scrollY)) {
-      const zone = (el as HTMLElement).closest?.('[data-drop]') as HTMLElement | null
-      if (zone && !zone.closest('.hand')) return zone.dataset.drop ?? null
-    }
-    return null
+    const x = info.point.x - window.scrollX
+    const y = info.point.y - window.scrollY
+    // smallest first, so a seat or a pair wins over the felt behind it
+    const hit = zoneBoxes.current.find(({ r }) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)
+    return hit?.name || null
   }
 
   const take = legal.find((a) => a.type === 'take')
@@ -718,19 +729,20 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               const isDrag = dragging === c.id
               const hint = defenseHint(view, c, can, me)
               return (
+                // The outer box slides the card along the hand with a transform (cheap), the inner one is dragged.
+                <motion.div key={`${c.id}:${resetKey}`} className="hand-pos" style={{ zIndex: isDrag ? 200 : i + 1 }} initial={false} animate={{ x: i * handStep }} transition={{ type: 'spring', stiffness: 260, damping: 32 }}>
                 <motion.div
-                  key={`${c.id}:${resetKey}`}
                   className={`hand-slot ${can ? 'can-drag' : ''}`}
-                  style={{ zIndex: isDrag ? 200 : i + 1 }}
-                  initial={false}
-                  animate={{ left: i * handStep }}
-                  transition={{ type: 'spring', stiffness: 260, damping: 32 }}
                   drag={can}
                   dragSnapToOrigin={!(isDrag && hot)}
                   dragElastic={0.18}
                   dragMomentum={false}
                   whileDrag={{ scale: 1.08 }}
                   onDragStart={() => {
+                    readZones()
+                    // zones that appear once the drag has begun (the transfer slot) are read a moment later
+                    setTimeout(readZones, 60)
+                    setTimeout(readZones, 350)
                     setDragging(c.id)
                     setSelected(null)
                     tap('light')
@@ -760,6 +772,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                     onClick={() => onCard(c)}
                     disabled={!can}
                   />
+                </motion.div>
                 </motion.div>
               )
             })}
