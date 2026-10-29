@@ -345,7 +345,7 @@ button:focus-visible,
 }
 
 .role {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--accent);
@@ -424,7 +424,7 @@ button:focus-visible,
 .zone-label {
   display: grid;
   gap: 1px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   text-align: center;
   max-width: calc(var(--cw) * 1.6);
@@ -817,7 +817,7 @@ button.card:disabled {
 
 .eyebrow {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
@@ -907,7 +907,7 @@ button.card:disabled {
 
 .foot-note {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--muted);
   line-height: 1.45;
 }
@@ -1201,7 +1201,7 @@ button.card:disabled {
 
 .hint {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--muted);
 }
 
@@ -1254,7 +1254,7 @@ button.card:disabled {
 
 .rule p {
   margin: 0;
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.5;
   color: var(--muted);
 }
@@ -1465,7 +1465,7 @@ button.card:disabled {
   border-radius: 999px;
   background: color-mix(in srgb, var(--good) 18%, transparent);
   color: var(--good);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1495,7 +1495,7 @@ button.card:disabled {
   background: var(--raise);
   border: 1px solid var(--line);
   box-shadow: 0 14px 40px var(--shadow);
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 .toast-dot {
@@ -1834,7 +1834,7 @@ button.card:disabled {
 }
 
 .name-hint {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--muted);
 }
 
@@ -1967,7 +1967,7 @@ button.card:disabled {
 }
 
 .seat-tag {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -2108,7 +2108,7 @@ button.card:disabled {
     --cw: var(--zone-cw);
   }
   .zone-label {
-    font-size: 11px;
+    font-size: 12px;
   }
 }
 
@@ -2171,9 +2171,6 @@ button.card:disabled {
 }
 
 @media (max-width: 380px) {
-  .bar .chip {
-    display: none;
-  }
   .main-action {
     min-width: 100px;
     padding: 0 14px;
@@ -2185,7 +2182,7 @@ button.card:disabled {
 }
 
 .update-log {
-  font-size: 11px;
+  font-size: 12px;
   max-width: 300px;
   text-align: center;
   text-wrap: balance;
@@ -2293,11 +2290,11 @@ button.card:disabled {
 .avatar-opt { position: relative; display: grid; place-items: center; aspect-ratio: 1; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); font-size: 22px; padding: 0; }
 .avatar-opt > span:not(.tile-ring) { position: relative; z-index: 1; }
 .history { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.history li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); font-size: 13.5px; }
+.history li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; }
 .history .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
 .history .win .dot { background: var(--good); }
 .history .loss .dot { background: var(--danger); }
-.history time, .history .meta { color: var(--muted); font-size: 12.5px; }
+.history time, .history .meta { color: var(--muted); font-size: 13px; }
 .avatar.emoji { font-size: 15px; }
 .stat-tiles.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .server-field { display: grid; gap: 8px; justify-items: start; }
@@ -2328,7 +2325,7 @@ button.card:disabled {
 .friend-dot { position: absolute; right: -1px; bottom: -1px; width: 11px; height: 11px; border-radius: 50%; background: var(--muted); border: 2px solid var(--surface); }
 .friend-dot.on { background: var(--good); }
 .friend-name { display: grid; font-weight: 600; min-width: 0; }
-.friend-name small { color: var(--muted); font-weight: 400; font-size: 12.5px; }
+.friend-name small { color: var(--muted); font-weight: 400; font-size: 13px; }
 .friend-actions { display: flex; align-items: center; gap: 4px; }
 .friends-empty { display: grid; justify-items: center; gap: 8px; text-align: center; color: var(--muted); padding: 16px 8px; }
 .friends-empty-art { font-size: 40px; }
@@ -2373,13 +2370,13 @@ button.card:disabled {
 
 .breakdown { display: grid; gap: 8px; }
 .breakdown h3 { margin: 0 0 2px; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
-.bd-row { display: grid; grid-template-columns: 7.5em 1fr auto; gap: 10px; align-items: center; font-size: 13.5px; }
+.bd-row { display: grid; grid-template-columns: 7.5em 1fr auto; gap: 10px; align-items: center; font-size: 14px; }
 .bd-name { white-space: nowrap; }
 .bd-bar { height: 8px; border-radius: 999px; background: var(--raise); overflow: hidden; }
 .bd-bar i { display: block; height: 100%; border-radius: 999px; background: var(--good); }
 .bd-num { color: var(--muted); font-variant-numeric: tabular-nums; }
 
-.series-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 12px; margin: 0 16px 6px; font-size: 12.5px; color: var(--muted); }
+.series-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 12px; margin: 0 16px 6px; font-size: 13px; color: var(--muted); }
 .series-strip b { color: var(--fg); margin-left: 2px; }
 .series-strip .last { color: var(--danger); }
 .series-strip .last b { color: var(--danger); }
@@ -2387,3 +2384,96 @@ button.card:disabled {
 .result { position: relative; overflow: hidden; }
 .confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .confetti i { position: absolute; top: 0; border-radius: 2px; }
+
+
+/* ---- Design pass: one type scale, comfortable touch targets, steadier text ---- */
+:root {
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 15px;
+  --fs-lg: 17px;
+}
+button,
+.tile,
+.way,
+.menu-tile {
+  touch-action: manipulation;
+}
+h1,
+h2,
+h3,
+.menu-tag,
+.big-note,
+.result-sub,
+.way-note,
+.tile-note {
+  text-wrap: balance;
+}
+p,
+small,
+.name-hint {
+  text-wrap: pretty;
+}
+.menu-tag {
+  text-align: center;
+  max-width: 28ch;
+  line-height: 1.4;
+}
+.menu-logo {
+  text-align: center;
+}
+/* 44 px is the least a thumb can hit reliably */
+.icon {
+  width: 44px;
+  height: 44px;
+}
+.friend-actions button,
+.seat-add,
+.link {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-grid;
+  place-items: center;
+}
+.link {
+  padding: 0 6px;
+}
+.tile-badge,
+.bd-num,
+.score,
+.stat-num,
+.ring-num,
+.series-strip b {
+  font-variant-numeric: tabular-nums;
+}
+/* Rules: the suit sits in the corner opposite the number, clear of the words */
+.rule-suit {
+  right: 14px;
+  top: 14px;
+  bottom: auto;
+  width: 26px;
+  height: 26px;
+  opacity: 0.5;
+}
+.rule-suit.red {
+  opacity: 0.65;
+}
+.friend-actions .toast-close {
+  width: 44px;
+  height: 44px;
+  font-size: 22px;
+  display: grid;
+  place-items: center;
+}
+
+.way-art.plus { font-size: 34px; font-weight: 500; line-height: 1; }
+.server-field > .link {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: var(--fs-sm);
+}
+.server-field > .link:hover { color: var(--fg); }

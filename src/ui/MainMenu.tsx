@@ -78,7 +78,7 @@ export function MainMenu({ settings, stats, canContinue, onContinue, onPlay, onO
           Дурак
         </motion.h1>
         <motion.p className="menu-tag" {...enter(0.42)}>
-          Подкидной и переводной. С ботами или с друзьями онлайн
+          С ботами или с друзьями онлайн
         </motion.p>
       </div>
 
