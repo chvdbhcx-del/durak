@@ -8,6 +8,8 @@ export interface Friends {
   list: Friend[]
   /** friend id → app is open right now; filled by `refresh` */
   here: Record<string, boolean>
+  /** this device is connected to the broker; without it nobody can be reached */
+  up: boolean
   incoming: Incoming | null
   /** a short confirmation line, e.g. "Приглашение отправлено" */
   flash: string | null
@@ -25,6 +27,7 @@ export function useFriends(name: string, server: string): Friends {
   const [fid] = useState(friendId)
   const [list, setList] = useState<Friend[]>(loadFriends)
   const [here, setHere] = useState<Record<string, boolean>>({})
+  const [up, setUp] = useState(false)
   const [queue, setQueue] = useState<Incoming[]>([])
   const [flash, setFlash] = useState<string | null>(null)
   const inbox = useRef<Inbox | null>(null)
@@ -46,7 +49,13 @@ export function useFriends(name: string, server: string): Friends {
 
   useEffect(() => {
     const handle = (msg: InboxMsg) => {
-      if (msg.t === 'ping' || msg.fid === fid) return
+      // A friend pinging us proves they are here, whatever our own pings found.
+      if (msg.t === 'ping') {
+        const from = msg.fid
+        if (from && listRef.current.some((f) => f.id === from)) setHere((h) => (h[from] ? h : { ...h, [from]: true }))
+        return
+      }
+      if (msg.fid === fid) return
       const known = listRef.current.find((f) => f.id === msg.fid)
       if (msg.t === 'friend') {
         if (known) {
@@ -84,7 +93,12 @@ export function useFriends(name: string, server: string): Friends {
   const remove = useCallback((id: string) => update(listRef.current.filter((f) => f.id !== id)), [])
 
   const refresh = useCallback(() => {
-    for (const f of listRef.current) inbox.current?.ping(f.id).then((ok) => setHere((h) => (h[f.id] === ok ? h : { ...h, [f.id]: ok })))
+    setUp(!!inbox.current?.up)
+    for (const f of listRef.current) {
+      const mark = (ok: boolean) => setHere((h) => (h[f.id] === ok ? h : { ...h, [f.id]: ok }))
+      // One quick second try: the first knock on a cold link often times out.
+      inbox.current?.ping(f.id).then((ok) => (ok ? mark(true) : inbox.current?.ping(f.id).then(mark)))
+    }
   }, [])
 
   const invite = useCallback(async (id: string, code: string, srv: string) => {
@@ -97,6 +111,7 @@ export function useFriends(name: string, server: string): Friends {
     fid,
     list,
     here,
+    up,
     incoming: queue[0] ?? null,
     flash,
     add,

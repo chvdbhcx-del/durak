@@ -1,3 +1,4 @@
+import { presenceText } from './FriendsPanel'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { maxPlayers } from '../engine/game'
@@ -117,6 +118,14 @@ export function OnlineScreen({ online, settings, onChange, initialCode, friends,
   const [code, setCode] = useState(initialCode)
   const [copied, setCopied] = useState(false)
   const { phase, lobby, role, error } = online
+  const { refresh } = friends
+  const watching = phase !== 'idle' && role === 'host'
+  useEffect(() => {
+    if (!watching) return
+    refresh()
+    const t = setInterval(refresh, 12000)
+    return () => clearInterval(t)
+  }, [watching, refresh])
 
   const back = () => {
     if (phase !== 'idle') online.leave()
@@ -312,7 +321,7 @@ export function OnlineScreen({ online, settings, onChange, initialCode, friends,
                             <i className={`friend-dot ${friends.here[f.id] ? 'on' : ''}`} aria-hidden="true" />
                             <span>
                               <b>{f.name}</b>
-                              <small>{friends.here[f.id] ? 'в приложении' : 'не в сети'}</small>
+                              <small>{presenceText(friends, f.id)}</small>
                             </span>
                           </span>
                           <motion.button type="button" className="primary small" whileTap={{ scale: 0.94 }} onClick={() => onInviteFriend(f.id)}>

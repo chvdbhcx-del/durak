@@ -16,7 +16,7 @@ export interface Friend {
   name: string
 }
 
-export type InboxMsg = { t: 'invite'; fid: string; name: string; code: string; server?: string } | { t: 'friend'; fid: string; name: string } | { t: 'ping' }
+export type InboxMsg = { t: 'invite'; fid: string; name: string; code: string; server?: string } | { t: 'friend'; fid: string; name: string } | { t: 'ping'; fid?: string }
 
 export function friendId(): string {
   try {
@@ -53,7 +53,7 @@ export function parseInbox(raw: unknown): InboxMsg | null {
   if (!raw || typeof raw !== 'object') return null
   const m = raw as Record<string, unknown>
   const text = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : null)
-  if (m.t === 'ping') return { t: 'ping' }
+  if (m.t === 'ping') return { t: 'ping', fid: text(m.fid, 32) || undefined }
   const fid = text(m.fid, 32)
   const name = text(m.name, 16)
   if (!fid || !name) return null
@@ -65,7 +65,8 @@ export function parseInbox(raw: unknown): InboxMsg | null {
   return null
 }
 
-const CONNECT_TIMEOUT_MS = 5000
+// Setting up a peer-to-peer link over mobile networks can take a while, so give it time before calling a friend absent.
+const CONNECT_TIMEOUT_MS = 10000
 
 export class Inbox {
   private peer: Peer | null = null
@@ -86,7 +87,7 @@ export class Inbox {
     peer.on('connection', (conn) => {
       conn.on('data', (raw) => {
         const msg = parseInbox(raw)
-        if (msg && msg.t !== 'ping') this.onMessage(msg)
+        if (msg) this.onMessage(msg)
         setTimeout(() => conn.close(), 400)
       })
     })
@@ -150,9 +151,14 @@ export class Inbox {
     })
   }
 
-  /** Whether a friend's app is open right now. */
+  /** Whether this device is registered with the broker, i.e. can be reached and can reach others. */
+  get up() {
+    return !!this.peer?.open && !this.peer.disconnected
+  }
+
+  /** Whether a friend's app is open right now. Our id goes along so they learn we are here too. */
   ping(fid: string) {
-    return this.send(fid, { t: 'ping' })
+    return this.send(fid, { t: 'ping', fid: this.fid })
   }
 
   close() {
