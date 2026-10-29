@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { maxPlayers } from '../engine/game'
-import { CheatPicker, DeckPicker, DifficultyPicker, HapticsPicker, LookPicker, ModePicker, OpponentsPicker, SoundPicker, SpeedPicker, ThemePicker } from './pickers'
+import { CheatPicker, DeckPicker, DifficultyPicker, HapticsPicker, LookPicker, ModePicker, OpponentsPicker, SeriesPicker, SoundPicker, SpeedPicker, ThemePicker } from './pickers'
 import type { Settings } from './settings'
 import { Sheet } from './Sheet'
 
@@ -35,6 +35,7 @@ export function SettingsPanel({ settings, onChange, onStart, onClose, inGame }: 
       <ModePicker value={settings.mode} onChange={(mode) => set({ mode })} />
       <OpponentsPicker value={settings.opponents} max={maxPlayers(settings.deckSize) - 1} onChange={(opponents) => set({ opponents })} />
       <DeckPicker value={settings.deckSize} onChange={(deckSize) => set({ deckSize })} />
+      <SeriesPicker value={settings.series} onChange={(series) => set({ series })} />
       <CheatPicker value={settings.cheat} onChange={(cheat) => set({ cheat })} />
       <DifficultyPicker value={settings.difficulty} onChange={(difficulty) => set({ difficulty })} />
       <SpeedPicker value={settings.speed} onChange={(speed) => set({ speed })} />

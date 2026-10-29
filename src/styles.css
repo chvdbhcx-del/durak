@@ -2297,3 +2297,12 @@ button.card:disabled {
 .stat-tiles.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .server-field { display: grid; gap: 8px; justify-items: start; }
 .server-field > div { width: 100%; display: grid; gap: 6px; padding-top: 4px; }
+
+/* Tournament */
+.series-art { display: flex; gap: 4px; justify-content: center; }
+.series-art span { width: 12px; height: 18px; border-radius: 3px; background: var(--muted); opacity: 0.7; }
+.tile.on .series-art span { background: var(--accent); opacity: 1; }
+.series-board { list-style: none; display: grid; gap: 6px; margin: 4px 0 0; padding: 0; }
+.series-board li { display: flex; justify-content: space-between; padding: 8px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; }
+.series-board li.last { border-color: var(--danger); }
+.series-board li.last b { color: var(--danger); }

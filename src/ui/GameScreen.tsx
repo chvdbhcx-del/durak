@@ -27,6 +27,13 @@ export const fade = {
 
 export type Result = 'win' | 'loss' | 'draw'
 
+/** A bot tournament in progress: how many games are played and how often each seat was the fool. */
+export interface Series {
+  total: number
+  played: number
+  fools: number[]
+}
+
 interface Props {
   game: GameState
   me: number
@@ -36,7 +43,8 @@ interface Props {
   botDelay: number
   /** called when a bot should move; left out for guests, whose bots run on the host */
   onBotTurn?: (actor: number) => void
-  onFinished: (result: Result) => void
+  onFinished: (result: Result, loser: number | null) => void
+  series?: Series | null
   onExit: () => void
   onOpenSettings: () => void
   /** left out when this player can't start the next game (an online guest) */
@@ -108,7 +116,7 @@ function zoneMap(g: GameState): Map<string, string> {
 /** How many cards of the deck and the discard pile are actually drawn. */
 const PILE_SHOWN = 9
 
-export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, onExit, onOpenSettings, onPlayAgain, room }: Props) {
+export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, series, onExit, onOpenSettings, onPlayAgain, room }: Props) {
   const { table: cw, hand: hw, flat } = useCardSizes()
   const { dealt, dealing } = useDealing(game)
   const zones = useMemo(() => zoneMap(game), [game])
@@ -263,7 +271,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     counted.current = game.options.seed ?? 0
     const result: Result = game.loser === null ? 'draw' : game.loser === me ? 'loss' : 'win'
     notify(result === 'loss' ? 'warning' : 'success')
-    onFinished(result)
+    onFinished(result, game.loser)
   }, [game, me, onFinished])
 
   const play = (action: Action) => {
@@ -405,6 +413,10 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const miniW = Math.round(cw * 0.42)
   const deckCards = [...game.deck.slice(1), ...undealt]
   const status = dealing ? 'Раздача…' : staged.length ? planText(staged, game) : selected ? 'Выберите карту на столе, которую покрыть' : statusText(game, actor, me)
+  const seriesDone = !!series && series.played >= series.total
+  const worst = series ? Math.max(...series.fools) : 0
+  const losers = series ? game.players.filter((_, i) => series.fools[i] === worst) : []
+  const seriesTitle = !seriesDone ? '' : losers.length > 1 ? 'Ничья в турнире' : losers[0].id === me ? 'Турнир проигран' : 'Вы выиграли турнир'
   const resultTitle = game.loser === null ? 'Ничья' : game.loser === me ? 'Вы дурак' : 'Вы не дурак'
 
   return (
@@ -742,11 +754,21 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               transition={{ delay: 0.55, type: 'spring', stiffness: 320, damping: 26 }}
             >
               <Stagger delay={0.7}>
-                <p className="eyebrow">Партия окончена</p>
-                <h2 id="result-title">{resultTitle}</h2>
+                <p className="eyebrow">{series ? (seriesDone ? 'Турнир окончен' : `Партия ${series.played} из ${series.total}`) : 'Партия окончена'}</p>
+                <h2 id="result-title">{seriesDone ? seriesTitle : resultTitle}</h2>
                 <p className="result-sub">
                   {game.loser === null ? 'Последние карты ушли одновременно.' : game.loser === me ? 'Карты остались только у вас. Отыграйтесь.' : `Дураком остался ${game.players[game.loser].name}.`}
                 </p>
+                {series && (
+                  <ul className="series-board" aria-label="Счёт турнира">
+                    {game.players.map((p, i) => (
+                      <li key={p.id} className={series.fools[i] === Math.max(...series.fools) && series.fools[i] > 0 ? 'last' : ''}>
+                        <span>{p.name}</span>
+                        <b>{series.fools[i]}</b>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <p className="result-stats">
                   Победы <b>{stats.wins}</b> · Поражения <b>{stats.losses}</b> · Ничьи <b>{stats.draws}</b>
                 </p>
@@ -756,7 +778,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                   </motion.button>
                   {onPlayAgain ? (
                     <motion.button type="button" className="primary" whileTap={{ scale: 0.95 }} autoFocus onClick={onPlayAgain}>
-                      Ещё партию
+                      {series ? (seriesDone ? 'Новый турнир' : 'Следующая партия') : 'Ещё партию'}
                     </motion.button>
                   ) : (
                     <span className="muted">Ждём, когда хозяин начнёт новую партию</span>

@@ -4,7 +4,7 @@ import { chooseAction } from '../engine/bot'
 import { Action, applyAction, currentActor, GameState, maxPlayers, newGame } from '../engine/game'
 import { normalizeCode, setRoomServer } from '../net/room'
 import { hasSavedRoom, useOnline } from '../net/useOnline'
-import { GameScreen, Result } from './GameScreen'
+import { GameScreen, Result, Series } from './GameScreen'
 import { RulesPanel, StatsPanel } from './InfoPanels'
 import { MainMenu } from './MainMenu'
 import { setHaptics, syncStatusBar, tap } from './native'
@@ -68,6 +68,7 @@ export function App() {
   setRoomServer(settings.server)
   const [stats, setStats] = useState<Stats>(loadStats)
   const [game, setGame] = useState<GameState | null>(loadGame)
+  const [series, setSeries] = useState<Series | null>(null)
   const [panel, setPanel] = useState<Panel | null>(null)
   const inviteCode = invite.code
   const [resumeRoom] = useState(() => !inviteCode && hasSavedRoom())
@@ -113,8 +114,10 @@ export function App() {
   const liveRef = useRef<{ game: GameState | null; online: boolean }>({ game: null, online: false })
   const liveOnline = screen === 'online' && online.phase === 'playing' && online.game
   liveRef.current = { game: liveOnline || (screen === 'game' ? game : null), online: !!liveOnline }
-  const recordResult = useCallback((result: Result) => {
+  const recordResult = useCallback((result: Result, loser: number | null) => {
     const g = liveRef.current.game
+    if (!liveRef.current.online)
+      setSeries((cur) => (cur && cur.played < cur.total ? { ...cur, played: cur.played + 1, fools: cur.fools.map((n, i) => (i === loser ? n + 1 : n)) } : cur))
     setStats((s) => {
       const next = addResult(s, { at: Date.now(), result, mode: g?.options.mode ?? 'podkidnoy', deck: g?.options.deckSize ?? 36, players: g?.players.length ?? 2, online: liveRef.current.online })
       saveStats(next)
@@ -138,8 +141,10 @@ export function App() {
     online.act(action)
   }
 
-  const newRound = (s: Settings = settings) => {
-    setGame(startGame(s))
+  const newRound = (s: Settings = settings, fresh = true) => {
+    const g = startGame(s)
+    setGame(g)
+    setSeries((cur) => (s.series > 1 ? (fresh || !cur || cur.played >= cur.total ? { total: s.series, played: 0, fools: g.players.map(() => 0) } : cur) : null))
     setScreen('game')
   }
 
@@ -214,7 +219,8 @@ export function App() {
         onFinished={recordResult}
         onExit={() => setScreen('menu')}
         onOpenSettings={() => setPanel('settings')}
-        onPlayAgain={() => newRound()}
+        series={series}
+        onPlayAgain={() => newRound(settings, false)}
       />
     )
   } else if (screen === 'online') {
