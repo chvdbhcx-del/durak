@@ -28,6 +28,8 @@ export interface Settings {
   haptics: boolean
   cardBack: CardBack
   tableStyle: TableStyle
+  /** address of a private room server; empty means the public one */
+  server: string
 }
 
 export interface HistoryEntry {
@@ -82,6 +84,7 @@ export const DEFAULT_SETTINGS: Settings = {
   haptics: true,
   cardBack: 'teal',
   tableStyle: 'forest',
+  server: '',
 }
 /** How long a bot "thinks" before a move, in ms. Each move varies around this. */
 export const BOT_DELAY: Record<Speed, number> = { calm: 2600, normal: 1800, fast: 1000 }

@@ -45,6 +45,25 @@ function CodeInput({ value, onChange, onDone }: { value: string; onChange: (v: s
   )
 }
 
+function ServerField({ value, onChange }: { value: string; onChange: (s: string) => void }) {
+  const [open, setOpen] = useState(!!value)
+  return (
+    <div className="server-field">
+      <button type="button" className="link" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {value.trim() ? 'Свой сервер комнат' : 'Сервер комнат: общий'}
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ overflow: 'hidden' }}>
+            <input className="profile-name" value={value} placeholder="Пусто: общий сервер. Или адрес вашего" inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-label="Адрес сервера комнат" onChange={(e) => onChange(e.target.value)} />
+            <p className="name-hint">Все игроки комнаты должны быть на одном сервере. Ссылка-приглашение передаёт адрес сама.</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 function NameBadge({ name, onChange }: { name: string; onChange: (n: string) => void }) {
   const [editing, setEditing] = useState(false)
   return (
@@ -104,7 +123,7 @@ export function OnlineScreen({ online, settings, onChange, initialCode, onBack }
 
   const invite = async () => {
     if (!lobby) return
-    const url = `${SITE_URL}#join-${lobby.code}`
+    const url = `${SITE_URL}#join-${lobby.code}${settings.server.trim() ? `&s=${encodeURIComponent(settings.server.trim())}` : ''}`
     const text = `Сыграем в дурака? Код комнаты: ${lobby.code}`
     try {
       if (navigator.share) {
@@ -147,6 +166,7 @@ export function OnlineScreen({ online, settings, onChange, initialCode, onBack }
           {phase === 'idle' && (
             <motion.div key={`idle-${mode}`} className="online-block" variants={sheetList} initial="hidden" animate="shown" exit={{ opacity: 0, y: -10 }}>
               <NameBadge name={settings.name} onChange={(name) => onChange({ ...settings, name })} />
+              <ServerField value={settings.server} onChange={(server) => onChange({ ...settings, server })} />
               {mode === 'choose' ? (
                 <div className="way-cards">
                   <motion.button

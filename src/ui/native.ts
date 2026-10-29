@@ -10,13 +10,24 @@ export function setHaptics(on: boolean) {
 }
 
 // Haptics fall back to navigator.vibrate on the web and are silently ignored where unsupported.
+// Android's stock impact buzz is long and heavy, so it gets a short plain vibration instead.
+const android = Capacitor.getPlatform() === 'android'
+
 export function tap(strength: 'light' | 'medium' = 'light') {
   if (!hapticsOn) return
+  if (android) {
+    Haptics.vibrate({ duration: strength === 'light' ? 6 : 12 }).catch(() => {})
+    return
+  }
   Haptics.impact({ style: strength === 'light' ? ImpactStyle.Light : ImpactStyle.Medium }).catch(() => {})
 }
 
 export function notify(kind: 'success' | 'warning') {
   if (!hapticsOn) return
+  if (android) {
+    Haptics.vibrate({ duration: kind === 'success' ? 14 : 22 }).catch(() => {})
+    return
+  }
   Haptics.notification({ type: kind === 'success' ? NotificationType.Success : NotificationType.Warning }).catch(() => {})
 }
 
