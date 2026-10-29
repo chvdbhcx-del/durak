@@ -2264,3 +2264,34 @@ button.card:disabled {
   pointer-events: none;
   white-space: nowrap;
 }
+
+/* Card backs and table colours */
+:root[data-back='ember'] { --back-a: #3b1f17; --back-b: #57301f; }
+:root[data-back='ink'] { --back-a: #1c2540; --back-b: #2a3860; }
+:root[data-back='rose'] { --back-a: #3d1c2e; --back-b: #5a2a44; }
+:root[data-table='night'] { --felt: #111826; --felt-glow: #1a2233; }
+:root[data-table='wine'] { --felt: #231216; --felt-glow: #33191f; }
+:root[data-table='slate'] { --felt: #191d1f; --felt-glow: #262b2e; }
+
+.tiles.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.swatch { display: block; border-radius: 8px; }
+.swatch.table { width: 100%; height: 34px; border: 1px solid var(--line); }
+.swatch.back { position: relative; width: 28px; height: 40px; border: 1px solid; }
+.swatch.back span { position: absolute; inset: 4px; border-radius: 3px; opacity: 0.9; }
+
+/* Profile */
+.profile-head { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; }
+.profile-avatar { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: var(--raise); border: 1px solid var(--line); font-size: 32px; }
+.profile-name { width: 100%; min-width: 0; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: inherit; font-weight: 600; }
+.profile-name:focus { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 1px; }
+.avatar-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+.avatar-opt { position: relative; display: grid; place-items: center; aspect-ratio: 1; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); font-size: 22px; padding: 0; }
+.avatar-opt > span:not(.tile-ring) { position: relative; z-index: 1; }
+.history { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.history li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); font-size: 13.5px; }
+.history .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.history .win .dot { background: var(--good); }
+.history .loss .dot { background: var(--danger); }
+.history time, .history .meta { color: var(--muted); font-size: 12.5px; }
+.avatar.emoji { font-size: 15px; }
+.stat-tiles.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }

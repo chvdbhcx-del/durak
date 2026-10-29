@@ -7,12 +7,12 @@ import { hasSavedRoom, useOnline } from '../net/useOnline'
 import { GameScreen, Result } from './GameScreen'
 import { RulesPanel, StatsPanel } from './InfoPanels'
 import { MainMenu } from './MainMenu'
-import { syncStatusBar, tap } from './native'
+import { setHaptics, syncStatusBar, tap } from './native'
 import { OnlineScreen } from './OnlineScreen'
 import { BOT_NAMES } from './pickers'
 import { PlayScreen } from './PlayScreen'
 import { SettingsPanel } from './SettingsPanel'
-import { applyTheme, BOT_DELAY, deviceToken, loadSettings, loadStats, saveSettings, saveStats, Settings, Stats } from './settings'
+import { addResult, applyLook, applyTheme, BOT_DELAY, deviceToken, EMPTY_STATS, loadSettings, loadStats, saveSettings, saveStats, Settings, Stats } from './settings'
 import { setSoundEnabled, unlockSound } from './sfx'
 import { UpdateToast } from './UpdateToast'
 import { applyIfIdle, startUpdates, UpdateState } from './updates'
@@ -69,6 +69,8 @@ export function App() {
     syncStatusBar()
   }, [settings.theme])
   useEffect(() => saveSettings(settings), [settings])
+  useEffect(() => applyLook(settings.cardBack, settings.tableStyle), [settings.cardBack, settings.tableStyle])
+  useEffect(() => setHaptics(settings.haptics), [settings.haptics])
   useEffect(() => setSoundEnabled(settings.sound), [settings.sound])
   useEffect(() => unlockSound(), [])
   // A downloaded update switches in only while nobody is mid-game (and right away if the player taps it).
@@ -91,11 +93,18 @@ export function App() {
   // Callbacks handed to the table stay stable, so a re-render doesn't restart its bot timer.
   const onlineRef = useRef(online)
   onlineRef.current = online
-  const stepOnlineBot = useCallback((actor: number) => onlineRef.current.stepBot(actor), [])
-  const stepLocalBot = useCallback((actor: number) => setGame((g) => (g && currentActor(g) === actor ? applyAction(g, actor, chooseAction(g, actor)) : g)), [])
+  const levelRef = useRef(settings.difficulty)
+  levelRef.current = settings.difficulty
+  const stepOnlineBot = useCallback((actor: number) => onlineRef.current.stepBot(actor, levelRef.current), [])
+  const stepLocalBot = useCallback((actor: number) => setGame((g) => (g && currentActor(g) === actor ? applyAction(g, actor, chooseAction(g, actor, levelRef.current)) : g)), [])
+  // The finished game's setup goes into the history, so keep the live game in a ref.
+  const liveRef = useRef<{ game: GameState | null; online: boolean }>({ game: null, online: false })
+  const liveOnline = screen === 'online' && online.phase === 'playing' && online.game
+  liveRef.current = { game: liveOnline || (screen === 'game' ? game : null), online: !!liveOnline }
   const recordResult = useCallback((result: Result) => {
+    const g = liveRef.current.game
     setStats((s) => {
-      const next = { ...s, wins: s.wins + (result === 'win' ? 1 : 0), losses: s.losses + (result === 'loss' ? 1 : 0), draws: s.draws + (result === 'draw' ? 1 : 0) }
+      const next = addResult(s, { at: Date.now(), result, mode: g?.options.mode ?? 'podkidnoy', deck: g?.options.deckSize ?? 36, players: g?.players.length ?? 2, online: liveRef.current.online })
       saveStats(next)
       return next
     })
@@ -147,11 +156,12 @@ export function App() {
         <StatsPanel
           key="stats"
           stats={stats}
+          settings={settings}
+          onSettings={setSettings}
           onClose={() => setPanel(null)}
           onReset={() => {
-            const zero = { wins: 0, losses: 0, draws: 0 }
-            saveStats(zero)
-            setStats(zero)
+            saveStats(EMPTY_STATS)
+            setStats(EMPTY_STATS)
           }}
         />
       )}

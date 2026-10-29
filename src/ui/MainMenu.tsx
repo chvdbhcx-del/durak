@@ -32,7 +32,7 @@ const ICONS = {
 const TILES: { id: 'settings' | 'rules' | 'stats'; label: string }[] = [
   { id: 'settings', label: 'Настройки' },
   { id: 'rules', label: 'Правила' },
-  { id: 'stats', label: 'Статистика' },
+  { id: 'stats', label: 'Профиль' },
 ]
 
 const enter = (delay: number) => ({

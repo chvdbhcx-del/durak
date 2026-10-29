@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import type { DeckSize } from '../engine/cards'
 import type { Mode } from '../engine/game'
-import type { Speed, Theme } from './settings'
+import { AVATARS, type CardBack, type Difficulty, type Speed, type TableStyle, type Theme } from './settings'
 import { sheetItem } from './Sheet'
 import { SuitIcon } from './SuitIcon'
 
@@ -248,5 +248,102 @@ export function SoundPicker({ value, onChange }: { value: boolean; onChange: (on
         ))}
       </div>
     </Group>
+  )
+}
+
+export function DifficultyPicker({ value, onChange }: { value: Difficulty; onChange: (d: Difficulty) => void }) {
+  const levels: { value: Difficulty; title: string; note: string; bars: number }[] = [
+    { value: 'easy', title: 'Лёгкий', note: 'Часто ошибается', bars: 1 },
+    { value: 'normal', title: 'Обычный', note: 'Играет разумно', bars: 2 },
+    { value: 'hard', title: 'Сильный', note: 'Считает вышедшие карты', bars: 3 },
+  ]
+  return (
+    <Group title="Сила ботов">
+      <div className="tiles three">
+        {levels.map((l) => (
+          <Tile key={l.value} group="difficulty" on={value === l.value} onClick={() => onChange(l.value)} label={l.title}>
+            <span className="speed-art" aria-hidden="true">
+              {[1, 2, 3].map((b) => (
+                <span key={b} className={b <= l.bars ? 'lit' : ''} />
+              ))}
+            </span>
+            <span className="tile-title">{l.title}</span>
+            <span className="tile-note">{l.note}</span>
+          </Tile>
+        ))}
+      </div>
+    </Group>
+  )
+}
+
+export function HapticsPicker({ value, onChange }: { value: boolean; onChange: (on: boolean) => void }) {
+  const options: { value: boolean; title: string }[] = [
+    { value: true, title: 'Вкл' },
+    { value: false, title: 'Выкл' },
+  ]
+  return (
+    <Group title="Вибрация">
+      <div className="tiles two">
+        {options.map((o) => (
+          <Tile key={String(o.value)} group="haptics" on={value === o.value} onClick={() => onChange(o.value)} label={o.title}>
+            <span className="tile-title">{o.title}</span>
+          </Tile>
+        ))}
+      </div>
+    </Group>
+  )
+}
+
+export const CARD_BACKS: { value: CardBack; title: string; a: string; b: string }[] = [
+  { value: 'teal', title: 'Изумруд', a: '#173a34', b: '#1f4d45' },
+  { value: 'ember', title: 'Уголь', a: '#3b1f17', b: '#57301f' },
+  { value: 'ink', title: 'Тушь', a: '#1c2540', b: '#2a3860' },
+  { value: 'rose', title: 'Роза', a: '#3d1c2e', b: '#5a2a44' },
+]
+
+export const TABLES: { value: TableStyle; title: string; color: string }[] = [
+  { value: 'forest', title: 'Сукно', color: '#183029' },
+  { value: 'night', title: 'Ночь', color: '#1a2233' },
+  { value: 'wine', title: 'Бордо', color: '#33191f' },
+  { value: 'slate', title: 'Сланец', color: '#262b2e' },
+]
+
+export function LookPicker({ back, table, onBack, onTable }: { back: CardBack; table: TableStyle; onBack: (b: CardBack) => void; onTable: (t: TableStyle) => void }) {
+  return (
+    <>
+      <Group title="Рубашка карт" value={CARD_BACKS.find((b) => b.value === back)?.title}>
+        <div className="tiles four">
+          {CARD_BACKS.map((b) => (
+            <Tile key={b.value} group="back" on={back === b.value} onClick={() => onBack(b.value)} label={b.title}>
+              <span className="swatch back" style={{ background: b.a, borderColor: b.b }} aria-hidden="true">
+                <span style={{ background: b.b }} />
+              </span>
+            </Tile>
+          ))}
+        </div>
+      </Group>
+      <Group title="Стол" value={TABLES.find((t) => t.value === table)?.title}>
+        <div className="tiles four">
+          {TABLES.map((t) => (
+            <Tile key={t.value} group="table" on={table === t.value} onClick={() => onTable(t.value)} label={t.title}>
+              <span className="swatch table" style={{ background: t.color }} aria-hidden="true" />
+            </Tile>
+          ))}
+        </div>
+      </Group>
+    </>
+  )
+}
+
+export function AvatarPicker({ value, onChange }: { value: number; onChange: (i: number) => void }) {
+  return (
+    <div className="avatar-grid">
+      {AVATARS.map((a, i) => (
+        <motion.button key={a} type="button" className={`avatar-opt ${i === value ? 'on' : ''}`} aria-label={`Аватар ${a}`} aria-pressed={i === value} whileTap={{ scale: 0.9 }} onClick={() => onChange(i)}>
+          {i === value && <motion.span layoutId="avatar-ring" className="tile-ring" transition={{ type: 'spring', stiffness: 480, damping: 36 }} />}
+          <span>{a}</span>
+        </motion.button>
+      ))}
+    </div>
   )
 }
