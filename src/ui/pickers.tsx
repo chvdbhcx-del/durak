@@ -113,7 +113,7 @@ export function OpponentsPicker({ value, max, onChange, title = 'Соперни�
               disabled={disabled}
               onClick={() => onChange(n)}
               whileTap={disabled ? undefined : { scale: 0.9 }}
-              animate={{ scale: on ? 1 : 0.88, opacity: disabled ? 0.25 : on ? 1 : 0.55 }}
+              animate={{ scale: on ? 1 : 0.88, opacity: disabled ? 0.3 : on ? 1 : 0.75 }}
               transition={{ type: 'spring', stiffness: 500, damping: 26, delay: on ? i * 0.03 : 0 }}
             >
               <span className="avatar-circle">{name[0]}</span>
