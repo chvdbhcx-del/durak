@@ -16,6 +16,15 @@ export interface Member {
   name: string
   host: boolean
   online: boolean
+  /** public friend id, so others can add this player; never the secret device token */
+  fid?: string
+}
+
+/** Who sits where once a game is on, so a seat can be turned into a friend. */
+export interface RosterEntry {
+  seat: number
+  name: string
+  fid?: string
 }
 
 export interface LobbyInfo {
@@ -25,6 +34,7 @@ export interface LobbyInfo {
   mode: GameState['options']['mode']
   deckSize: GameState['options']['deckSize']
   cheat?: boolean
+  roster?: RosterEntry[]
 }
 
 export type ToGuest =
@@ -33,7 +43,7 @@ export type ToGuest =
   | { t: 'emote'; seat: number; emoji: string }
   | { t: 'closed'; reason: string }
 
-export type ToHost = { t: 'hello'; name: string; token: string } | { t: 'act'; action: Action } | { t: 'emote'; emoji: string }
+export type ToHost = { t: 'hello'; name: string; token: string; fid?: string } | { t: 'act'; action: Action } | { t: 'emote'; emoji: string }
 
 export function randomCode() {
   let code = ''
@@ -77,7 +87,7 @@ export function setRoomServer(raw: string) {
   ownServer = parseServer(raw)
 }
 
-const peerOptions = () => ({ debug: 0 as const, ...(ownServer ?? {}) })
+export const peerOptions = () => ({ debug: 0 as const, ...(ownServer ?? {}) })
 
 /** How long the first link to the room broker may take before we say so instead of spinning forever. */
 const BROKER_TIMEOUT_MS = 15000
@@ -104,7 +114,7 @@ const TRANSIENT = new Set(['network', 'server-error', 'socket-error', 'socket-cl
 
 export interface HostEvents {
   onReady: (code: string) => void
-  onJoin: (token: string, name: string) => void
+  onJoin: (token: string, name: string, fid?: string) => void
   onLeave: (token: string) => void
   onAction: (token: string, action: Action) => void
   onEmote: (token: string, emoji: string) => void
@@ -176,7 +186,7 @@ export class HostRoom {
           const old = this.conns.get(token)
           this.conns.set(token, conn)
           if (old && old !== conn) old.close()
-          this.events.onJoin(token, msg.name.slice(0, 16) || 'Гость')
+          this.events.onJoin(token, msg.name.slice(0, 16) || 'Гость', typeof msg.fid === 'string' ? msg.fid.slice(0, 32) : undefined)
         } else if (msg.t === 'act' && token) this.events.onAction(token, msg.action)
         else if (msg.t === 'emote' && token) this.events.onEmote(token, String(msg.emoji).slice(0, 8))
       })
@@ -269,6 +279,7 @@ export class GuestRoom {
     public code: string,
     private name: string,
     private token: string,
+    private fid: string,
     private events: GuestEvents,
   ) {
     this.peer = this.makePeer()
@@ -304,7 +315,7 @@ export class GuestRoom {
     const conn = this.peer.connect(PREFIX + this.code, { reliable: true })
     this.conn = conn
     conn.on('open', () => {
-      conn.send({ t: 'hello', name: this.name, token: this.token } satisfies ToHost)
+      conn.send({ t: 'hello', name: this.name, token: this.token, fid: this.fid } satisfies ToHost)
       this.everConnected = true
       this.lostAt = 0
       this.events.onReconnecting(false)

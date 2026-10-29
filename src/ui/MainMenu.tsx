@@ -11,7 +11,8 @@ interface Props {
   canContinue: boolean
   onContinue: () => void
   onPlay: () => void
-  onOpen: (panel: 'settings' | 'rules' | 'stats') => void
+  onOpen: (panel: 'settings' | 'rules' | 'stats' | 'friends') => void
+  friendCount: number
 }
 
 // The hero fan: an ace of trumps flanked by court cards.
@@ -27,12 +28,14 @@ const ICONS = {
   settings: 'M4 7h10.2a3 3 0 0 1 5.6 0H20a1 1 0 1 1 0 2h-.2a3 3 0 0 1-5.6 0H4a1 1 0 0 1 0-2zm13 2a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM4 15h.2a3 3 0 0 1 5.6 0H20a1 1 0 1 1 0 2H9.8a3 3 0 0 1-5.6 0H4a1 1 0 1 1 0-2zm3 2a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
   rules: 'M6 3h9l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm8 1.5V8h3.5L14 4.5zM8 11v1.6h8V11H8zm0 3.6v1.6h8v-1.6H8zm0 3.6v1.6h5v-1.6H8z',
   stats: 'M4 20V10h3.5v10H4zm6.25 0V4h3.5v16h-3.5zM16.5 20v-7H20v7h-3.5z',
+  friends: 'M9 11a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7zm7.5.5a2.75 2.75 0 1 1 0-5.5 2.75 2.75 0 0 1 0 5.5zM9 13c3.3 0 6 1.7 6 3.8V19H3v-2.2C3 14.7 5.7 13 9 13zm7.5.5c2.5 0 4.5 1.3 4.5 3V19h-4v-2.2c0-1.3-.5-2.4-1.3-3.2.2 0 .5-.1.8-.1z',
 }
 
-const TILES: { id: 'settings' | 'rules' | 'stats'; label: string }[] = [
+const TILES: { id: 'settings' | 'rules' | 'stats' | 'friends'; label: string }[] = [
   { id: 'settings', label: 'Настройки' },
   { id: 'rules', label: 'Правила' },
   { id: 'stats', label: 'Профиль' },
+  { id: 'friends', label: 'Друзья' },
 ]
 
 const enter = (delay: number) => ({
@@ -48,7 +51,7 @@ function useUpdateLog() {
   return log
 }
 
-export function MainMenu({ settings, stats, canContinue, onContinue, onPlay, onOpen }: Props) {
+export function MainMenu({ settings, stats, canContinue, onContinue, onPlay, onOpen, friendCount }: Props) {
   const setup = `${settings.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'} · ${settings.deckSize} карт · ${settings.opponents} ${settings.opponents === 1 ? 'соперник' : settings.opponents < 5 ? 'соперника' : 'соперников'}`
   const updateLog = useUpdateLog()
   return (
@@ -93,7 +96,7 @@ export function MainMenu({ settings, stats, canContinue, onContinue, onPlay, onO
         </motion.button>
       </div>
 
-      <div className="menu-tiles">
+      <div className="menu-tiles four">
         {TILES.map((t, i) => (
           <motion.button key={t.id} type="button" className="menu-tile" {...enter(0.68 + i * 0.06)} whileTap={{ scale: 0.94 }} whileHover={{ y: -4 }} onClick={() => onOpen(t.id)}>
             <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
@@ -101,6 +104,7 @@ export function MainMenu({ settings, stats, canContinue, onContinue, onPlay, onO
             </svg>
             <span>{t.label}</span>
             {t.id === 'stats' && stats.wins + stats.losses + stats.draws > 0 && <span className="tile-badge">{stats.wins}</span>}
+            {t.id === 'friends' && friendCount > 0 && <span className="tile-badge">{friendCount}</span>}
           </motion.button>
         ))}
       </div>

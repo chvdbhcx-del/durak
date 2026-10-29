@@ -2,6 +2,7 @@ import { AnimatePresence, LayoutGroup, motion, type PanInfo } from 'framer-motio
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { beats, Card, rankLabel, sortHand, SUIT_NAME } from '../engine/cards'
 import { EMOTES, type Emote } from '../engine/emotes'
+import type { Friends } from '../net/useFriends'
 import { Action, canThrow, currentActor, GameState, HAND_SIZE, legalActions, previewAction } from '../engine/game'
 import { CardView, type Flight } from './CardView'
 import { notify, tap } from './native'
@@ -47,12 +48,14 @@ interface Props {
   onFinished: (result: Result, loser: number | null) => void
   series?: Series | null
   emote?: Emote | null
+  /** online rooms: lets a player turn an opponent into a friend */
+  friends?: Friends
   onEmote?: (emoji: string) => void
   onExit: () => void
   onOpenSettings: () => void
   /** left out when this player can't start the next game (an online guest) */
   onPlayAgain?: () => void
-  room?: { code: string; notice: string | null; reconnecting?: boolean }
+  room?: { code: string; notice: string | null; reconnecting?: boolean; roster?: { seat: number; name: string; fid?: string }[] }
 }
 
 /** Card sizes in px: table cards and the bigger cards in your own hand. */
@@ -119,7 +122,7 @@ function zoneMap(g: GameState): Map<string, string> {
 /** How many cards of the deck and the discard pile are actually drawn. */
 const PILE_SHOWN = 9
 
-export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, series, emote, onEmote, onExit, onOpenSettings, onPlayAgain, room }: Props) {
+export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, series, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, room }: Props) {
   const { table: cw, hand: hw, flat } = useCardSizes()
   const { dealt, dealing } = useDealing(game)
   const zones = useMemo(() => zoneMap(game), [game])
@@ -525,6 +528,16 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                       {!p.human && BOT_NAMES.includes(p.name) ? AVATARS[BOT_NAMES.indexOf(p.name)] : p.name[0]}
                     </motion.span>
                     <span className="seat-name">{p.name}</span>
+                    {friends && room && p.human && (() => {
+                      const fid = room.roster?.find((r) => r.seat === p.id)?.fid
+                      if (!fid || fid === friends.fid) return null
+                      const mine = friends.isFriend(fid)
+                      return (
+                        <button type="button" className={`seat-add ${mine ? 'done' : ''}`} aria-label={mine ? `${p.name} уже в друзьях` : `Добавить ${p.name} в друзья`} disabled={mine} onClick={() => friends.add(fid, p.name)}>
+                          {mine ? '✓' : '+'}
+                        </button>
+                      )
+                    })()}
                     <AnimatePresence>
                       {bubble?.seat === p.id && (
                         <motion.span key={bubble.key} className="bubble" initial={{ opacity: 0, y: 6, scale: 0.7 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.9 }} transition={{ type: 'spring', stiffness: 500, damping: 26 }}>
