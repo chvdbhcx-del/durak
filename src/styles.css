@@ -2370,3 +2370,20 @@ button.card:disabled {
 @media (max-width: 440px) {
   .bar .logo { display: none; }
 }
+
+.breakdown { display: grid; gap: 8px; }
+.breakdown h3 { margin: 0 0 2px; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.bd-row { display: grid; grid-template-columns: 7.5em 1fr auto; gap: 10px; align-items: center; font-size: 13.5px; }
+.bd-name { white-space: nowrap; }
+.bd-bar { height: 8px; border-radius: 999px; background: var(--raise); overflow: hidden; }
+.bd-bar i { display: block; height: 100%; border-radius: 999px; background: var(--good); }
+.bd-num { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.series-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 12px; margin: 0 16px 6px; font-size: 12.5px; color: var(--muted); }
+.series-strip b { color: var(--fg); margin-left: 2px; }
+.series-strip .last { color: var(--danger); }
+.series-strip .last b { color: var(--danger); }
+.result-emblem { font-size: 52px; line-height: 1; text-align: center; margin-bottom: 6px; }
+.result { position: relative; overflow: hidden; }
+.confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.confetti i { position: absolute; top: 0; border-radius: 2px; }
