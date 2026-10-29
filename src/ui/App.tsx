@@ -4,8 +4,11 @@ import { chooseAction } from '../engine/bot'
 import { botReaction, botReply, type Emote, fingerprint } from '../engine/emotes'
 import { Action, applyAction, currentActor, GameState, maxPlayers, newGame } from '../engine/game'
 import { normalizeCode, setRoomServer } from '../net/room'
+import { useFriends } from '../net/useFriends'
 import { hasSavedRoom, useOnline } from '../net/useOnline'
 import { GameScreen, Result, Series } from './GameScreen'
+import { FriendToast } from './FriendToast'
+import { FriendsPanel } from './FriendsPanel'
 import { RulesPanel, StatsPanel } from './InfoPanels'
 import { MainMenu } from './MainMenu'
 import { setHaptics, syncStatusBar, tap } from './native'
@@ -20,7 +23,7 @@ import { applyIfIdle, startUpdates, UpdateState } from './updates'
 
 const ME = 0
 type Screen = 'menu' | 'play' | 'online' | 'game'
-type Panel = 'settings' | 'rules' | 'stats'
+type Panel = 'settings' | 'rules' | 'stats' | 'friends'
 
 // The bot game is saved as it goes, so closing or reloading the app never loses a hand.
 const GAME_KEY = 'durak.game'
@@ -77,7 +80,8 @@ export function App() {
   const [screen, setScreen] = useState<Screen>(inviteCode || resumeRoom ? 'online' : 'menu')
   const [update, setUpdate] = useState<UpdateState>({ kind: 'idle' })
   const [token] = useState(deviceToken)
-  const online = useOnline(token)
+  const friends = useFriends(settings.name, settings.server)
+  const online = useOnline(token, friends.fid)
 
   useEffect(() => {
     applyTheme(settings.theme)
@@ -173,6 +177,42 @@ export function App() {
     online.act(action)
   }
 
+  // Joining from a friend's invitation: the server (if the invite names one) is applied first, then the join runs after the render that uses it.
+  const [pendingJoin, setPendingJoin] = useState<string | null>(null)
+  const [pendingInvite, setPendingInvite] = useState<string | null>(null)
+  const joinFromInvite = (code: string, server?: string) => {
+    if (server && server !== settings.server) setSettings((s) => ({ ...s, server }))
+    online.leave()
+    setPanel(null)
+    setScreen('online')
+    setPendingJoin(code)
+  }
+  useEffect(() => {
+    if (!pendingJoin) return
+    online.join(pendingJoin, settings.name.trim() || 'Игрок')
+    setPendingJoin(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingJoin])
+  const inviteFriend = (id: string) => {
+    const hosting = online.role === 'host' && online.lobby
+    if (hosting) {
+      friends.invite(id, online.lobby!.code, settings.server).then((ok) => friends.say(ok ? 'Приглашение отправлено' : 'Друг сейчас не в сети. Отправьте ему код комнаты'))
+      return
+    }
+    if (online.phase !== 'idle' || screen === 'game') return friends.say('Сначала выйдите из текущей игры')
+    setPendingInvite(id)
+    setPanel(null)
+    setScreen('online')
+    online.create({ name: settings.name.trim() || 'Игрок', mode: settings.mode, deckSize: settings.deckSize, cheat: settings.cheat })
+  }
+  useEffect(() => {
+    if (!pendingInvite || online.role !== 'host' || !online.lobby) return
+    const id = pendingInvite
+    setPendingInvite(null)
+    friends.invite(id, online.lobby.code, settings.server).then((ok) => friends.say(ok ? 'Приглашение отправлено' : 'Друг сейчас не в сети. Отправьте ему код комнаты'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingInvite, online.lobby])
+
   const newRound = (s: Settings = settings, fresh = true) => {
     const g = startGame(s)
     setGame(g)
@@ -200,6 +240,7 @@ export function App() {
           }}
         />
       )}
+      {panel === 'friends' && <FriendsPanel key="friends" friends={friends} onInvite={inviteFriend} onClose={() => setPanel(null)} />}
       {panel === 'rules' && <RulesPanel key="rules" onClose={() => setPanel(null)} />}
       {panel === 'stats' && (
         <StatsPanel
@@ -232,11 +273,12 @@ export function App() {
         onBotTurn={host ? stepOnlineBot : undefined}
         emote={online.emote}
         onEmote={online.sendEmote}
+        friends={friends}
         onFinished={recordResult}
         onExit={() => online.leave()}
         onOpenSettings={() => setPanel('settings')}
         onPlayAgain={host ? () => online.start() : undefined}
-        room={{ code: online.lobby?.code ?? '', notice: online.notice, reconnecting: online.reconnecting }}
+        room={{ code: online.lobby?.code ?? '', notice: online.notice, reconnecting: online.reconnecting, roster: online.lobby?.roster }}
       />
     )
   } else if (screen === 'game' && game) {
@@ -267,6 +309,8 @@ export function App() {
         settings={settings}
         onChange={setSettings}
         initialCode={inviteCode}
+        friends={friends}
+        onInviteFriend={inviteFriend}
         onBack={() => {
           online.leave()
           setScreen(inviteCode ? 'menu' : 'play')
@@ -276,7 +320,7 @@ export function App() {
   } else if (screen === 'play') {
     view = <PlayScreen key="play" settings={settings} onChange={setSettings} onBots={() => newRound()} onOnline={() => setScreen('online')} onBack={() => setScreen('menu')} />
   } else {
-    view = <MainMenu key="menu" settings={settings} stats={stats} canContinue={canContinue} onContinue={() => setScreen('game')} onPlay={() => setScreen('play')} onOpen={setPanel} />
+    view = <MainMenu key="menu" settings={settings} stats={stats} canContinue={canContinue} onContinue={() => setScreen('game')} onPlay={() => setScreen('play')} onOpen={setPanel} friendCount={friends.list.length} />
   }
 
   return (
@@ -284,6 +328,7 @@ export function App() {
       <AnimatePresence mode="wait">{view}</AnimatePresence>
       {panels}
       <UpdateToast state={update} />
+      <FriendToast friends={friends} busy={inRound} onJoin={joinFromInvite} />
     </>
   )
 }

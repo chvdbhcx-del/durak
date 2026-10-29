@@ -2318,3 +2318,22 @@ button.card:disabled {
 .my-emote { position: fixed; left: 50%; bottom: 31%; translate: -50% 0; z-index: 60; font-size: 54px; pointer-events: none; filter: drop-shadow(0 6px 10px var(--shadow)); }
 .emote-picker { position: fixed; top: calc(58px + env(safe-area-inset-top, 0px)); right: 12px; z-index: 70; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 8px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 14px 40px var(--shadow); }
 .emote-picker button { width: 46px; height: 46px; border-radius: 12px; border: 0; background: var(--raise); font-size: 26px; line-height: 1; padding: 0; }
+
+/* Friends */
+.toasts { position: fixed; z-index: 80; left: 0; right: 0; top: max(12px, env(safe-area-inset-top, 0px)); display: grid; justify-items: center; gap: 8px; pointer-events: none; }
+.toasts .toast { position: static; translate: none; pointer-events: auto; }
+.menu-tiles.four { grid-template-columns: repeat(4, minmax(0, 1fr)); width: min(380px, 100%); }
+.friends { list-style: none; display: grid; gap: 8px; margin: 0; padding: 0; }
+.friends li { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); }
+.friend-avatar { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--raise); border: 1px solid var(--line); font-weight: 700; }
+.friend-dot { position: absolute; right: -1px; bottom: -1px; width: 11px; height: 11px; border-radius: 50%; background: var(--muted); border: 2px solid var(--surface); }
+.friend-dot.on { background: var(--good); }
+.friend-name { display: grid; font-weight: 600; min-width: 0; }
+.friend-name small { color: var(--muted); font-weight: 400; font-size: 12.5px; }
+.friend-actions { display: flex; align-items: center; gap: 4px; }
+.friends-empty { display: grid; justify-items: center; gap: 8px; text-align: center; color: var(--muted); padding: 16px 8px; }
+.friends-empty-art { font-size: 40px; }
+.seat-add { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px dashed var(--muted); background: none; color: var(--muted); font-size: 15px; line-height: 1; }
+.seat-add.done { border-style: solid; border-color: var(--good); color: var(--good); }
+.invite-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.invite-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; }

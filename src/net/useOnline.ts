@@ -78,7 +78,7 @@ function fitBots(lobby: LobbyInfo): LobbyInfo {
   return { ...lobby, bots: Math.max(0, Math.min(lobby.bots, room)) }
 }
 
-export function useOnline(token: string): Online {
+export function useOnline(token: string, fid: string): Online {
   const [phase, setPhase] = useState<OnlinePhase>('idle')
   const [role, setRole] = useState<'host' | 'guest' | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -105,7 +105,9 @@ export function useOnline(token: string): Online {
   const updateLobby = useCallback((fn: (l: LobbyInfo) => LobbyInfo) => {
     setLobbyState((prev) => {
       if (!prev) return prev
-      const next = fitBots(fn(prev))
+      const base = fitBots(fn(prev))
+      const roster = base.members.filter((m) => seats.current.has(m.token)).map((m) => ({ seat: seats.current.get(m.token)!, name: m.name, fid: m.fid }))
+      const next = roster.length ? { ...base, roster } : { ...base, roster: undefined }
       lobbyRef.current = next
       host.current?.broadcast({ t: 'lobby', lobby: next })
       return next
@@ -162,14 +164,14 @@ export function useOnline(token: string): Online {
     host.current = new HostRoom({
       onReady: (code) => {
         const l: LobbyInfo = restore?.lobby
-          ? { ...restore.lobby, members: restore.lobby.members.map((m) => ({ ...m, online: m.token === token })) }
-          : { code, members: [{ token, name, host: true, online: true }], bots: 0, mode: fresh!.mode, deckSize: fresh!.deckSize, cheat: fresh!.cheat }
+          ? { ...restore.lobby, members: restore.lobby.members.map((m) => ({ ...m, online: m.token === token, fid: m.token === token ? fid : m.fid })) }
+          : { code, members: [{ token, name, host: true, online: true, fid }], bots: 0, mode: fresh!.mode, deckSize: fresh!.deckSize, cheat: fresh!.cheat }
         lobbyRef.current = l
         setLobbyState(l)
         setPhase(restore?.game && !restore.game.over ? 'playing' : 'lobby')
       },
       onReconnecting: setReconnecting,
-      onJoin: (t, guestName) => {
+      onJoin: (t, guestName, guestFid) => {
         const seatTaken = seats.current.get(t)
         const g = gameRef.current
         if (g && !g.over) {
@@ -191,12 +193,12 @@ export function useOnline(token: string): Online {
         }
         updateLobby((l) => {
           const known = l.members.find((m) => m.token === t)
-          if (known) return { ...l, members: l.members.map((m) => (m.token === t ? { ...m, name: guestName, online: true } : m)) }
+          if (known) return { ...l, members: l.members.map((m) => (m.token === t ? { ...m, name: guestName, online: true, fid: guestFid ?? m.fid } : m)) }
           if (l.members.length >= maxPlayers(l.deckSize)) {
             host.current?.send(t, { t: 'closed', reason: 'Комната заполнена.' })
             return l
           }
-          return { ...l, members: [...l.members, { token: t, name: guestName, host: false, online: true }] }
+          return { ...l, members: [...l.members, { token: t, name: guestName, host: false, online: true, fid: guestFid }] }
         })
       },
       onLeave: (t) => {
@@ -241,7 +243,7 @@ export function useOnline(token: string): Online {
     setRole('guest')
     setPhase('connecting')
     setError(null)
-    guest.current = new GuestRoom(code, name, token, {
+    guest.current = new GuestRoom(code, name, token, fid, {
       onConnected: () => {},
       onReconnecting: setReconnecting,
       onMessage: (msg: ToGuest) => {
@@ -315,6 +317,7 @@ export function useOnline(token: string): Online {
     setSeat(0)
     setGame(g)
     setPhase('playing')
+    updateLobby((cur) => cur)
   }
 
   const act = (action: Action) => {

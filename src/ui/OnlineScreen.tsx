@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { maxPlayers } from '../engine/game'
 import { CODE_LENGTH, normalizeCode } from '../net/room'
+import type { Friends } from '../net/useFriends'
 import type { Online } from '../net/useOnline'
 import { BackButton } from './PlayScreen'
 import { BOT_NAMES, CheatPicker, DeckPicker, Group, ModePicker, plural } from './pickers'
@@ -15,6 +16,8 @@ interface Props {
   settings: Settings
   onChange: (s: Settings) => void
   initialCode: string
+  friends: Friends
+  onInviteFriend: (fid: string) => void
   onBack: () => void
 }
 
@@ -109,7 +112,7 @@ function CardSpinner() {
   )
 }
 
-export function OnlineScreen({ online, settings, onChange, initialCode, onBack }: Props) {
+export function OnlineScreen({ online, settings, onChange, initialCode, friends, onInviteFriend, onBack }: Props) {
   const [mode, setMode] = useState<'choose' | 'join'>(initialCode ? 'join' : 'choose')
   const [code, setCode] = useState(initialCode)
   const [copied, setCopied] = useState(false)
@@ -263,6 +266,11 @@ export function OnlineScreen({ online, settings, onChange, initialCode, onBack }
                         <span className="avatar-circle person">{m.name[0]?.toUpperCase()}</span>
                         <span className="avatar-name">{m.name}</span>
                         {m.host && <span className="seat-tag">хозяин</span>}
+                        {m.fid && m.fid !== friends.fid && (
+                          <button type="button" className={`seat-add ${friends.isFriend(m.fid) ? 'done' : ''}`} aria-label={friends.isFriend(m.fid) ? `${m.name} уже в друзьях` : `Добавить ${m.name} в друзья`} disabled={friends.isFriend(m.fid)} onClick={() => friends.add(m.fid!, m.name)}>
+                            {friends.isFriend(m.fid) ? '✓' : '+'}
+                          </button>
+                        )}
                         {host && !m.host && (
                           <button type="button" className="seat-kick" aria-label={`Убрать ${m.name}`} onClick={() => online.kick(m.token)}>
                             ×
@@ -292,6 +300,23 @@ export function OnlineScreen({ online, settings, onChange, initialCode, onBack }
                   </AnimatePresence>
                 </div>
               </Group>
+
+              {host && friends.list.length > 0 && (
+                <Group title="Позвать друга">
+                  <div className="invite-row">
+                    {friends.list
+                      .filter((f) => !lobby.members.some((m) => m.fid === f.id))
+                      .map((f) => (
+                        <span key={f.id} className="invite-chip">
+                          {f.name}
+                          <motion.button type="button" className="primary small" whileTap={{ scale: 0.94 }} onClick={() => onInviteFriend(f.id)}>
+                            Позвать
+                          </motion.button>
+                        </span>
+                      ))}
+                  </div>
+                </Group>
+              )}
 
               {host ? (
                 <>
