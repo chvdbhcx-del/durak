@@ -22,9 +22,11 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-      # 1.1.0 is the first release of this line; run 18 produced it.
+        with:
+          fetch-depth: 0
+      # 1.1.0 is commit 8856a81; every commit on main after it bumps the patch number, so the web version and the app agree.
       - run: |
-          V="1.1.$(( ${{ github.run_number }} - 18 ))"
+          V="1.1.$(( $(git rev-list --count HEAD) - 19 ))"
           echo "VERSION_NAME=$V" >> "$GITHUB_ENV"
           echo "WEB_VERSION=$V" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4

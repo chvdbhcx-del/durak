@@ -19,14 +19,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Same numbering as the release workflow (1.1.0 is commit 8856a81), so the web version matches the app's.
+      - run: echo "WEB_VERSION=1.1.$(( $(git rev-list --count HEAD) - 19 ))" >> "$GITHUB_ENV"
       - run: npm run build
-        env:
-          WEB_VERSION: 1.1.${{ github.run_number }}
       - name: Push dist to gh-pages
         run: |
           cd dist

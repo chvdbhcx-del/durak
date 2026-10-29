@@ -2334,8 +2334,13 @@ button.card:disabled {
 .friends-empty-art { font-size: 40px; }
 .seat-add { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px dashed var(--muted); background: none; color: var(--muted); font-size: 15px; line-height: 1; }
 .seat-add.done { border-style: solid; border-color: var(--good); color: var(--good); }
-.invite-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.invite-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; }
+.invite-list { display: grid; gap: 8px; }
+.invite-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 10px 10px 14px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); }
+.invite-who { display: flex; align-items: center; gap: 10px; min-width: 0; font-family: var(--font-ui); }
+.invite-who > span { display: grid; gap: 1px; min-width: 0; }
+.invite-who b { font-size: 15px; font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invite-who small { font-size: 12px; color: var(--muted); line-height: 1.2; }
+.invite-item .primary.small { flex: none; padding: 9px 16px; font-size: 14px; font-weight: 600; }
 
 /* iOS: the visible height changes with Safari's toolbars, so the page is pinned to it */
 :root.ios,
@@ -2357,4 +2362,11 @@ button.card:disabled {
 /* Cards in flight get their own layer so the move costs no repaint */
 .card.flying {
   will-change: transform;
+}
+.invite-who .friend-dot { position: static; flex: none; width: 10px; height: 10px; border-color: transparent; }
+
+.chips { display: inline-flex; gap: 6px; min-width: 0; }
+.chip.warn { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+@media (max-width: 440px) {
+  .bar .logo { display: none; }
 }
