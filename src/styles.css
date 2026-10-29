@@ -437,6 +437,7 @@ button:focus-visible,
 }
 
 .battle {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -446,6 +447,12 @@ button:focus-visible,
 }
 
 .empty-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  pointer-events: none;
   color: var(--muted);
   font-size: 14px;
 }
@@ -2337,3 +2344,25 @@ button.card:disabled {
 .seat-add.done { border-style: solid; border-color: var(--good); color: var(--good); }
 .invite-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .invite-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; }
+
+/* iOS: the visible height changes with Safari's toolbars, so the page is pinned to it */
+:root.ios,
+:root.ios body,
+:root.ios #root {
+  height: var(--app-h, 100%);
+}
+:root.ios body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  overscroll-behavior: none;
+}
+:root.ios .app {
+  height: var(--app-h, 100%);
+  padding-block: max(8px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-bottom, 0px));
+}
+
+/* Cards in flight get their own layer so the move costs no repaint */
+.card.flying {
+  will-change: transform;
+}

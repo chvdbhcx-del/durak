@@ -47,7 +47,7 @@ function saveGame(g: GameState | null) {
 
 function startGame(s: Settings): GameState {
   const players = Math.min(s.opponents + 1, maxPlayers(s.deckSize))
-  return newGame({ players, deckSize: s.deckSize, mode: s.mode, cheat: s.cheat, names: ['Вы', ...BOT_NAMES], human: ME, seed: Date.now() })
+  return newGame({ players, deckSize: s.deckSize, mode: s.mode, cheat: s.cheat, names: ['Вы', ...BOT_NAMES], human: ME, level: s.difficulty, seed: Date.now() })
 }
 
 /** A room code from an invite link like …/durak/#join-AB3CD, plus the private server a link may carry (&s=…). */
@@ -112,10 +112,8 @@ export function App() {
   // Callbacks handed to the table stay stable, so a re-render doesn't restart its bot timer.
   const onlineRef = useRef(online)
   onlineRef.current = online
-  const levelRef = useRef(settings.difficulty)
-  levelRef.current = settings.difficulty
-  const stepOnlineBot = useCallback((actor: number) => onlineRef.current.stepBot(actor, levelRef.current), [])
-  const stepLocalBot = useCallback((actor: number) => setGame((g) => (g && currentActor(g) === actor ? applyAction(g, actor, chooseAction(g, actor, levelRef.current)) : g)), [])
+  const stepOnlineBot = useCallback((actor: number) => onlineRef.current.stepBot(actor), [])
+  const stepLocalBot = useCallback((actor: number) => setGame((g) => (g && currentActor(g) === actor ? applyAction(g, actor, chooseAction(g, actor)) : g)), [])
   // The finished game's setup goes into the history, so keep the live game in a ref.
   const liveRef = useRef<{ game: GameState | null; online: boolean }>({ game: null, online: false })
   const liveOnline = screen === 'online' && online.phase === 'playing' && online.game
@@ -277,7 +275,7 @@ export function App() {
         onFinished={recordResult}
         onExit={() => online.leave()}
         onOpenSettings={() => setPanel('settings')}
-        onPlayAgain={host ? () => online.start() : undefined}
+        onPlayAgain={host ? () => online.start(settings.difficulty) : undefined}
         room={{ code: online.lobby?.code ?? '', notice: online.notice, reconnecting: online.reconnecting, roster: online.lobby?.roster }}
       />
     )

@@ -16,7 +16,10 @@ import '@fontsource/unbounded/cyrillic-800.css'
 import '@fontsource/unbounded/latin-800.css'
 import { App } from './ui/App'
 import { isNative } from './ui/native'
+import { setupPlatform } from './ui/platform'
 import './styles.css'
+
+setupPlatform()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -2,7 +2,7 @@ import { animate, motion, useMotionValue, useTransform } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import type { Suit } from '../engine/cards'
 import { AVATARS, type HistoryEntry, type Settings, type Stats } from './settings'
-import { AvatarPicker, plural } from './pickers'
+import { AvatarPicker, LookPicker, plural } from './pickers'
 import { Sheet, sheetItem } from './Sheet'
 import { SuitIcon } from './SuitIcon'
 
@@ -83,6 +83,7 @@ export function StatsPanel({ stats, settings, onSettings, onClose, onReset }: { 
       <motion.div variants={sheetItem}>
         <AvatarPicker value={settings.avatar} onChange={(avatar) => onSettings({ ...settings, avatar })} />
       </motion.div>
+      <LookPicker back={settings.cardBack} table={settings.tableStyle} onBack={(cardBack) => onSettings({ ...settings, cardBack })} onTable={(tableStyle) => onSettings({ ...settings, tableStyle })} />
 
       <motion.div className="ring-wrap" variants={sheetItem}>
         <svg viewBox="0 0 120 120" className="ring" aria-hidden="true">

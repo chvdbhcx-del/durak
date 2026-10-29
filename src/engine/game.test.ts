@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { beats, Card } from './cards'
 import { chooseAction } from './bot'
 import { botReaction, botReply } from './emotes'
-import { applyAction, canCheat, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options } from './game'
+import { applyAction, canCheat, catchChance, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options } from './game'
 
 const opts = (o: Partial<Options> = {}): Options => ({
   players: 2,
@@ -310,5 +310,75 @@ describe('bot emotes', () => {
     const s = fresh()
     expect(botReply('😂', s, () => 0.9)).toBeNull()
     expect(botReply('😂', s, () => 0)?.emoji).toBe('😂')
+  })
+})
+
+describe('bots catching bots', () => {
+  it('a stronger table spots cheats more often', () => {
+    expect(catchChance('easy')).toBeLessThan(catchChance('normal'))
+    expect(catchChance('normal')).toBeLessThan(catchChance('hard'))
+  })
+  it('all-bot cheater games finish, with bluffs now and then caught by the others', () => {
+    let caught = 0
+    for (let seed = 1; seed <= 40; seed++) {
+      let g = newGame({ players: 3, deckSize: 36, mode: 'podkidnoy', cheat: true, level: 'hard', names: ['A', 'B', 'C'], human: -1, seed })
+      for (let i = 0; i < 800 && !g.over; i++) {
+        const actor = currentActor(g)
+        if (actor === null) break
+        g = applyAction(g, actor, chooseAction(g, actor))
+      }
+      expect(g.over).toBe(true)
+      caught += g.caught?.length ?? 0
+    }
+    expect(caught).toBeGreaterThan(0)
+  })
+})
+
+describe('bot judgement', () => {
+  const card = (suit: Card['suit'], rank: number): Card => ({ id: `${suit}${rank}`, suit, rank })
+  /** A two-player game with chosen hands and a long deck, so it is early in the game. */
+  const early = (botHand: Card[], table: GameState['table'] = [], extra: Partial<GameState> = {}): GameState => {
+    const s = newGame({ players: 2, deckSize: 36, mode: 'podkidnoy', names: ['A', 'B'], human: -1, seed: 5 })
+    s.trump = 'S'
+    s.trumpCard = card('S', 6)
+    s.players[1].hand = botHand
+    s.table = table
+    s.attacker = table.length ? 0 : 1
+    s.defender = table.length ? 1 : 0
+    return Object.assign(s, extra)
+  }
+
+  it('does not lead an ace or a trump early when a low plain card is at hand', () => {
+    for (const level of ['normal', 'hard'] as const) {
+      const s = early([card('H', 14), card('S', 7), card('D', 8), card('C', 13)])
+      expect(chooseAction(s, 1, level)).toEqual({ type: 'attack', cardId: 'D8' })
+    }
+  })
+  it('takes a couple of cheap cards instead of burning a trump early', () => {
+    const s = early([card('S', 13), card('H', 7)], [{ attack: card('D', 8), defense: null }])
+    s.players[1].hand = [card('S', 13), card('C', 7)]
+    expect(chooseAction(s, 1, 'normal')).toEqual({ type: 'take' })
+  })
+  it('covers with a plain card when it has one, trump or not', () => {
+    const s = early([card('S', 13), card('D', 10)], [{ attack: card('D', 8), defense: null }])
+    expect(chooseAction(s, 1, 'normal')).toMatchObject({ type: 'defend', cardId: 'D10' })
+  })
+  it('does not throw in a trump early and stops after a couple of cards', () => {
+    const s = early([card('S', 8), card('H', 8), card('C', 8)], [{ attack: card('D', 8), defense: card('D', 12) }], { attacker: 1, defender: 0 })
+    const move = chooseAction(s, 1, 'normal')
+    expect(move.type === 'attack' ? move.cardId : null).not.toBe('S8')
+  })
+  it('a normal bot beats an easy one over many games', () => {
+    let easyLost = 0
+    for (let seed = 1; seed <= 80; seed++) {
+      let g = newGame({ players: 2, deckSize: 36, mode: 'podkidnoy', names: ['A', 'B'], human: -1, seed })
+      for (let i = 0; i < 800 && !g.over; i++) {
+        const actor = currentActor(g)
+        if (actor === null) break
+        g = applyAction(g, actor, chooseAction(g, actor, actor === 0 ? 'easy' : 'normal'))
+      }
+      if (g.loser === 0) easyLost++
+    }
+    expect(easyLost).toBeGreaterThan(50)
   })
 })
