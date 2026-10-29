@@ -52,6 +52,44 @@ function CountUp({ value }: { value: number }) {
   return <>{text}</>
 }
 
+const SLICE_NAMES: [string, string][] = [
+  ['mode:podkidnoy', 'Подкидной'],
+  ['mode:perevodnoy', 'Переводной'],
+  ['rules:classic', 'Классика'],
+  ['rules:cheat', 'Шулер'],
+  ['level:easy', 'Лёгкий бот'],
+  ['level:normal', 'Обычный бот'],
+  ['level:hard', 'Сильный бот'],
+  ['where:bots', 'С ботами'],
+  ['where:online', 'Онлайн'],
+]
+
+/** Win share per mode, rules and bot strength; only slices that have games are shown. */
+function Breakdown({ by }: { by?: Stats['by'] }) {
+  const rows = SLICE_NAMES.flatMap(([key, name]) => {
+    const t = by?.[key]
+    const total = t ? t[0] + t[1] + t[2] : 0
+    return t && total > 0 ? [{ key, name, t, total }] : []
+  })
+  if (rows.length === 0) return null
+  return (
+    <motion.div className="breakdown" variants={sheetItem}>
+      <h3>По режимам</h3>
+      {rows.map(({ key, name, t, total }) => (
+        <div key={key} className="bd-row">
+          <span className="bd-name">{name}</span>
+          <span className="bd-bar" aria-hidden="true">
+            <motion.i initial={{ width: 0 }} animate={{ width: `${(t[0] / total) * 100}%` }} transition={{ duration: 0.8, ease: [0.2, 0.8, 0.2, 1] }} />
+          </span>
+          <span className="bd-num">
+            {Math.round((t[0] / total) * 100)}% · {total}
+          </span>
+        </div>
+      ))}
+    </motion.div>
+  )
+}
+
 const RESULT_TEXT = { win: 'Победа', loss: 'Остались дураком', draw: 'Ничья' } as const
 
 function when(at: number) {
@@ -142,6 +180,8 @@ export function StatsPanel({ stats, settings, onSettings, onClose, onReset }: { 
           <span className="stat-label">Лучшая серия</span>
         </div>
       </motion.div>
+
+      <Breakdown by={stats.by} />
 
       {stats.history.length > 0 && (
         <motion.ul className="history" variants={sheetItem} aria-label="Последние партии">

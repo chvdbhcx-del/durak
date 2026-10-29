@@ -504,6 +504,18 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
           </motion.button>
         </div>
       </motion.header>
+      {series && !game.over && (
+        <motion.div className="series-strip" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} aria-label="Счёт турнира">
+          <span>
+            Турнир · {Math.min(series.played + 1, series.total)} из {series.total}
+          </span>
+          {game.players.map((p, i) => (
+            <span key={p.id} className={series.fools[i] === worst && worst > 0 ? 'last' : ''}>
+              {i === me ? 'Вы' : p.name} <b>{series.fools[i]}</b>
+            </span>
+          ))}
+        </motion.div>
+      )}
 
       <AnimatePresence>
         {room?.reconnecting && (
@@ -905,7 +917,11 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               exit={{ y: 20, scale: 0.95, opacity: 0 }}
               transition={{ delay: 0.55, type: 'spring', stiffness: 320, damping: 26 }}
             >
+              {game.loser !== me && <Confetti />}
               <Stagger delay={0.7}>
+                <motion.div className="result-emblem" aria-hidden="true" initial={{ scale: 0, rotate: -40 }} animate={game.loser === me ? { scale: 1, rotate: [0, -14, 12, -8, 0] } : { scale: [0, 1.25, 1], rotate: 0 }} transition={game.loser === me ? { delay: 0.9, duration: 0.9 } : { delay: 0.8, duration: 0.7, ease: [0.2, 0.8, 0.2, 1] }}>
+                  {game.loser === null ? '🤝' : game.loser === me ? '🃏' : '🏆'}
+                </motion.div>
                 <p className="eyebrow">{series ? (seriesDone ? 'Турнир окончен' : `Партия ${series.played} из ${series.total}`) : 'Партия окончена'}</p>
                 <h2 id="result-title">{seriesDone ? seriesTitle : resultTitle}</h2>
                 <p className="result-sub">
@@ -942,6 +958,29 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
         )}
       </AnimatePresence>
     </motion.div>
+  )
+}
+
+const CONFETTI = ['#e3a94d', '#6bd49a', '#ff7a6b', '#7aa7ff', '#f0f0f0']
+
+/** A short shower over the result dialog when the player did not lose. */
+function Confetti() {
+  return (
+    <span className="confetti" aria-hidden="true">
+      {Array.from({ length: 26 }, (_, i) => {
+        const x = ((i * 37) % 100) - 50
+        const drift = ((i * 53) % 60) - 30
+        return (
+          <motion.i
+            key={i}
+            style={{ left: `${50 + x}%`, background: CONFETTI[i % CONFETTI.length], width: 6 + (i % 3) * 2, height: 9 + (i % 4) * 2 }}
+            initial={{ y: -20, opacity: 0, rotate: 0 }}
+            animate={{ y: [0, 260 + (i % 5) * 40], x: [0, drift], opacity: [0, 1, 1, 0], rotate: 360 + i * 40 }}
+            transition={{ delay: 0.75 + (i % 9) * 0.06, duration: 1.8 + (i % 4) * 0.25, ease: 'easeIn' }}
+          />
+        )
+      })}
+    </span>
   )
 }
 

@@ -42,7 +42,13 @@ export interface HistoryEntry {
   deck: number
   players: number
   online: boolean
+  /** bot strength and cheater setting of that game; absent in older entries */
+  level?: 'easy' | 'normal' | 'hard'
+  cheat?: boolean
 }
+
+/** Wins, losses and draws for one slice of the games. */
+export type Tally = [wins: number, losses: number, draws: number]
 
 export interface Stats {
   wins: number
@@ -53,6 +59,15 @@ export interface Stats {
   bestStreak: number
   /** newest first, capped at HISTORY_LIMIT */
   history: HistoryEntry[]
+  /** running totals per slice, keyed like `mode:podkidnoy`, `level:hard`, `rules:cheat`, `where:online`; games before this existed are not in them */
+  by?: Record<string, Tally>
+}
+
+/** The slices a finished game belongs to. */
+export function slicesOf(e: Pick<HistoryEntry, 'mode' | 'online' | 'level' | 'cheat'>): string[] {
+  const out = [`mode:${e.mode}`, `rules:${e.cheat ? 'cheat' : 'classic'}`, `where:${e.online ? 'online' : 'bots'}`]
+  if (!e.online && e.level) out.push(`level:${e.level}`)
+  return out
 }
 
 export const HISTORY_LIMIT = 30
@@ -69,6 +84,14 @@ export function addResult(s: Stats, entry: HistoryEntry): Stats {
     streak,
     bestStreak: Math.max(s.bestStreak, streak),
     history: [entry, ...s.history].slice(0, HISTORY_LIMIT),
+    by: slicesOf(entry).reduce(
+      (by, key) => {
+        const [w, l, d] = by[key] ?? [0, 0, 0]
+        by[key] = [w + (entry.result === 'win' ? 1 : 0), l + (entry.result === 'loss' ? 1 : 0), d + (entry.result === 'draw' ? 1 : 0)]
+        return by
+      },
+      { ...(s.by ?? {}) },
+    ),
   }
 }
 
