@@ -294,18 +294,19 @@ export function HapticsPicker({ value, onChange }: { value: boolean; onChange: (
   )
 }
 
-export const CARD_BACKS: { value: CardBack; title: string; a: string; b: string }[] = [
-  { value: 'teal', title: 'Изумруд', a: '#173a34', b: '#1f4d45' },
-  { value: 'ember', title: 'Уголь', a: '#3b1f17', b: '#57301f' },
-  { value: 'ink', title: 'Тушь', a: '#1c2540', b: '#2a3860' },
-  { value: 'rose', title: 'Роза', a: '#3d1c2e', b: '#5a2a44' },
+// `a` and `b` are the real back colours; `pa` and `pb` are livelier versions of the same hues so the choices read on a dark panel.
+export const CARD_BACKS: { value: CardBack; title: string; a: string; b: string; pa: string; pb: string }[] = [
+  { value: 'teal', title: 'Изумруд', a: '#173a34', b: '#1f4d45', pa: '#1f6b5c', pb: '#3fb399' },
+  { value: 'ember', title: 'Уголь', a: '#3b1f17', b: '#57301f', pa: '#7a3b22', pb: '#d9854f' },
+  { value: 'ink', title: 'Тушь', a: '#1c2540', b: '#2a3860', pa: '#2a3d7a', pb: '#6d8bea' },
+  { value: 'rose', title: 'Роза', a: '#3d1c2e', b: '#5a2a44', pa: '#7a2c53', pb: '#e06f9f' },
 ]
 
-export const TABLES: { value: TableStyle; title: string; color: string }[] = [
-  { value: 'forest', title: 'Сукно', color: '#183029' },
-  { value: 'night', title: 'Ночь', color: '#1a2233' },
-  { value: 'wine', title: 'Бордо', color: '#33191f' },
-  { value: 'slate', title: 'Сланец', color: '#262b2e' },
+export const TABLES: { value: TableStyle; title: string; color: string; glow: string }[] = [
+  { value: 'forest', title: 'Сукно', color: '#183029', glow: '#2f7a5f' },
+  { value: 'night', title: 'Ночь', color: '#1a2233', glow: '#3a5190' },
+  { value: 'wine', title: 'Бордо', color: '#33191f', glow: '#8a3447' },
+  { value: 'slate', title: 'Сланец', color: '#262b2e', glow: '#5d6a72' },
 ]
 
 export function LookPicker({ back, table, onBack, onTable }: { back: CardBack; table: TableStyle; onBack: (b: CardBack) => void; onTable: (t: TableStyle) => void }) {
@@ -315,8 +316,8 @@ export function LookPicker({ back, table, onBack, onTable }: { back: CardBack; t
         <div className="tiles four">
           {CARD_BACKS.map((b) => (
             <Tile key={b.value} group="back" on={back === b.value} onClick={() => onBack(b.value)} label={b.title}>
-              <span className="swatch back" style={{ background: b.a, borderColor: b.b }} aria-hidden="true">
-                <span style={{ background: b.b }} />
+              <span className="swatch back" style={{ background: `linear-gradient(135deg, ${b.pa}, ${b.pb})`, borderColor: b.pb }} aria-hidden="true">
+                <span style={{ borderColor: b.pb, background: `repeating-linear-gradient(45deg, ${b.pa} 0 4px, ${b.pb}55 4px 8px)` }} />
               </span>
             </Tile>
           ))}
@@ -326,7 +327,9 @@ export function LookPicker({ back, table, onBack, onTable }: { back: CardBack; t
         <div className="tiles four">
           {TABLES.map((t) => (
             <Tile key={t.value} group="table" on={table === t.value} onClick={() => onTable(t.value)} label={t.title}>
-              <span className="swatch table" style={{ background: t.color }} aria-hidden="true" />
+              <span className="swatch table" style={{ background: `radial-gradient(ellipse at 50% 35%, ${t.glow}, ${t.color} 85%)`, borderColor: t.glow }} aria-hidden="true">
+                <i />
+              </span>
             </Tile>
           ))}
         </div>
