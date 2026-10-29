@@ -26,6 +26,8 @@ export interface Flight {
 // Cards glide on eased curves instead of springs: a gentle start and a long soft landing, no overshoot.
 export const cardSpring = { type: 'tween', ease: [0.22, 1, 0.36, 1], duration: 0.5 } as const
 const flightSpring = { type: 'tween', ease: [0.33, 0.7, 0.2, 1], duration: 0.8 } as const
+// The sweep into the discard pile is the slowest and softest: the cards ease out, glide, and settle.
+const sweepSpring = { type: 'tween', ease: [0.4, 0.05, 0.2, 1], duration: 1.05 } as const
 const flipSpring = { type: 'spring', stiffness: 200, damping: 26 } as const
 
 /**
@@ -36,7 +38,7 @@ const flipSpring = { type: 'spring', stiffness: 200, damping: 26 } as const
 const lastFace = new Map<string, boolean>()
 
 export function CardView({ card, faceUp, trump, size = 'full', className = '', style, animate, onClick, disabled, label, flight }: Props) {
-  const transition = flight ? { ...flightSpring, delay: flight.delay } : cardSpring
+  const transition = flight ? { ...(flight.kind === 'discard' ? sweepSpring : flightSpring), delay: flight.delay } : cardSpring
   const name = `${rankLabel(card.rank)} ${SUIT_NAME[card.suit]}`
   const was = lastFace.get(card.id) ?? faceUp
   useEffect(() => {

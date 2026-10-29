@@ -62,8 +62,8 @@ function MiniCard({ rank, suit, red, tilt = 0, x = 0 }: { rank: string; suit: 'S
 
 export function ModePicker({ value, onChange }: { value: Mode; onChange: (m: Mode) => void }) {
   const modes: { value: Mode; title: string; note: string }[] = [
-    { value: 'podkidnoy', title: 'Подкидной', note: 'Подкидывайте карты того же достоинства' },
-    { value: 'perevodnoy', title: 'Переводной', note: 'Отбивающийся может перевести ход дальше' },
+    { value: 'podkidnoy', title: 'Подкидной', note: 'Подкидывают' },
+    { value: 'perevodnoy', title: 'Переводной', note: 'Можно переводить' },
   ]
   return (
     <Group title="Игра">
@@ -200,8 +200,8 @@ export function ThemePicker({ value, onChange }: { value: Theme; onChange: (t: T
 
 export function CheatPicker({ value, onChange }: { value: boolean; onChange: (on: boolean) => void }) {
   const options: { value: boolean; title: string; note: string }[] = [
-    { value: false, title: 'По правилам', note: 'Покрывать можно только старшей картой' },
-    { value: true, title: 'Шулер', note: 'Кроете любой картой. Пойманный мухлевать больше не может. Боты замечают обман, и чем они сильнее, тем чаще (15, 30 или 50%), в том числе друг у друга. Вы ловите обман нажатием на карту' },
+    { value: false, title: 'По правилам', note: 'Честная игра' },
+    { value: true, title: 'Шулер', note: 'Любая карта в отбой и подброс. Бот может поймать (15–50%)' },
   ]
   return (
     <Group title="Шулер">
@@ -253,9 +253,9 @@ export function SoundPicker({ value, onChange }: { value: boolean; onChange: (on
 
 export function DifficultyPicker({ value, onChange }: { value: Difficulty; onChange: (d: Difficulty) => void }) {
   const levels: { value: Difficulty; title: string; note: string; bars: number }[] = [
-    { value: 'easy', title: 'Лёгкий', note: 'Часто ошибается', bars: 1 },
-    { value: 'normal', title: 'Обычный', note: 'Играет разумно', bars: 2 },
-    { value: 'hard', title: 'Сильный', note: 'Считает вышедшие карты', bars: 3 },
+    { value: 'easy', title: 'Лёгкий', note: 'Ошибается', bars: 1 },
+    { value: 'normal', title: 'Обычный', note: 'Разумный', bars: 2 },
+    { value: 'hard', title: 'Сильный', note: 'Считает карты', bars: 3 },
   ]
   return (
     <Group title="Сила ботов">
@@ -351,7 +351,7 @@ export function AvatarPicker({ value, onChange }: { value: number; onChange: (i:
 export function SeriesPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const options = [
     { value: 1, title: 'Одна партия', note: 'Сыграли и всё' },
-    { value: 3, title: 'Турнир на 3', note: 'Больше всех дураком: проиграл' },
+    { value: 3, title: 'Турнир на 3', note: 'Меньше дураков — победа' },
     { value: 5, title: 'Турнир на 5', note: 'Длинная серия' },
   ]
   return (

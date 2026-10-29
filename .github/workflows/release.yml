@@ -18,12 +18,15 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      VERSION_NAME: 1.0.${{ github.run_number }}
       VERSION_CODE: ${{ github.run_number }}
-      WEB_VERSION: 1.0.${{ github.run_number }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+      # 1.1.0 is the first release of this line; run 18 produced it.
+      - run: |
+          V="1.1.$(( ${{ github.run_number }} - 18 ))"
+          echo "VERSION_NAME=$V" >> "$GITHUB_ENV"
+          echo "WEB_VERSION=$V" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with:
           node-version: 22

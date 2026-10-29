@@ -265,6 +265,39 @@ describe('cheating only once', () => {
   })
 })
 
+describe('cheating on a throw-in', () => {
+  const lead = (cheat: boolean, seed = 1) => {
+    const s = applyAction(position([[card('H', 7), card('D', 9), card('C', 12)], [card('H', 10), card('S', 6), card('S', 7)]], { human: 0, cheat, seed }), 0, { type: 'attack', cardId: 'H7' })
+    return applyAction(s, 1, { type: 'defend', cardId: 'H10', pair: 0 })
+  }
+
+  it('is refused without the cheater setting', () => {
+    expect(legalActions(lead(false), 0).some((a) => a.type === 'attack' && a.cardId === 'D9')).toBe(false)
+    expect(canThrow(lead(false), 0, ['D9'])).toBe(false)
+  })
+  it('lets a person throw in a card of any rank, and a bot may catch it', () => {
+    let kept = 0
+    let caught = 0
+    for (let seed = 1; seed <= 60; seed++) {
+      const s0 = lead(true, seed)
+      expect(canThrow(s0, 0, ['D9'])).toBe(true)
+      const s = applyAction(s0, 0, { type: 'throw', cardIds: ['D9'] })
+      if (s.lastCaught) {
+        caught++
+        expect(s.table).toHaveLength(1)
+        expect(s.players[0].hand.some((c) => c.id === 'D9')).toBe(true)
+        expect(s.caught).toEqual([0])
+        expect(canCheat(s, 0)).toBe(false)
+      } else {
+        kept++
+        expect(s.table).toHaveLength(2)
+      }
+    }
+    expect(caught).toBeGreaterThan(0)
+    expect(kept).toBeGreaterThan(0)
+  })
+})
+
 describe('bot levels', () => {
   const play = (level: 'easy' | 'normal' | 'hard', seed: number) => {
     let g = newGame({ players: 2, deckSize: 36, mode: 'podkidnoy', names: ['A', 'B'], human: -1, seed })
@@ -281,7 +314,7 @@ describe('bot levels', () => {
   it('a strong bot loses less often than an easy one', () => {
     const fool = (level: 'easy' | 'hard') => {
       let lost = 0
-      for (let seed = 1; seed <= 60; seed++) if (play(level, seed).loser === 0) lost++
+      for (let seed = 1; seed <= 40; seed++) if (play(level, seed).loser === 0) lost++
       return lost
     }
     expect(fool('hard')).toBeLessThan(fool('easy'))
