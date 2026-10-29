@@ -1,4 +1,4 @@
-import { AnimatePresence, LayoutGroup, motion, type PanInfo } from 'framer-motion'
+import { AnimatePresence, LayoutGroup, motion, useDragControls, type DragControls, type PanInfo } from 'framer-motion'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { beats, Card, rankLabel, sortHand, SUIT_NAME } from '../engine/cards'
 import { EMOTES, type Emote } from '../engine/emotes'
@@ -137,6 +137,10 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const [dragging, setDragging] = useState<string | null>(null)
   const [hot, setHot] = useState<string | null>(null)
   const [resetKey, setResetKey] = useState(0)
+  /** the card under a finger or pointer sliding over the fan: it rises and its neighbours part */
+  const [fan, setFan] = useState<number | null>(null)
+  const slotControls = useRef(new Map<string, DragControls>())
+  const press = useRef<{ x: number; y: number; id: string | null; mode: 'wait' | 'scrub' | 'drag' } | null>(null)
   const handIds = useRef<string[]>([])
   const prev = useRef<GameState>(game)
   const counted = useRef<number | null>(null)
@@ -168,9 +172,9 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
       else if (zone.startsWith('hand-') && was === 'deck') drawn.push(id)
       else if (zone.startsWith('hand-') && was === 'table') taken.push(id)
     }
-    swept.forEach((id, i) => out.set(id, { kind: 'discard', delay: 0.3 + i * 0.05 }))
+    swept.forEach((id, i) => out.set(id, { kind: 'discard', delay: 0.35 + i * 0.07 }))
     taken.forEach((id, i) => out.set(id, { kind: 'take', delay: 0.3 + i * 0.05 }))
-    const start = swept.length || taken.length ? 0.3 + (swept.length + taken.length) * 0.05 + 0.35 : 0.25
+    const start = swept.length || taken.length ? 0.3 + (swept.length + taken.length) * 0.07 + 0.55 : 0.25
     drawn.forEach((id, i) => out.set(id, { kind: 'draw', delay: start + i * 0.1 }))
     return out
   }, [zones, dealing, game.options.seed])
@@ -261,7 +265,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   useEffect(() => {
     if (!emote || Date.now() - emote.key > 1500) return
     setLiveEmote(emote)
-    const t = setTimeout(() => setLiveEmote((e) => (e === emote ? null : e)), 2600)
+    const t = setTimeout(() => setLiveEmote((e) => (e === emote ? null : e)), 1400)
     return () => clearTimeout(t)
   }, [emote])
 
@@ -310,7 +314,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const autoThrow = staged[0]?.type === 'throw'
   useEffect(() => {
     if (!autoThrow || dragging) return
-    const t = setTimeout(() => confirmRef.current(), 750)
+    const t = setTimeout(() => confirmRef.current(), 2200)
     return () => clearTimeout(t)
   }, [plan, autoThrow, dragging])
 
@@ -437,6 +441,12 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const opponents = Array.from({ length: n - 1 }, (_, k) => game.players[(me + 1 + k) % n])
   const handStep = hand.length > 1 ? Math.min(hw * 0.92, (Math.min(window.innerWidth - 32 - (flat ? 240 : 0), 860) - hw) / (hand.length - 1)) : 0
   handIds.current = hand.map((c) => c.id)
+  const fanAt = (e: React.PointerEvent) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    if (hand.length === 0) return
+    const i = hand.length > 1 ? Math.round((e.clientX - r.left - hw / 2) / handStep) : 0
+    setFan(Math.max(0, Math.min(hand.length - 1, i)))
+  }
   const miniW = Math.round(cw * 0.42)
   const deckCards = [...game.deck.slice(1), ...undealt]
   const status = dealing ? 'Раздача…' : staged.length ? planText(staged, game) : selected ? 'Выберите карту на столе, которую покрыть' : statusText(game, actor, me)
@@ -477,13 +487,6 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
             <i>·</i>
             <Counter value={stats.draws} />
           </span>
-          {onEmote && (
-            <motion.button type="button" className="icon" aria-label="Смайлики" aria-expanded={emoteOpen} whileTap={{ scale: 0.9 }} onClick={() => setEmoteOpen((o) => !o)}>
-              <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>
-                🙂
-              </span>
-            </motion.button>
-          )}
           <motion.button type="button" className="icon" aria-label="Настройки" whileTap={{ scale: 0.9, rotate: 30 }} whileHover={{ rotate: 15 }} onClick={onOpenSettings}>
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
               <path
@@ -709,6 +712,13 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               </motion.p>
             </AnimatePresence>
             <div className="buttons">
+              {onEmote && (
+                <motion.button type="button" className="icon" aria-label="Смайлики" aria-expanded={emoteOpen} whileTap={{ scale: 0.9 }} onClick={() => setEmoteOpen((o) => !o)}>
+                  <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>
+                    🙂
+                  </span>
+                </motion.button>
+              )}
               <AnimatePresence>
                 {staged.length > 0 && (
                   <motion.button key="cancel" type="button" className="icon cancel" aria-label="Вернуть карты в руку" whileTap={{ scale: 0.9 }} onClick={() => setPlan([])} {...pop}>
@@ -733,7 +743,42 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               </motion.button>
             </div>
           </div>
-          <div className="hand" style={{ width: hand.length ? hw + handStep * (hand.length - 1) : hw }}>
+          <div
+            className="hand"
+            style={{ width: hand.length ? hw + handStep * (hand.length - 1) : hw }}
+            onPointerDown={(e) => {
+              const id = (e.target as HTMLElement).closest<HTMLElement>('[data-card]')?.dataset.card ?? null
+              press.current = { x: e.clientX, y: e.clientY, id, mode: 'wait' }
+              fanAt(e)
+            }}
+            onPointerMove={(e) => {
+              const p = press.current
+              if (dragging) return
+              if (!p) {
+                if (e.pointerType === 'mouse') fanAt(e)
+                return
+              }
+              if (p.mode === 'wait') {
+                const dx = Math.abs(e.clientX - p.x)
+                const dy = p.y - e.clientY
+                if (dx < 7 && Math.abs(dy) < 7) return
+                if (dy > 0 && dy > dx * 0.8 && p.id && playable.has(p.id)) {
+                  p.mode = 'drag'
+                  slotControls.current.get(p.id)?.start(e.nativeEvent)
+                } else p.mode = 'scrub'
+              }
+              if (p.mode === 'scrub') fanAt(e)
+            }}
+            onPointerUp={(e) => {
+              press.current = null
+              if (e.pointerType !== 'mouse') setFan(null)
+            }}
+            onPointerCancel={() => {
+              press.current = null
+              setFan(null)
+            }}
+            onPointerLeave={() => !press.current && setFan(null)}
+          >
             {hand.map((c, i) => {
               const mid = (hand.length - 1) / 2
               const off = i - mid
@@ -741,10 +786,22 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               const isSel = selected === c.id
               const isDrag = dragging === c.id
               const hint = defenseHint(view, c, can, me)
+              const dist = fan === null || isDrag ? 9 : Math.abs(i - fan)
+              const k = Math.max(0, 1 - dist / 2.4)
+              const push = fan === null || dist === 0 ? 0 : Math.sign(i - fan) * hw * 0.3 * Math.min(1, k * 1.7)
               return (
                 // The outer box slides the card along the hand with a transform (cheap), the inner one is dragged.
-                <motion.div key={`${c.id}:${resetKey}`} className="hand-pos" style={{ zIndex: isDrag ? 200 : i + 1 }} initial={false} animate={{ x: i * handStep }} transition={{ type: 'spring', stiffness: 260, damping: 32 }}>
                 <motion.div
+                  key={`${c.id}:${resetKey}`}
+                  className="hand-pos"
+                  style={{ zIndex: isDrag ? 200 : fan === i ? 100 : i + 1, transformOrigin: '50% 100%' }}
+                  initial={false}
+                  animate={{ x: i * handStep + push, y: -hw * 0.3 * k, scale: 1 + 0.2 * k }}
+                  transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+                >
+                <HandSlot
+                  id={c.id}
+                  registry={slotControls}
                   className={`hand-slot ${can ? 'can-drag' : ''}`}
                   drag={can}
                   dragSnapToOrigin={!(isDrag && hot)}
@@ -757,6 +814,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                     setTimeout(readZones, 60)
                     setTimeout(readZones, 350)
                     setDragging(c.id)
+                    setFan(null)
                     setSelected(null)
                     tap('light')
                   }}
@@ -785,7 +843,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                     onClick={() => onCard(c)}
                     disabled={!can}
                   />
-                </motion.div>
+                </HandSlot>
                 </motion.div>
               )
             })}
@@ -800,7 +858,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
           </motion.div>
         )}
         {emoteOpen && onEmote && (
-          <motion.div key="emote-picker" className="emote-picker" role="menu" initial={{ opacity: 0, y: -8, scale: 0.92 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.92 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
+          <motion.div key="emote-picker" className="emote-picker" role="menu" initial={{ opacity: 0, y: 8, scale: 0.92 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.92 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
             {EMOTES.map((e) => (
               <motion.button
                 key={e}
@@ -900,9 +958,25 @@ function Counter({ value }: { value: number }) {
   )
 }
 
+/** A hand card's drag box. The drag starts from the fan's own pointer logic, so a sideways slide can scrub the fan instead. */
+function HandSlot({ id, registry, children, ...props }: { id: string; registry: { current: Map<string, DragControls> } } & React.ComponentProps<typeof motion.div>) {
+  const controls = useDragControls()
+  useEffect(() => {
+    registry.current.set(id, controls)
+    return () => {
+      registry.current.delete(id)
+    }
+  }, [id, controls, registry])
+  return (
+    <motion.div data-card={id} dragControls={controls} dragListener={false} {...props}>
+      {children}
+    </motion.div>
+  )
+}
+
 function planText(plan: Action[], g: GameState): string {
   const first = plan[0]
-  if (first.type === 'throw') return 'Можно добавить ещё карту того же достоинства'
+  if (first.type === 'throw') return 'Можно добавить ещё карты, подходящие к столу'
   if (first.type === 'transfer') return 'Переводим ход дальше. Подтвердите кнопкой'
   return g.table.length ? 'Подтвердите кнопкой' : ''
 }

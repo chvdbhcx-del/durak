@@ -174,7 +174,19 @@ function canThrowMore(s: GameState) {
 function throwInCards(s: GameState, player: number): Card[] {
   if (!canThrowMore(s)) return []
   const ranks = tableRanks(s)
+  // A cheater may throw in anything; the bots at the table may notice.
+  if (canCheat(s, player)) return s.players[player].hand.slice()
   return s.players[player].hand.filter((c) => ranks.has(c.rank))
+}
+
+/** Cards of a throw-in that don't match any rank on the table: only a cheater gets to put these down. */
+function offRank(s: GameState, cardIds: string[]): string[] {
+  if (s.table.length === 0) return []
+  const ranks = tableRanks(s)
+  return cardIds.filter((id) => {
+    const c = s.players.flatMap((p) => p.hand).find((h) => h.id === id)
+    return !!c && !ranks.has(c.rank)
+  })
 }
 
 function transferTarget(s: GameState) {
@@ -237,7 +249,7 @@ export function canThrow(s: GameState, player: number, cardIds: string[]): boole
   for (const id of cardIds) {
     const card = hand.find((c) => c.id === id)
     if (!card) return false
-    if (t.table.length > 0 && (!tableRanks(t).has(card.rank) || !canThrowMore(t))) return false
+    if (t.table.length > 0 && ((!tableRanks(t).has(card.rank) && !canCheat(s, player)) || !canThrowMore(t))) return false
     t.table.push({ attack: removeFromHand(t.players[player], id), defense: null })
   }
   return true
@@ -245,6 +257,24 @@ export function canThrow(s: GameState, player: number, cardIds: string[]): boole
 
 export function applyAction(prev: GameState, player: number, action: Action): GameState {
   const s = previewAction(prev, player, action)
+  // A person's throw-in of a card that doesn't fit the table may be spotted by a bot.
+  const thrown = action.type === 'throw' ? action.cardIds : action.type === 'attack' ? [action.cardId] : []
+  const off = canCheat(prev, player) ? offRank(prev, thrown) : []
+  if (off.length > 0) {
+    const watchers = s.players.filter((p) => !p.human && !p.out && p.id !== player)
+    const roll = mulberry32(((s.options.seed ?? 1) + s.deck.length * 7 + s.discard.length * 13 + s.table.length * 17 + thrown.length * 31 + 5) >>> 0)
+    if (watchers.length > 0 && roll() < catchChance(s.options.level)) {
+      const by = watchers[Math.floor(roll() * watchers.length)].id
+      s.table = s.table.filter((pair) => {
+        if (!off.includes(pair.attack.id)) return true
+        s.players[player].hand.push(pair.attack)
+        return false
+      })
+      s.caught = [...(s.caught ?? []), player]
+      s.lastCaught = { by, player }
+      s.passed = []
+    }
+  }
   // A person's cheat or a bot's bluff may be spotted by the other bots at the table.
   if ((action.type === 'defend' && canCheat(prev, player)) || action.type === 'bluff') {
     const pair = s.table[action.pair]

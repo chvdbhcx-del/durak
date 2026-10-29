@@ -1,5 +1,5 @@
 import { beats, Card, makeDeck, mulberry32, Suit } from './cards'
-import { Action, attackOrder, GameState, legalActions, type Level } from './game'
+import { Action, applyAction, attackOrder, currentActor, GameState, legalActions, type Level } from './game'
 
 /** Chance that a bot in cheater mode covers with a card that doesn't beat instead of taking. */
 export const BLUFF_CHANCE = 0.3
@@ -13,6 +13,9 @@ export type { Level }
 export const EASY_SLIP = 0.35
 
 const value = (c: Card, trump: Suit) => c.rank + (c.suit === trump ? 20 : 0)
+
+/** Card ids are random per game, so cards are matched by what is printed on them. */
+const face = (c: Card) => `${c.suit}${c.rank}`
 
 function cardById(s: GameState, player: number, id: string) {
   return s.players[player].hand.find((c) => c.id === id)!
@@ -37,14 +40,14 @@ function planDefense(s: GameState, player: number): { cardId: string; pair: numb
 
 /** Cards this bot cannot place: everything not in its hand, the discard, on the table or the open trump. */
 function unseenCards(s: GameState, player: number): Card[] {
-  const known = new Set<string>([s.trumpCard.id])
-  for (const c of s.discard) known.add(c.id)
-  for (const c of s.players[player].hand) known.add(c.id)
+  const known = new Set<string>([face(s.trumpCard)])
+  for (const c of s.discard) known.add(face(c))
+  for (const c of s.players[player].hand) known.add(face(c))
   for (const p of s.table) {
-    known.add(p.attack.id)
-    if (p.defense) known.add(p.defense.id)
+    known.add(face(p.attack))
+    if (p.defense) known.add(face(p.defense))
   }
-  return makeDeck(s.options.deckSize).filter((c) => !known.has(c.id))
+  return makeDeck(s.options.deckSize).filter((c) => !known.has(face(c)))
 }
 
 /** How many unseen cards would cover `card`, as a share of all unseen cards. Lower is a safer lead. */
@@ -61,6 +64,10 @@ function dice(s: GameState, player: number, salt: number) {
 export function chooseAction(s: GameState, player: number, level: Level = s.options.level ?? 'normal'): Action {
   const legal = legalActions(s, player)
   if (legal.length === 0) throw new Error('Bot has no legal action')
+  if (level === 'hard') {
+    const exact = solveEndgame(s, player, legal)
+    if (exact) return exact
+  }
   if (level === 'easy' && dice(s, player, 3) < EASY_SLIP) {
     const slip = easySlip(s, player, legal)
     if (slip) return slip
@@ -107,6 +114,68 @@ export function chooseAction(s: GameState, player: number, level: Level = s.opti
     if (worthThrowing(s, player, c, level, unseen)) return t
   }
   return { type: 'pass' }
+}
+
+/**
+ * Endgame by counting: with the deck gone and one opponent left, every card not in sight is in
+ * that opponent's hand, so a sharp bot can search the rest of the game to the end.
+ */
+function solveEndgame(s: GameState, player: number, legal: Action[]): Action | null {
+  if (s.deck.length > 0 || s.over) return null
+  const others = s.players.map((_, i) => i).filter((i) => i !== player && !s.players[i].out)
+  if (others.length !== 1) return null
+  const foe = others[0]
+  const known = new Set<string>()
+  for (const c of s.discard) known.add(face(c))
+  for (const c of s.players[player].hand) known.add(face(c))
+  for (const p of s.table) {
+    known.add(face(p.attack))
+    if (p.defense) known.add(face(p.defense))
+  }
+  const hidden = makeDeck(s.options.deckSize).filter((c) => !known.has(face(c)))
+  if (hidden.length !== s.players[foe].hand.length || hidden.length > 5) return null
+  const world: GameState = structuredClone({ ...s, options: { ...s.options, cheat: false } })
+  world.players[foe].hand = hidden
+  const moves = legal.filter((a) => a.type !== 'bluff')
+  if (moves.length < 2) return null
+  let budget = 2500
+  const memo = new Map<string, number>()
+  const key = (g: GameState) =>
+    [g.players.map((p) => p.hand.map((c) => c.id).sort().join('')).join('|'), g.table.map((p) => p.attack.id + (p.defense?.id ?? '-')).join(','), g.attacker, g.defender, g.taking ? 1 : 0, g.passed.join('')].join('/')
+  // value for `player`: +1 they win, -1 they lose, 0 draw
+  const search = (g: GameState): number => {
+    if (g.over) return g.loser === null ? 0 : g.loser === player ? -1 : 1
+    const k = key(g)
+    const hit = memo.get(k)
+    if (hit !== undefined) return hit
+    if (--budget < 0) throw new Error('budget')
+    const actor = currentActor(g)
+    if (actor === null) return 0
+    const mine = actor === player
+    let best = mine ? -2 : 2
+    for (const a of legalActions(g, actor)) {
+      if (a.type === 'bluff') continue
+      const v = search(applyAction(g, actor, a))
+      if (mine ? v > best : v < best) best = v
+      if (best === (mine ? 1 : -1)) break
+    }
+    memo.set(k, best)
+    return best
+  }
+  try {
+    let bestV = -2
+    let pick: Action | null = null
+    for (const a of moves) {
+      const v = search(applyAction(world, player, a))
+      if (v > bestV) {
+        bestV = v
+        pick = a
+      }
+    }
+    return pick
+  } catch {
+    return null
+  }
 }
 
 type Phase = 'early' | 'mid' | 'late'
