@@ -263,3 +263,26 @@ describe('cheating only once', () => {
     }
   })
 })
+
+describe('bot levels', () => {
+  const play = (level: 'easy' | 'normal' | 'hard', seed: number) => {
+    let g = newGame({ players: 2, deckSize: 36, mode: 'podkidnoy', names: ['A', 'B'], human: -1, seed })
+    for (let i = 0; i < 600 && !g.over; i++) {
+      const actor = currentActor(g)
+      if (actor === null) break
+      g = applyAction(g, actor, chooseAction(g, actor, actor === 0 ? level : 'normal'))
+    }
+    return g
+  }
+  it('every level finishes games without illegal moves', () => {
+    for (const level of ['easy', 'normal', 'hard'] as const) for (let seed = 1; seed <= 20; seed++) expect(play(level, seed).over).toBe(true)
+  })
+  it('a strong bot loses less often than an easy one', () => {
+    const fool = (level: 'easy' | 'hard') => {
+      let lost = 0
+      for (let seed = 1; seed <= 60; seed++) if (play(level, seed).loser === 0) lost++
+      return lost
+    }
+    expect(fool('hard')).toBeLessThan(fool('easy'))
+  })
+})

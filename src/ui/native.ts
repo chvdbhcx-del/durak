@@ -4,12 +4,19 @@ import { StatusBar, Style } from '@capacitor/status-bar'
 
 export const isNative = Capacitor.isNativePlatform()
 
+let hapticsOn = true
+export function setHaptics(on: boolean) {
+  hapticsOn = on
+}
+
 // Haptics fall back to navigator.vibrate on the web and are silently ignored where unsupported.
 export function tap(strength: 'light' | 'medium' = 'light') {
+  if (!hapticsOn) return
   Haptics.impact({ style: strength === 'light' ? ImpactStyle.Light : ImpactStyle.Medium }).catch(() => {})
 }
 
 export function notify(kind: 'success' | 'warning') {
+  if (!hapticsOn) return
   Haptics.notification({ type: kind === 'success' ? NotificationType.Success : NotificationType.Warning }).catch(() => {})
 }
 

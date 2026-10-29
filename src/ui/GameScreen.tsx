@@ -5,7 +5,8 @@ import { Action, canThrow, currentActor, GameState, HAND_SIZE, legalActions, pre
 import { CardView, type Flight } from './CardView'
 import { notify, tap } from './native'
 import { playCard, playDeal, playSweep } from './sfx'
-import type { Stats } from './settings'
+import { BOT_NAMES } from './pickers'
+import { AVATARS, type Stats } from './settings'
 import { SuitIcon } from './SuitIcon'
 
 const DEAL_STEP_MS = 75
@@ -477,8 +478,8 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                   transition={{ delay: idx * 0.06, type: 'spring', stiffness: 400, damping: 30 }}
                 >
                   <div className="seat-head">
-                    <motion.span className={`avatar ${p.human && room ? 'person' : ''}`} animate={actor === p.id ? { scale: [1, 1.12, 1] } : { scale: 1 }} transition={actor === p.id ? { duration: 1.4, repeat: Infinity } : undefined}>
-                      {p.name[0]}
+                    <motion.span className={`avatar ${p.human && room ? 'person' : ''} ${!p.human && BOT_NAMES.includes(p.name) ? 'emoji' : ''}`} animate={actor === p.id ? { scale: [1, 1.12, 1] } : { scale: 1 }} transition={actor === p.id ? { duration: 1.4, repeat: Infinity } : undefined}>
+                      {!p.human && BOT_NAMES.includes(p.name) ? AVATARS[BOT_NAMES.indexOf(p.name)] : p.name[0]}
                     </motion.span>
                     <span className="seat-name">{p.name}</span>
                     <AnimatePresence>

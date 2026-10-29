@@ -1,7 +1,8 @@
 import { animate, motion, useMotionValue, useTransform } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import type { Suit } from '../engine/cards'
-import type { Stats } from './settings'
+import { AVATARS, type HistoryEntry, type Settings, type Stats } from './settings'
+import { AvatarPicker, plural } from './pickers'
 import { Sheet, sheetItem } from './Sheet'
 import { SuitIcon } from './SuitIcon'
 
@@ -51,7 +52,20 @@ function CountUp({ value }: { value: number }) {
   return <>{text}</>
 }
 
-export function StatsPanel({ stats, onClose, onReset }: { stats: Stats; onClose: () => void; onReset: () => void }) {
+const RESULT_TEXT = { win: 'Победа', loss: 'Остались дураком', draw: 'Ничья' } as const
+
+function when(at: number) {
+  const d = new Date(at)
+  const today = new Date()
+  const time = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  return d.toDateString() === today.toDateString() ? `сегодня, ${time}` : `${d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}, ${time}`
+}
+
+function gameNote(h: HistoryEntry) {
+  return `${h.online ? 'Онлайн' : 'С ботами'} · ${h.mode === 'podkidnoy' ? 'подкидной' : 'переводной'} · ${h.players} ${plural(h.players, 'игрок', 'игрока', 'игроков')}`
+}
+
+export function StatsPanel({ stats, settings, onSettings, onClose, onReset }: { stats: Stats; settings: Settings; onSettings: (s: Settings) => void; onClose: () => void; onReset: () => void }) {
   const [confirm, setConfirm] = useState(false)
   const games = stats.wins + stats.losses + stats.draws
   const rate = games ? stats.wins / games : 0
@@ -59,7 +73,17 @@ export function StatsPanel({ stats, onClose, onReset }: { stats: Stats; onClose:
   const C = 2 * Math.PI * R
 
   return (
-    <Sheet title="Статистика" onClose={onClose}>
+    <Sheet title="Профиль" onClose={onClose}>
+      <motion.div className="profile-head" variants={sheetItem}>
+        <motion.span key={settings.avatar} className="profile-avatar" initial={{ scale: 0.6, rotate: -12 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 420, damping: 18 }}>
+          {AVATARS[settings.avatar] ?? AVATARS[0]}
+        </motion.span>
+        <input className="profile-name" value={settings.name} maxLength={16} aria-label="Имя" placeholder="Ваше имя" onChange={(e) => onSettings({ ...settings, name: e.target.value })} />
+      </motion.div>
+      <motion.div variants={sheetItem}>
+        <AvatarPicker value={settings.avatar} onChange={(avatar) => onSettings({ ...settings, avatar })} />
+      </motion.div>
+
       <motion.div className="ring-wrap" variants={sheetItem}>
         <svg viewBox="0 0 120 120" className="ring" aria-hidden="true">
           <circle cx="60" cy="60" r={R} className="ring-track" />
@@ -102,6 +126,37 @@ export function StatsPanel({ stats, onClose, onReset }: { stats: Stats; onClose:
           <span className="stat-label">Ничьи</span>
         </div>
       </motion.div>
+
+      <motion.div className="stat-tiles two" variants={sheetItem}>
+        <div className="stat">
+          <span className="stat-num">
+            <CountUp value={stats.streak} />
+          </span>
+          <span className="stat-label">Серия без «дурака»</span>
+        </div>
+        <div className="stat">
+          <span className="stat-num">
+            <CountUp value={stats.bestStreak} />
+          </span>
+          <span className="stat-label">Лучшая серия</span>
+        </div>
+      </motion.div>
+
+      {stats.history.length > 0 && (
+        <motion.ul className="history" variants={sheetItem} aria-label="Последние партии">
+          {stats.history.slice(0, 10).map((h) => (
+            <li key={h.at} className={h.result}>
+              <span className="dot" />
+              <span>
+                {RESULT_TEXT[h.result]}
+                <br />
+                <span className="meta">{gameNote(h)}</span>
+              </span>
+              <time>{when(h.at)}</time>
+            </li>
+          ))}
+        </motion.ul>
+      )}
 
       <motion.div className="stat-foot" variants={sheetItem}>
         <span className="muted">{games ? `Сыграно партий: ${games}` : 'Сыграйте первую партию, и здесь появится счёт.'}</span>

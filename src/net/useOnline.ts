@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DeckSize } from '../engine/cards'
-import { chooseAction } from '../engine/bot'
+import { chooseAction, type Level } from '../engine/bot'
 import { Action, applyAction, currentActor, GameState, maxPlayers, Mode, newGame, viewFor } from '../engine/game'
 import { BOT_NAMES } from '../ui/pickers'
 import { GuestRoom, HostRoom, LobbyInfo, Member, ToGuest } from './room'
@@ -25,7 +25,7 @@ export interface Online {
   setLobby: (patch: Partial<Pick<LobbyInfo, 'bots' | 'mode' | 'deckSize' | 'cheat'>>) => void
   kick: (token: string) => void
   /** host only: let the bot in `actor`'s seat make its move */
-  stepBot: (actor: number) => void
+  stepBot: (actor: number, level?: Level) => void
   restore: () => boolean
 }
 
@@ -322,8 +322,8 @@ export function useOnline(token: string): Online {
     updateLobby((l) => ({ ...l, members: l.members.filter((m) => m.token !== t) }))
   }
 
-  const stepBot = (actor: number) =>
-    setGame((g) => (g && currentActor(g) === actor && !g.players[actor].human ? applyAction(g, actor, chooseAction(g, actor)) : g))
+  const stepBot = (actor: number, level: Level = 'normal') =>
+    setGame((g) => (g && currentActor(g) === actor && !g.players[actor].human ? applyAction(g, actor, chooseAction(g, actor, level)) : g))
 
   // Unmounting (e.g. a reload) keeps the saved room; only `leave` forgets it.
   useEffect(() => () => {
