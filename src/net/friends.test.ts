@@ -5,6 +5,8 @@ describe('parseInbox', () => {
   it('accepts an invite and a friend request', () => {
     expect(parseInbox({ t: 'invite', fid: 'abc', name: 'Аня', code: 'AB3CD' })).toEqual({ t: 'invite', fid: 'abc', name: 'Аня', code: 'AB3CD', server: undefined })
     expect(parseInbox({ t: 'friend', fid: 'abc', name: 'Аня' })).toEqual({ t: 'friend', fid: 'abc', name: 'Аня' })
+    expect(parseInbox({ t: 'ping', fid: 'abc' })).toEqual({ t: 'ping', fid: 'abc' })
+    expect(parseInbox({ t: 'ping' })).toEqual({ t: 'ping', fid: undefined })
   })
   it('keeps a private server address from an invite', () => {
     expect(parseInbox({ t: 'invite', fid: 'a', name: 'B', code: 'AB3CD', server: 'https://x.example.com' })?.t).toBe('invite')

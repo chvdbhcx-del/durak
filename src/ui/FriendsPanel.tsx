@@ -9,6 +9,13 @@ interface Props {
   onClose: () => void
 }
 
+/** What a friend's row says about them; before the first answer it says so instead of claiming they are away. */
+export function presenceText(friends: Friends, id: string): string {
+  if (friends.here[id]) return 'в приложении'
+  if (!friends.up) return 'нет связи с сервером'
+  return friends.here[id] === undefined ? 'проверяем…' : 'не в сети'
+}
+
 export function FriendsPanel({ friends, onInvite, onClose }: Props) {
   const [removing, setRemoving] = useState<string | null>(null)
   const { refresh } = friends
@@ -34,11 +41,11 @@ export function FriendsPanel({ friends, onInvite, onClose }: Props) {
               <motion.li key={f.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, x: -30 }} transition={{ type: 'spring', stiffness: 420, damping: 32 }}>
                 <span className="friend-avatar">
                   {f.name[0]?.toUpperCase()}
-                  <i className={`friend-dot ${friends.here[f.id] ? 'on' : ''}`} aria-label={friends.here[f.id] ? 'в приложении' : 'не в сети'} />
+                  <i className={`friend-dot ${friends.here[f.id] ? 'on' : ''}`} aria-hidden="true" />
                 </span>
                 <span className="friend-name">
                   {f.name}
-                  <small>{friends.here[f.id] ? 'в приложении' : 'не в сети'}</small>
+                  <small>{presenceText(friends, f.id)}</small>
                 </span>
                 {removing === f.id ? (
                   <span className="friend-actions">
