@@ -1,0 +1,9 @@
+{
+  "name": "durak-room-server",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Own room server for Durak online (PeerJS signalling)",
+  "scripts": { "start": "node index.mjs" },
+  "dependencies": { "peer": "1.0.2" }
+}

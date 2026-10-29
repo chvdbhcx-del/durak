@@ -2,7 +2,7 @@ import { AnimatePresence } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { chooseAction } from '../engine/bot'
 import { Action, applyAction, currentActor, GameState, maxPlayers, newGame } from '../engine/game'
-import { normalizeCode } from '../net/room'
+import { normalizeCode, setRoomServer } from '../net/room'
 import { hasSavedRoom, useOnline } from '../net/useOnline'
 import { GameScreen, Result } from './GameScreen'
 import { RulesPanel, StatsPanel } from './InfoPanels'
@@ -46,18 +46,30 @@ function startGame(s: Settings): GameState {
   return newGame({ players, deckSize: s.deckSize, mode: s.mode, cheat: s.cheat, names: ['Вы', ...BOT_NAMES], human: ME, seed: Date.now() })
 }
 
-/** A room code from an invite link like …/durak/#join-AB3CD. */
-function codeFromHash(): string {
-  const m = /^#join-([A-Za-z0-9]+)/.exec(window.location.hash)
-  return m ? normalizeCode(m[1]) : ''
+/** A room code from an invite link like …/durak/#join-AB3CD, plus the private server a link may carry (&s=…). */
+function inviteFromHash(): { code: string; server: string } {
+  const m = /^#join-([A-Za-z0-9]+)(?:&s=(.+))?/.exec(window.location.hash)
+  if (!m) return { code: '', server: '' }
+  let server = ''
+  try {
+    server = m[2] ? decodeURIComponent(m[2]) : ''
+  } catch {
+    /* a mangled link just falls back to the public server */
+  }
+  return { code: normalizeCode(m[1]), server }
 }
 
 export function App() {
-  const [settings, setSettings] = useState<Settings>(loadSettings)
+  const [invite] = useState(inviteFromHash)
+  const [settings, setSettings] = useState<Settings>(() => {
+    const s = loadSettings()
+    return invite.server ? { ...s, server: invite.server } : s
+  })
+  setRoomServer(settings.server)
   const [stats, setStats] = useState<Stats>(loadStats)
   const [game, setGame] = useState<GameState | null>(loadGame)
   const [panel, setPanel] = useState<Panel | null>(null)
-  const [inviteCode] = useState(codeFromHash)
+  const inviteCode = invite.code
   const [resumeRoom] = useState(() => !inviteCode && hasSavedRoom())
   const [screen, setScreen] = useState<Screen>(inviteCode || resumeRoom ? 'online' : 'menu')
   const [update, setUpdate] = useState<UpdateState>({ kind: 'idle' })

@@ -49,7 +49,34 @@ export function normalizeCode(raw: string) {
     .slice(0, CODE_LENGTH)
 }
 
-const peerOptions = { debug: 0 as const }
+/** Where rooms are introduced: PeerJS's public broker unless the player points the app at their own server. */
+interface OwnServer {
+  host: string
+  port: number
+  path: string
+  secure: boolean
+}
+let ownServer: OwnServer | null = null
+
+/** Accepts `https://name.example.com`, `name.example.com:9000` or `http://192.168.1.5:9000`; empty or unreadable means the public broker. */
+export function parseServer(raw: string): OwnServer | null {
+  const text = raw.trim()
+  if (!text) return null
+  try {
+    const url = new URL(/^[a-z]+:\/\//i.test(text) ? text : `https://${text}`)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
+    const secure = url.protocol === 'https:'
+    return { host: url.hostname, port: url.port ? Number(url.port) : secure ? 443 : 80, path: url.pathname.replace(/\/$/, '') || '/', secure }
+  } catch {
+    return null
+  }
+}
+
+export function setRoomServer(raw: string) {
+  ownServer = parseServer(raw)
+}
+
+const peerOptions = () => ({ debug: 0 as const, ...(ownServer ?? {}) })
 
 /** How long the first link to the room broker may take before we say so instead of spinning forever. */
 const BROKER_TIMEOUT_MS = 15000
@@ -103,7 +130,7 @@ export class HostRoom {
 
   private open(attempt: number, keepCode: boolean) {
     if (this.closed) return
-    const peer = new Peer(PREFIX + this.code, peerOptions)
+    const peer = new Peer(PREFIX + this.code, peerOptions())
     this.peer = peer
     const slow = this.ready || keepCode ? null : setTimeout(() => {
       if (this.closed || this.peer !== peer || this.ready) return
@@ -245,7 +272,7 @@ export class GuestRoom {
   }
 
   private makePeer() {
-    const peer = new Peer(peerOptions)
+    const peer = new Peer(peerOptions())
     const slow = this.everConnected ? null : setTimeout(() => {
       if (this.done || this.peer !== peer || peer.open) return
       this.done = true
