@@ -1,6 +1,7 @@
 import { AnimatePresence, LayoutGroup, motion, type PanInfo } from 'framer-motion'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { beats, Card, rankLabel, sortHand, SUIT_NAME } from '../engine/cards'
+import { EMOTES, type Emote } from '../engine/emotes'
 import { Action, canThrow, currentActor, GameState, HAND_SIZE, legalActions, previewAction } from '../engine/game'
 import { CardView, type Flight } from './CardView'
 import { notify, tap } from './native'
@@ -45,6 +46,8 @@ interface Props {
   onBotTurn?: (actor: number) => void
   onFinished: (result: Result, loser: number | null) => void
   series?: Series | null
+  emote?: Emote | null
+  onEmote?: (emoji: string) => void
   onExit: () => void
   onOpenSettings: () => void
   /** left out when this player can't start the next game (an online guest) */
@@ -116,7 +119,7 @@ function zoneMap(g: GameState): Map<string, string> {
 /** How many cards of the deck and the discard pile are actually drawn. */
 const PILE_SHOWN = 9
 
-export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, series, onExit, onOpenSettings, onPlayAgain, room }: Props) {
+export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, series, emote, onEmote, onExit, onOpenSettings, onPlayAgain, room }: Props) {
   const { table: cw, hand: hw, flat } = useCardSizes()
   const { dealt, dealing } = useDealing(game)
   const zones = useMemo(() => zoneMap(game), [game])
@@ -248,6 +251,16 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     setSelected(null)
     setPlan([])
   }, [game, me])
+
+  // Emotes from anyone stay on screen for a couple of seconds.
+  const [liveEmote, setLiveEmote] = useState<Emote | null>(null)
+  const [emoteOpen, setEmoteOpen] = useState(false)
+  useEffect(() => {
+    if (!emote || Date.now() - emote.key > 1500) return
+    setLiveEmote(emote)
+    const t = setTimeout(() => setLiveEmote((e) => (e === emote ? null : e)), 2600)
+    return () => clearTimeout(t)
+  }, [emote])
 
   useEffect(() => {
     if (!bubble) return
@@ -450,6 +463,13 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
             <i>·</i>
             <Counter value={stats.draws} />
           </span>
+          {onEmote && (
+            <motion.button type="button" className="icon" aria-label="Смайлики" aria-expanded={emoteOpen} whileTap={{ scale: 0.9 }} onClick={() => setEmoteOpen((o) => !o)}>
+              <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>
+                🙂
+              </span>
+            </motion.button>
+          )}
           <motion.button type="button" className="icon" aria-label="Настройки" whileTap={{ scale: 0.9, rotate: 30 }} whileHover={{ rotate: 15 }} onClick={onOpenSettings}>
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
               <path
@@ -498,6 +518,13 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                       {bubble?.seat === p.id && (
                         <motion.span key={bubble.key} className="bubble" initial={{ opacity: 0, y: 6, scale: 0.7 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.9 }} transition={{ type: 'spring', stiffness: 500, damping: 26 }}>
                           {bubble.text}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                    <AnimatePresence>
+                      {liveEmote?.seat === p.id && (
+                        <motion.span key={liveEmote.key} className="bubble emote" initial={{ opacity: 0, y: 8, scale: 0.4 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.7 }} transition={{ type: 'spring', stiffness: 460, damping: 18 }}>
+                          {liveEmote.emoji}
                         </motion.span>
                       )}
                     </AnimatePresence>
@@ -739,6 +766,34 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
           </div>
         </section>
       </LayoutGroup>
+
+      <AnimatePresence>
+        {liveEmote?.seat === me && (
+          <motion.div key={liveEmote.key} className="my-emote" aria-hidden="true" initial={{ opacity: 0, y: 14, scale: 0.4 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -14, scale: 0.7 }} transition={{ type: 'spring', stiffness: 460, damping: 18 }}>
+            {liveEmote.emoji}
+          </motion.div>
+        )}
+        {emoteOpen && onEmote && (
+          <motion.div key="emote-picker" className="emote-picker" role="menu" initial={{ opacity: 0, y: -8, scale: 0.92 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.92 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
+            {EMOTES.map((e) => (
+              <motion.button
+                key={e}
+                type="button"
+                role="menuitem"
+                aria-label={`Смайлик ${e}`}
+                whileTap={{ scale: 0.8 }}
+                whileHover={{ scale: 1.15 }}
+                onClick={() => {
+                  setEmoteOpen(false)
+                  onEmote(e)
+                }}
+              >
+                {e}
+              </motion.button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {game.over && (

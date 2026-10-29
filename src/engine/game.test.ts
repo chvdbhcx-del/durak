@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { beats, Card } from './cards'
 import { chooseAction } from './bot'
+import { botReaction, botReply } from './emotes'
 import { applyAction, canCheat, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options } from './game'
 
 const opts = (o: Partial<Options> = {}): Options => ({
@@ -284,5 +285,30 @@ describe('bot levels', () => {
       return lost
     }
     expect(fool('hard')).toBeLessThan(fool('easy'))
+  })
+})
+
+describe('bot emotes', () => {
+  const fresh = () => newGame({ players: 3, deckSize: 36, mode: 'podkidnoy', names: ['Вы', 'Лиса', 'Мишка'], human: 0, seed: 7 })
+  it('a bot that gets caught sulks and the catcher gloats', () => {
+    const prev = fresh()
+    const next = { ...structuredClone(prev), lastCaught: { by: 1, player: 2 } }
+    expect(botReaction(prev, next, () => 0)).toEqual({ seat: 1, emoji: '😎' })
+    const sulk = { ...structuredClone(prev), lastCaught: { by: 0, player: 2 } }
+    expect(botReaction(prev, sulk, () => 0)?.seat).toBe(2)
+  })
+  it('a game that ends with a bot as the fool makes it complain', () => {
+    const prev = fresh()
+    const next = { ...structuredClone(prev), over: true, loser: 1 }
+    expect(botReaction(prev, next, () => 0)).toEqual({ seat: 1, emoji: '😡' })
+  })
+  it('stays quiet when nothing happened', () => {
+    const s = fresh()
+    expect(botReaction(s, structuredClone(s), () => 0)).toBeNull()
+  })
+  it('replies to a person only some of the time', () => {
+    const s = fresh()
+    expect(botReply('😂', s, () => 0.9)).toBeNull()
+    expect(botReply('😂', s, () => 0)?.emoji).toBe('😂')
   })
 })

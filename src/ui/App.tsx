@@ -1,6 +1,7 @@
 import { AnimatePresence } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { chooseAction } from '../engine/bot'
+import { botReaction, botReply, type Emote, fingerprint } from '../engine/emotes'
 import { Action, applyAction, currentActor, GameState, maxPlayers, newGame } from '../engine/game'
 import { normalizeCode, setRoomServer } from '../net/room'
 import { hasSavedRoom, useOnline } from '../net/useOnline'
@@ -69,6 +70,7 @@ export function App() {
   const [stats, setStats] = useState<Stats>(loadStats)
   const [game, setGame] = useState<GameState | null>(loadGame)
   const [series, setSeries] = useState<Series | null>(null)
+  const [localEmote, setLocalEmote] = useState<Emote | null>(null)
   const [panel, setPanel] = useState<Panel | null>(null)
   const inviteCode = invite.code
   const [resumeRoom] = useState(() => !inviteCode && hasSavedRoom())
@@ -124,6 +126,36 @@ export function App() {
       return next
     })
   }, [])
+
+  // Bots react to what happens at the table, and now and then answer a person's emote.
+  // They run wherever the game does: on this device for bot games, on the host for rooms.
+  const botGame = liveOnline ? (online.role === 'host' ? liveOnline : null) : screen === 'game' ? game : null
+  const emoteRef = useRef({ prev: null as GameState | null, at: 0 })
+  const showEmote = (seat: number, emoji: string) => (liveOnline ? online.emitEmote(seat, emoji) : setLocalEmote({ seat, emoji, key: Date.now() + Math.random() }))
+  const showEmoteRef = useRef(showEmote)
+  showEmoteRef.current = showEmote
+  useEffect(() => {
+    const prev = emoteRef.current.prev
+    emoteRef.current.prev = botGame
+    if (!botGame || !prev || prev.options.seed !== botGame.options.seed || fingerprint(prev) === fingerprint(botGame)) return
+    if (Date.now() - emoteRef.current.at < 3500) return
+    const r = botReaction(prev, botGame, Math.random)
+    if (!r) return
+    emoteRef.current.at = Date.now()
+    // not cancelled when the game moves on: the reaction belongs to the moment that triggered it
+    setTimeout(() => showEmoteRef.current(r.seat, r.emoji), 500 + Math.random() * 700)
+  }, [botGame])
+  const shownEmote = liveOnline ? online.emote : localEmote
+  const replied = useRef(0)
+  useEffect(() => {
+    if (!shownEmote || !botGame || replied.current === shownEmote.key || !botGame.players[shownEmote.seat]?.human) return
+    replied.current = shownEmote.key
+    const r = botReply(shownEmote.emoji, botGame, Math.random)
+    if (!r) return
+    setTimeout(() => showEmoteRef.current(r.seat, r.emoji), 700 + Math.random() * 900)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shownEmote])
+  const sendMyEmote = (emoji: string) => (liveOnline ? online.sendEmote(emoji) : setLocalEmote({ seat: ME, emoji, key: Date.now() + Math.random() }))
 
   const playLocal = (action: Action) => {
     tap(action.type === 'take' ? 'medium' : 'light')
@@ -198,6 +230,8 @@ export function App() {
         paused={false}
         botDelay={BOT_DELAY[settings.speed]}
         onBotTurn={host ? stepOnlineBot : undefined}
+        emote={online.emote}
+        onEmote={online.sendEmote}
         onFinished={recordResult}
         onExit={() => online.leave()}
         onOpenSettings={() => setPanel('settings')}
@@ -220,6 +254,8 @@ export function App() {
         onExit={() => setScreen('menu')}
         onOpenSettings={() => setPanel('settings')}
         series={series}
+        emote={shownEmote}
+        onEmote={sendMyEmote}
         onPlayAgain={() => newRound(settings, false)}
       />
     )

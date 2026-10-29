@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DeckSize } from '../engine/cards'
 import { chooseAction, type Level } from '../engine/bot'
+import { EMOTES, type Emote } from '../engine/emotes'
 import { Action, applyAction, currentActor, GameState, maxPlayers, Mode, newGame, viewFor } from '../engine/game'
 import { BOT_NAMES } from '../ui/pickers'
 import { GuestRoom, HostRoom, LobbyInfo, Member, ToGuest } from './room'
@@ -27,6 +28,12 @@ export interface Online {
   /** host only: let the bot in `actor`'s seat make its move */
   stepBot: (actor: number, level?: Level) => void
   restore: () => boolean
+  /** the latest emote at the table, from anyone */
+  emote: Emote | null
+  /** this player's own emote */
+  sendEmote: (emoji: string) => void
+  /** host only: an emote from a bot's seat */
+  emitEmote: (seat: number, emoji: string) => void
 }
 
 /** Saved so a room survives the app being reloaded or killed while a player is away sharing the invite. */
@@ -80,6 +87,7 @@ export function useOnline(token: string): Online {
   const [seat, setSeat] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
   const [reconnecting, setReconnecting] = useState(false)
+  const [emote, setEmote] = useState<Emote | null>(null)
   const gameRef = useRef<GameState | null>(null)
   gameRef.current = game
   const nameRef = useRef('')
@@ -214,6 +222,10 @@ export function useOnline(token: string): Online {
           }
         })
       },
+      onEmote: (t, emoji) => {
+        const s = seats.current.get(t)
+        if (s !== undefined && EMOTES.includes(emoji)) emitEmote(s, emoji)
+      },
       onError: (message) => {
         setError(message)
         setPhase('error')
@@ -240,6 +252,8 @@ export function useOnline(token: string): Online {
           setSeat(msg.seat)
           setGame(msg.view)
           setPhase('playing')
+        } else if (msg.t === 'emote') {
+          setEmote({ seat: msg.seat, emoji: msg.emoji, key: Date.now() })
         } else if (msg.t === 'closed') {
           setError(msg.reason)
           setPhase('error')
@@ -316,6 +330,16 @@ export function useOnline(token: string): Online {
       })
   }
 
+  /** Host: show an emote here and send it to every guest. */
+  const emitEmote = (seat: number, emoji: string) => {
+    setEmote({ seat, emoji, key: Date.now() + Math.random() })
+    host.current?.broadcast({ t: 'emote', seat, emoji })
+  }
+  const sendEmote = (emoji: string) => {
+    if (role === 'guest') guest.current?.emote(emoji)
+    else emitEmote(0, emoji)
+  }
+
   const setLobby: Online['setLobby'] = (patch) => updateLobby((l) => ({ ...l, ...patch }))
   const kick = (t: string) => {
     host.current?.kick(t)
@@ -331,6 +355,6 @@ export function useOnline(token: string): Online {
     guest.current?.close()
   }, [])
 
-  return { phase, role, error, lobby, game, seat, notice, reconnecting, create, join, leave, start, act, setLobby, kick, stepBot, restore }
+  return { phase, role, error, lobby, game, seat, notice, reconnecting, create, join, leave, start, act, setLobby, kick, stepBot, restore, emote, sendEmote, emitEmote }
 }
 
