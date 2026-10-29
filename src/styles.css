@@ -437,6 +437,7 @@ button:focus-visible,
 }
 
 .battle {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -446,6 +447,12 @@ button:focus-visible,
 }
 
 .empty-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  pointer-events: none;
   color: var(--muted);
   font-size: 14px;
 }
@@ -2353,4 +2360,9 @@ button.card:disabled {
 :root.ios .app {
   height: var(--app-h, 100%);
   padding-block: max(8px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-bottom, 0px));
+}
+
+/* Cards in flight get their own layer so the move costs no repaint */
+.card.flying {
+  will-change: transform;
 }

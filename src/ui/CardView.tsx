@@ -23,8 +23,9 @@ export interface Flight {
   kind: 'draw' | 'discard' | 'take'
 }
 
-export const cardSpring = { type: 'spring', stiffness: 260, damping: 30, mass: 0.9 } as const
-const flightSpring = { type: 'spring', stiffness: 105, damping: 22, mass: 1 } as const
+// Cards glide on eased curves instead of springs: a gentle start and a long soft landing, no overshoot.
+export const cardSpring = { type: 'tween', ease: [0.22, 1, 0.36, 1], duration: 0.5 } as const
+const flightSpring = { type: 'tween', ease: [0.33, 0.7, 0.2, 1], duration: 0.8 } as const
 const flipSpring = { type: 'spring', stiffness: 200, damping: 26 } as const
 
 /**
@@ -42,7 +43,7 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
     lastFace.set(card.id, faceUp)
   }, [card.id, faceUp])
 
-  const classes = ['card', size, faceUp && isRed(card.suit) ? 'red' : '', faceUp && card.suit === trump ? 'trump' : '', className].filter(Boolean).join(' ')
+  const classes = ['card', size, flight ? 'flying' : '', faceUp && isRed(card.suit) ? 'red' : '', faceUp && card.suit === trump ? 'trump' : '', className].filter(Boolean).join(' ')
   const inner = (
     <motion.span className="flipper" initial={{ rotateY: was ? 0 : 180 }} animate={{ rotateY: faceUp ? 0 : 180 }} transition={flipSpring}>
       <span className={`side front ${isRed(card.suit) ? 'red' : ''} ${card.suit === trump ? 'trump' : ''}`}>
