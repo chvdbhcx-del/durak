@@ -449,7 +449,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   }
   const miniW = Math.round(cw * 0.42)
   const deckCards = [...game.deck.slice(1), ...undealt]
-  const status = dealing ? 'Раздача…' : staged.length ? planText(staged, game) : selected ? 'Выберите карту на столе, которую покрыть' : statusText(game, actor, me)
+  const status = dealing ? 'Раздача…' : staged.length ? planText(staged, game) : selected ? 'Выберите карту на столе' : statusText(game, actor, me)
   const seriesDone = !!series && series.played >= series.total
   const worst = series ? Math.max(...series.fools) : 0
   const losers = series ? game.players.filter((_, i) => series.fools[i] === worst) : []
@@ -473,11 +473,18 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
             </svg>
           </motion.button>
           <span className="logo">Дурак</span>
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.span key={`${game.options.mode}${game.options.deckSize}${room?.code}`} className="chip" {...fade}>
-              {room ? `Комната ${room.code}` : `${game.options.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'} · ${game.options.deckSize}`}
-            </motion.span>
-          </AnimatePresence>
+          <span className="chips" title={`${game.options.deckSize} карт${room ? `, комната ${room.code}` : ''}`}>
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.span key={game.options.mode} className="chip" {...fade}>
+                {game.options.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'}
+              </motion.span>
+            </AnimatePresence>
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.span key={game.options.cheat ? 'cheat' : 'classic'} className={`chip ${game.options.cheat ? 'warn' : ''}`} {...fade}>
+                {game.options.cheat ? 'Шулер' : 'Классика'}
+              </motion.span>
+            </AnimatePresence>
+          </span>
         </div>
         <div className="bar-actions">
           <span className="score" title="Победы · поражения · ничьи">
@@ -617,9 +624,9 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
 
           <div className="battle">
             <AnimatePresence>
-              {view.table.length === 0 && !game.over && (
+              {view.table.length === 0 && !game.over && dealing && (
                 <motion.span key="hint" className="empty-hint" {...fade}>
-                  {dealing ? 'Раздаём карты…' : actor === me ? 'Ваш ход: нажмите или перетащите карты' : `${game.players[game.attacker].name} ходит…`}
+                  Раздаём карты…
                 </motion.span>
               )}
             </AnimatePresence>
@@ -728,7 +735,11 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                   </motion.button>
                 )}
               </AnimatePresence>
-              <motion.button
+              <AnimatePresence initial={false}>
+                {(main.onClick || autoThrow) && (
+                <motion.button
+                  key="main"
+                  {...pop}
                 type="button"
                 className={`main-action ${main.tone} ${main.onClick ? 'ready' : ''}`}
                 disabled={!main.onClick}
@@ -741,6 +752,8 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                   </motion.span>
                 </AnimatePresence>
               </motion.button>
+                )}
+              </AnimatePresence>
             </div>
           </div>
           <div
@@ -976,9 +989,9 @@ function HandSlot({ id, registry, children, ...props }: { id: string; registry: 
 
 function planText(plan: Action[], g: GameState): string {
   const first = plan[0]
-  if (first.type === 'throw') return 'Можно добавить ещё карты, подходящие к столу'
-  if (first.type === 'transfer') return 'Переводим ход дальше. Подтвердите кнопкой'
-  return g.table.length ? 'Подтвердите кнопкой' : ''
+  if (first.type === 'throw') return 'Можно добавить ещё карты'
+  if (first.type === 'transfer') return 'Перевести ход дальше?'
+  return g.table.length ? 'Подтвердите' : ''
 }
 
 /** Who would defend after a transfer: the next player still in the game. */
@@ -1002,19 +1015,16 @@ function statusText(g: GameState, actor: number | null, me: number): string {
   if (g.players[me].out) return 'Вы вышли из игры. Остальные доигрывают'
   if (actor === me) {
     const legal = legalActions(g, me)
-    if (g.table.length === 0) return 'Ваш ход. Выберите карты одного достоинства'
+    if (g.table.length === 0) return 'Ваш ход: выберите карту'
     if (g.defender === me && !g.taking) {
-      if (!legal.some((a) => a.type === 'defend' || a.type === 'transfer')) return 'Отбиться нечем. Нажмите «Беру»'
-      return legal.some((a) => a.type === 'transfer') ? 'Покройте, переведите или возьмите' : 'Покройте карты или возьмите'
+      if (!legal.some((a) => a.type === 'defend' || a.type === 'transfer')) return 'Отбиться нечем: берите'
+      return legal.some((a) => a.type === 'transfer') ? 'Покройте, переведите или берите' : 'Покройте карты или берите'
     }
     const canAdd = legal.some((a) => a.type === 'attack')
-    if (g.taking) return canAdd ? `${g.players[g.defender].name} берёт. Можно подкинуть` : `${g.players[g.defender].name} берёт. Подкинуть нечего`
-    if (!canAdd) return g.attacker === me ? 'Подкинуть нечего. Нажмите «Бито»' : 'Подкинуть нечего. Нажмите «Пас»'
-    return g.attacker === me ? 'Подкиньте карты или нажмите «Бито»' : 'Подкиньте карты или нажмите «Пас»'
+    if (g.taking) return canAdd ? 'Можно подкинуть' : 'Подкинуть нечего'
+    if (!canAdd) return 'Подкинуть нечего'
+    return g.attacker === me ? 'Подкиньте или «Бито»' : 'Подкиньте или «Пас»'
   }
-  if (actor === null) return ''
-  const who = g.players[actor].name
-  if (g.table.length === 0) return `${who} ходит`
-  if (actor === g.defender) return `${who} отбивается`
-  return `${who} решает, подкинуть ли`
+  // Whose turn it is already shows on the seats, so only the player's own moves need words.
+  return ''
 }

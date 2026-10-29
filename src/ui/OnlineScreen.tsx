@@ -303,16 +303,22 @@ export function OnlineScreen({ online, settings, onChange, initialCode, friends,
 
               {host && friends.list.length > 0 && (
                 <Group title="Позвать друга">
-                  <div className="invite-row">
+                  <div className="invite-list">
                     {friends.list
                       .filter((f) => !lobby.members.some((m) => m.fid === f.id))
                       .map((f) => (
-                        <span key={f.id} className="invite-chip">
-                          {f.name}
+                        <div key={f.id} className="invite-item">
+                          <span className="invite-who">
+                            <i className={`friend-dot ${friends.here[f.id] ? 'on' : ''}`} aria-hidden="true" />
+                            <span>
+                              <b>{f.name}</b>
+                              <small>{friends.here[f.id] ? 'в приложении' : 'не в сети'}</small>
+                            </span>
+                          </span>
                           <motion.button type="button" className="primary small" whileTap={{ scale: 0.94 }} onClick={() => onInviteFriend(f.id)}>
                             Позвать
                           </motion.button>
-                        </span>
+                        </div>
                       ))}
                   </div>
                 </Group>
