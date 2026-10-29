@@ -30,9 +30,10 @@ export interface LobbyInfo {
 export type ToGuest =
   | { t: 'lobby'; lobby: LobbyInfo }
   | { t: 'state'; view: GameState; seat: number }
+  | { t: 'emote'; seat: number; emoji: string }
   | { t: 'closed'; reason: string }
 
-export type ToHost = { t: 'hello'; name: string; token: string } | { t: 'act'; action: Action }
+export type ToHost = { t: 'hello'; name: string; token: string } | { t: 'act'; action: Action } | { t: 'emote'; emoji: string }
 
 export function randomCode() {
   let code = ''
@@ -106,6 +107,7 @@ export interface HostEvents {
   onJoin: (token: string, name: string) => void
   onLeave: (token: string) => void
   onAction: (token: string, action: Action) => void
+  onEmote: (token: string, emoji: string) => void
   onError: (message: string) => void
   /** true while the link to the room broker is down and being restored */
   onReconnecting: (on: boolean) => void
@@ -176,6 +178,7 @@ export class HostRoom {
           if (old && old !== conn) old.close()
           this.events.onJoin(token, msg.name.slice(0, 16) || 'Гость')
         } else if (msg.t === 'act' && token) this.events.onAction(token, msg.action)
+        else if (msg.t === 'emote' && token) this.events.onEmote(token, String(msg.emoji).slice(0, 8))
       })
       conn.on('close', () => {
         if (token && this.conns.get(token) === conn) {
@@ -355,6 +358,10 @@ export class GuestRoom {
 
   act(action: Action) {
     if (this.conn?.open) this.conn.send({ t: 'act', action } satisfies ToHost)
+  }
+
+  emote(emoji: string) {
+    if (this.conn?.open) this.conn.send({ t: 'emote', emoji } satisfies ToHost)
   }
 
   close() {

@@ -1,6 +1,7 @@
 import { AnimatePresence, LayoutGroup, motion, type PanInfo } from 'framer-motion'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { beats, Card, rankLabel, sortHand, SUIT_NAME } from '../engine/cards'
+import { EMOTES, type Emote } from '../engine/emotes'
 import { Action, canThrow, currentActor, GameState, HAND_SIZE, legalActions, previewAction } from '../engine/game'
 import { CardView, type Flight } from './CardView'
 import { notify, tap } from './native'
@@ -27,6 +28,13 @@ export const fade = {
 
 export type Result = 'win' | 'loss' | 'draw'
 
+/** A bot tournament in progress: how many games are played and how often each seat was the fool. */
+export interface Series {
+  total: number
+  played: number
+  fools: number[]
+}
+
 interface Props {
   game: GameState
   me: number
@@ -36,7 +44,10 @@ interface Props {
   botDelay: number
   /** called when a bot should move; left out for guests, whose bots run on the host */
   onBotTurn?: (actor: number) => void
-  onFinished: (result: Result) => void
+  onFinished: (result: Result, loser: number | null) => void
+  series?: Series | null
+  emote?: Emote | null
+  onEmote?: (emoji: string) => void
   onExit: () => void
   onOpenSettings: () => void
   /** left out when this player can't start the next game (an online guest) */
@@ -108,7 +119,7 @@ function zoneMap(g: GameState): Map<string, string> {
 /** How many cards of the deck and the discard pile are actually drawn. */
 const PILE_SHOWN = 9
 
-export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, onExit, onOpenSettings, onPlayAgain, room }: Props) {
+export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, series, emote, onEmote, onExit, onOpenSettings, onPlayAgain, room }: Props) {
   const { table: cw, hand: hw, flat } = useCardSizes()
   const { dealt, dealing } = useDealing(game)
   const zones = useMemo(() => zoneMap(game), [game])
@@ -241,6 +252,16 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     setPlan([])
   }, [game, me])
 
+  // Emotes from anyone stay on screen for a couple of seconds.
+  const [liveEmote, setLiveEmote] = useState<Emote | null>(null)
+  const [emoteOpen, setEmoteOpen] = useState(false)
+  useEffect(() => {
+    if (!emote || Date.now() - emote.key > 1500) return
+    setLiveEmote(emote)
+    const t = setTimeout(() => setLiveEmote((e) => (e === emote ? null : e)), 2600)
+    return () => clearTimeout(t)
+  }, [emote])
+
   useEffect(() => {
     if (!bubble) return
     const t = setTimeout(() => setBubble(null), 1600)
@@ -263,7 +284,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     counted.current = game.options.seed ?? 0
     const result: Result = game.loser === null ? 'draw' : game.loser === me ? 'loss' : 'win'
     notify(result === 'loss' ? 'warning' : 'success')
-    onFinished(result)
+    onFinished(result, game.loser)
   }, [game, me, onFinished])
 
   const play = (action: Action) => {
@@ -375,12 +396,23 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   }
 
   // Drag and drop: the drop zone under the finger decides where the card goes.
+  // The zones' boxes are read once per drag (not hit-tested on every pointer move, which is slow on phones).
+  const zoneBoxes = useRef<{ name: string; r: DOMRect; area: number }[]>([])
+  const readZones = () => {
+    zoneBoxes.current = [...document.querySelectorAll<HTMLElement>('[data-drop]')]
+      .filter((el) => !el.closest('.hand'))
+      .map((el) => {
+        const r = el.getBoundingClientRect()
+        return { name: el.dataset.drop ?? '', r, area: r.width * r.height }
+      })
+      .sort((a, b) => a.area - b.area)
+  }
   const zoneAt = (info: PanInfo) => {
-    for (const el of document.elementsFromPoint(info.point.x - window.scrollX, info.point.y - window.scrollY)) {
-      const zone = (el as HTMLElement).closest?.('[data-drop]') as HTMLElement | null
-      if (zone && !zone.closest('.hand')) return zone.dataset.drop ?? null
-    }
-    return null
+    const x = info.point.x - window.scrollX
+    const y = info.point.y - window.scrollY
+    // smallest first, so a seat or a pair wins over the felt behind it
+    const hit = zoneBoxes.current.find(({ r }) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)
+    return hit?.name || null
   }
 
   const take = legal.find((a) => a.type === 'take')
@@ -405,6 +437,10 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const miniW = Math.round(cw * 0.42)
   const deckCards = [...game.deck.slice(1), ...undealt]
   const status = dealing ? 'Раздача…' : staged.length ? planText(staged, game) : selected ? 'Выберите карту на столе, которую покрыть' : statusText(game, actor, me)
+  const seriesDone = !!series && series.played >= series.total
+  const worst = series ? Math.max(...series.fools) : 0
+  const losers = series ? game.players.filter((_, i) => series.fools[i] === worst) : []
+  const seriesTitle = !seriesDone ? '' : losers.length > 1 ? 'Ничья в турнире' : losers[0].id === me ? 'Турнир проигран' : 'Вы выиграли турнир'
   const resultTitle = game.loser === null ? 'Ничья' : game.loser === me ? 'Вы дурак' : 'Вы не дурак'
 
   return (
@@ -438,6 +474,13 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
             <i>·</i>
             <Counter value={stats.draws} />
           </span>
+          {onEmote && (
+            <motion.button type="button" className="icon" aria-label="Смайлики" aria-expanded={emoteOpen} whileTap={{ scale: 0.9 }} onClick={() => setEmoteOpen((o) => !o)}>
+              <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>
+                🙂
+              </span>
+            </motion.button>
+          )}
           <motion.button type="button" className="icon" aria-label="Настройки" whileTap={{ scale: 0.9, rotate: 30 }} whileHover={{ rotate: 15 }} onClick={onOpenSettings}>
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
               <path
@@ -486,6 +529,13 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                       {bubble?.seat === p.id && (
                         <motion.span key={bubble.key} className="bubble" initial={{ opacity: 0, y: 6, scale: 0.7 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.9 }} transition={{ type: 'spring', stiffness: 500, damping: 26 }}>
                           {bubble.text}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                    <AnimatePresence>
+                      {liveEmote?.seat === p.id && (
+                        <motion.span key={liveEmote.key} className="bubble emote" initial={{ opacity: 0, y: 8, scale: 0.4 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.7 }} transition={{ type: 'spring', stiffness: 460, damping: 18 }}>
+                          {liveEmote.emoji}
                         </motion.span>
                       )}
                     </AnimatePresence>
@@ -679,19 +729,20 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               const isDrag = dragging === c.id
               const hint = defenseHint(view, c, can, me)
               return (
+                // The outer box slides the card along the hand with a transform (cheap), the inner one is dragged.
+                <motion.div key={`${c.id}:${resetKey}`} className="hand-pos" style={{ zIndex: isDrag ? 200 : i + 1 }} initial={false} animate={{ x: i * handStep }} transition={{ type: 'spring', stiffness: 260, damping: 32 }}>
                 <motion.div
-                  key={`${c.id}:${resetKey}`}
                   className={`hand-slot ${can ? 'can-drag' : ''}`}
-                  style={{ zIndex: isDrag ? 200 : i + 1 }}
-                  initial={false}
-                  animate={{ left: i * handStep }}
-                  transition={{ type: 'spring', stiffness: 260, damping: 32 }}
                   drag={can}
                   dragSnapToOrigin={!(isDrag && hot)}
                   dragElastic={0.18}
                   dragMomentum={false}
                   whileDrag={{ scale: 1.08 }}
                   onDragStart={() => {
+                    readZones()
+                    // zones that appear once the drag has begun (the transfer slot) are read a moment later
+                    setTimeout(readZones, 60)
+                    setTimeout(readZones, 350)
                     setDragging(c.id)
                     setSelected(null)
                     tap('light')
@@ -722,11 +773,40 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                     disabled={!can}
                   />
                 </motion.div>
+                </motion.div>
               )
             })}
           </div>
         </section>
       </LayoutGroup>
+
+      <AnimatePresence>
+        {liveEmote?.seat === me && (
+          <motion.div key={liveEmote.key} className="my-emote" aria-hidden="true" initial={{ opacity: 0, y: 14, scale: 0.4 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -14, scale: 0.7 }} transition={{ type: 'spring', stiffness: 460, damping: 18 }}>
+            {liveEmote.emoji}
+          </motion.div>
+        )}
+        {emoteOpen && onEmote && (
+          <motion.div key="emote-picker" className="emote-picker" role="menu" initial={{ opacity: 0, y: -8, scale: 0.92 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.92 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
+            {EMOTES.map((e) => (
+              <motion.button
+                key={e}
+                type="button"
+                role="menuitem"
+                aria-label={`Смайлик ${e}`}
+                whileTap={{ scale: 0.8 }}
+                whileHover={{ scale: 1.15 }}
+                onClick={() => {
+                  setEmoteOpen(false)
+                  onEmote(e)
+                }}
+              >
+                {e}
+              </motion.button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {game.over && (
@@ -742,11 +822,21 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               transition={{ delay: 0.55, type: 'spring', stiffness: 320, damping: 26 }}
             >
               <Stagger delay={0.7}>
-                <p className="eyebrow">Партия окончена</p>
-                <h2 id="result-title">{resultTitle}</h2>
+                <p className="eyebrow">{series ? (seriesDone ? 'Турнир окончен' : `Партия ${series.played} из ${series.total}`) : 'Партия окончена'}</p>
+                <h2 id="result-title">{seriesDone ? seriesTitle : resultTitle}</h2>
                 <p className="result-sub">
                   {game.loser === null ? 'Последние карты ушли одновременно.' : game.loser === me ? 'Карты остались только у вас. Отыграйтесь.' : `Дураком остался ${game.players[game.loser].name}.`}
                 </p>
+                {series && (
+                  <ul className="series-board" aria-label="Счёт турнира">
+                    {game.players.map((p, i) => (
+                      <li key={p.id} className={series.fools[i] === Math.max(...series.fools) && series.fools[i] > 0 ? 'last' : ''}>
+                        <span>{p.name}</span>
+                        <b>{series.fools[i]}</b>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <p className="result-stats">
                   Победы <b>{stats.wins}</b> · Поражения <b>{stats.losses}</b> · Ничьи <b>{stats.draws}</b>
                 </p>
@@ -756,7 +846,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                   </motion.button>
                   {onPlayAgain ? (
                     <motion.button type="button" className="primary" whileTap={{ scale: 0.95 }} autoFocus onClick={onPlayAgain}>
-                      Ещё партию
+                      {series ? (seriesDone ? 'Новый турнир' : 'Следующая партия') : 'Ещё партию'}
                     </motion.button>
                   ) : (
                     <span className="muted">Ждём, когда хозяин начнёт новую партию</span>

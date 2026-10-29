@@ -1,10 +1,11 @@
 import { AnimatePresence } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { chooseAction } from '../engine/bot'
+import { botReaction, botReply, type Emote, fingerprint } from '../engine/emotes'
 import { Action, applyAction, currentActor, GameState, maxPlayers, newGame } from '../engine/game'
 import { normalizeCode, setRoomServer } from '../net/room'
 import { hasSavedRoom, useOnline } from '../net/useOnline'
-import { GameScreen, Result } from './GameScreen'
+import { GameScreen, Result, Series } from './GameScreen'
 import { RulesPanel, StatsPanel } from './InfoPanels'
 import { MainMenu } from './MainMenu'
 import { setHaptics, syncStatusBar, tap } from './native'
@@ -68,6 +69,8 @@ export function App() {
   setRoomServer(settings.server)
   const [stats, setStats] = useState<Stats>(loadStats)
   const [game, setGame] = useState<GameState | null>(loadGame)
+  const [series, setSeries] = useState<Series | null>(null)
+  const [localEmote, setLocalEmote] = useState<Emote | null>(null)
   const [panel, setPanel] = useState<Panel | null>(null)
   const inviteCode = invite.code
   const [resumeRoom] = useState(() => !inviteCode && hasSavedRoom())
@@ -113,14 +116,46 @@ export function App() {
   const liveRef = useRef<{ game: GameState | null; online: boolean }>({ game: null, online: false })
   const liveOnline = screen === 'online' && online.phase === 'playing' && online.game
   liveRef.current = { game: liveOnline || (screen === 'game' ? game : null), online: !!liveOnline }
-  const recordResult = useCallback((result: Result) => {
+  const recordResult = useCallback((result: Result, loser: number | null) => {
     const g = liveRef.current.game
+    if (!liveRef.current.online)
+      setSeries((cur) => (cur && cur.played < cur.total ? { ...cur, played: cur.played + 1, fools: cur.fools.map((n, i) => (i === loser ? n + 1 : n)) } : cur))
     setStats((s) => {
       const next = addResult(s, { at: Date.now(), result, mode: g?.options.mode ?? 'podkidnoy', deck: g?.options.deckSize ?? 36, players: g?.players.length ?? 2, online: liveRef.current.online })
       saveStats(next)
       return next
     })
   }, [])
+
+  // Bots react to what happens at the table, and now and then answer a person's emote.
+  // They run wherever the game does: on this device for bot games, on the host for rooms.
+  const botGame = liveOnline ? (online.role === 'host' ? liveOnline : null) : screen === 'game' ? game : null
+  const emoteRef = useRef({ prev: null as GameState | null, at: 0 })
+  const showEmote = (seat: number, emoji: string) => (liveOnline ? online.emitEmote(seat, emoji) : setLocalEmote({ seat, emoji, key: Date.now() + Math.random() }))
+  const showEmoteRef = useRef(showEmote)
+  showEmoteRef.current = showEmote
+  useEffect(() => {
+    const prev = emoteRef.current.prev
+    emoteRef.current.prev = botGame
+    if (!botGame || !prev || prev.options.seed !== botGame.options.seed || fingerprint(prev) === fingerprint(botGame)) return
+    if (Date.now() - emoteRef.current.at < 3500) return
+    const r = botReaction(prev, botGame, Math.random)
+    if (!r) return
+    emoteRef.current.at = Date.now()
+    // not cancelled when the game moves on: the reaction belongs to the moment that triggered it
+    setTimeout(() => showEmoteRef.current(r.seat, r.emoji), 500 + Math.random() * 700)
+  }, [botGame])
+  const shownEmote = liveOnline ? online.emote : localEmote
+  const replied = useRef(0)
+  useEffect(() => {
+    if (!shownEmote || !botGame || replied.current === shownEmote.key || !botGame.players[shownEmote.seat]?.human) return
+    replied.current = shownEmote.key
+    const r = botReply(shownEmote.emoji, botGame, Math.random)
+    if (!r) return
+    setTimeout(() => showEmoteRef.current(r.seat, r.emoji), 700 + Math.random() * 900)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shownEmote])
+  const sendMyEmote = (emoji: string) => (liveOnline ? online.sendEmote(emoji) : setLocalEmote({ seat: ME, emoji, key: Date.now() + Math.random() }))
 
   const playLocal = (action: Action) => {
     tap(action.type === 'take' ? 'medium' : 'light')
@@ -138,8 +173,10 @@ export function App() {
     online.act(action)
   }
 
-  const newRound = (s: Settings = settings) => {
-    setGame(startGame(s))
+  const newRound = (s: Settings = settings, fresh = true) => {
+    const g = startGame(s)
+    setGame(g)
+    setSeries((cur) => (s.series > 1 ? (fresh || !cur || cur.played >= cur.total ? { total: s.series, played: 0, fools: g.players.map(() => 0) } : cur) : null))
     setScreen('game')
   }
 
@@ -193,6 +230,8 @@ export function App() {
         paused={false}
         botDelay={BOT_DELAY[settings.speed]}
         onBotTurn={host ? stepOnlineBot : undefined}
+        emote={online.emote}
+        onEmote={online.sendEmote}
         onFinished={recordResult}
         onExit={() => online.leave()}
         onOpenSettings={() => setPanel('settings')}
@@ -214,7 +253,10 @@ export function App() {
         onFinished={recordResult}
         onExit={() => setScreen('menu')}
         onOpenSettings={() => setPanel('settings')}
-        onPlayAgain={() => newRound()}
+        series={series}
+        emote={shownEmote}
+        onEmote={sendMyEmote}
+        onPlayAgain={() => newRound(settings, false)}
       />
     )
   } else if (screen === 'online') {

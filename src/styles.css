@@ -621,9 +621,15 @@ button:focus-visible,
 }
 
 /* Each hand card sits in a slot that can be dragged onto the table. */
-.hand-slot {
+.hand-pos {
   position: absolute;
   top: 16px;
+  left: 0;
+}
+
+.hand-slot {
+  position: relative;
+  top: 0;
   touch-action: none;
 }
 
@@ -637,7 +643,7 @@ button:focus-visible,
     transition: top 0.2s ease;
   }
   .hand-slot.can-drag:hover {
-    top: 4px;
+    top: -12px;
   }
 }
 
@@ -646,8 +652,8 @@ button:focus-visible,
 }
 
 .is-dragging,
-.is-dragging * {
-  cursor: grabbing !important;
+.is-dragging .hand-slot.can-drag {
+  cursor: grabbing;
 }
 
 .hand .card.dim .side.front::after {
@@ -2297,3 +2303,18 @@ button.card:disabled {
 .stat-tiles.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .server-field { display: grid; gap: 8px; justify-items: start; }
 .server-field > div { width: 100%; display: grid; gap: 6px; padding-top: 4px; }
+
+/* Tournament */
+.series-art { display: flex; gap: 4px; justify-content: center; }
+.series-art span { width: 12px; height: 18px; border-radius: 3px; background: var(--muted); opacity: 0.7; }
+.tile.on .series-art span { background: var(--accent); opacity: 1; }
+.series-board { list-style: none; display: grid; gap: 6px; margin: 4px 0 0; padding: 0; }
+.series-board li { display: flex; justify-content: space-between; padding: 8px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; }
+.series-board li.last { border-color: var(--danger); }
+.series-board li.last b { color: var(--danger); }
+
+/* Emotes */
+.bubble.emote { top: -40px; padding: 2px 8px; background: var(--raise); border: 1px solid var(--line); font-size: 24px; line-height: 1.2; }
+.my-emote { position: fixed; left: 50%; bottom: 31%; translate: -50% 0; z-index: 60; font-size: 54px; pointer-events: none; filter: drop-shadow(0 6px 10px var(--shadow)); }
+.emote-picker { position: fixed; top: calc(58px + env(safe-area-inset-top, 0px)); right: 12px; z-index: 70; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 8px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 14px 40px var(--shadow); }
+.emote-picker button { width: 46px; height: 46px; border-radius: 12px; border: 0; background: var(--raise); font-size: 26px; line-height: 1; padding: 0; }

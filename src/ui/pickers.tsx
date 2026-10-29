@@ -347,3 +347,28 @@ export function AvatarPicker({ value, onChange }: { value: number; onChange: (i:
     </div>
   )
 }
+
+export function SeriesPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const options = [
+    { value: 1, title: 'Одна партия', note: 'Сыграли и всё' },
+    { value: 3, title: 'Турнир на 3', note: 'Больше всех дураком: проиграл' },
+    { value: 5, title: 'Турнир на 5', note: 'Длинная серия' },
+  ]
+  return (
+    <Group title="Турнир с ботами">
+      <div className="tiles three">
+        {options.map((o) => (
+          <Tile key={o.value} group="series" on={value === o.value} onClick={() => onChange(o.value)} label={o.title}>
+            <span className="series-art" aria-hidden="true">
+              {Array.from({ length: o.value === 1 ? 1 : o.value }, (_, i) => (
+                <span key={i} />
+              ))}
+            </span>
+            <span className="tile-title">{o.title}</span>
+            <span className="tile-note">{o.note}</span>
+          </Tile>
+        ))}
+      </div>
+    </Group>
+  )
+}

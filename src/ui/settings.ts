@@ -30,6 +30,8 @@ export interface Settings {
   tableStyle: TableStyle
   /** address of a private room server; empty means the public one */
   server: string
+  /** games in a bot tournament; 1 means a single game */
+  series: number
 }
 
 export interface HistoryEntry {
@@ -85,6 +87,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cardBack: 'teal',
   tableStyle: 'forest',
   server: '',
+  series: 1,
 }
 /** How long a bot "thinks" before a move, in ms. Each move varies around this. */
 export const BOT_DELAY: Record<Speed, number> = { calm: 2600, normal: 1800, fast: 1000 }
