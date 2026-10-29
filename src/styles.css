@@ -2200,9 +2200,17 @@ button.card:disabled {
 
 .cheat-art {
   position: relative;
-  display: block;
+  display: grid;
+  place-items: center;
   height: 54px;
   width: 80px;
+}
+.cheat-art .art-badge {
+  left: calc(50% - 30px);
+  top: 0;
+}
+.deck-art {
+  translate: -3px 0;
 }
 .cheat-art.off .art-badge {
   background: var(--good);
