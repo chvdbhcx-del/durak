@@ -201,7 +201,7 @@ export function ThemePicker({ value, onChange }: { value: Theme; onChange: (t: T
 export function CheatPicker({ value, onChange }: { value: boolean; onChange: (on: boolean) => void }) {
   const options: { value: boolean; title: string; note: string }[] = [
     { value: false, title: 'По правилам', note: 'Покрывать можно только старшей картой' },
-    { value: true, title: 'Шулер', note: 'Кроете любой картой. Пойманный мухлевать больше не может: боты замечают обман с шансом 30%, и вы ловите ботов, нажав на подозрительную карту' },
+    { value: true, title: 'Шулер', note: 'Кроете любой картой. Пойманный мухлевать больше не может. Боты замечают обман, и чем они сильнее, тем чаще (15, 30 или 50%), в том числе друг у друга. Вы ловите обман нажатием на карту' },
   ]
   return (
     <Group title="Шулер">

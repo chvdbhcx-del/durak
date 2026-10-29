@@ -2,6 +2,9 @@ import { beats, Card, DeckSize, makeDeck, mulberry32, shuffle, Suit } from './ca
 
 export type Mode = 'podkidnoy' | 'perevodnoy'
 
+/** How sharp the bots are: how well they play, and how often they spot a cheat. */
+export type Level = 'easy' | 'normal' | 'hard'
+
 export interface Options {
   players: number
   /** seats played by people; the rest are bots. Defaults to just `human`. */
@@ -13,6 +16,8 @@ export interface Options {
   cheat?: boolean
   /** index of the human player, or -1 for an all-bot game */
   human: number
+  /** bot strength, normal when missing */
+  level?: Level
   seed?: number
 }
 
@@ -75,6 +80,9 @@ export interface GameState {
 
 /** Chance that a bot spots a person covering with a card that doesn't beat. */
 export const CATCH_CHANCE = 0.3
+
+/** The chance a watching bot spots a cheat grows with its strength. */
+export const catchChance = (level: Level = 'normal') => (level === 'easy' ? 0.15 : level === 'hard' ? 0.5 : CATCH_CHANCE)
 
 export const HAND_SIZE = 6
 
@@ -237,14 +245,15 @@ export function canThrow(s: GameState, player: number, cardIds: string[]): boole
 
 export function applyAction(prev: GameState, player: number, action: Action): GameState {
   const s = previewAction(prev, player, action)
-  if (action.type === 'defend' && canCheat(prev, player)) {
+  // A person's cheat or a bot's bluff may be spotted by the other bots at the table.
+  if ((action.type === 'defend' && canCheat(prev, player)) || action.type === 'bluff') {
     const pair = s.table[action.pair]
     const card = pair.defense
     if (card && !beats(card, pair.attack, s.trump)) {
       const watchers = s.players.filter((p) => !p.human && !p.out && p.id !== player)
       // Deterministic from the game's own state, so a replay of the same game catches the same cheats.
       const roll = mulberry32(((s.options.seed ?? 1) + s.deck.length * 7 + s.discard.length * 13 + s.table.length * 17 + card.rank * 31) >>> 0)
-      if (watchers.length > 0 && roll() < CATCH_CHANCE) {
+      if (watchers.length > 0 && roll() < catchChance(s.options.level)) {
         const by = watchers[Math.floor(roll() * watchers.length)].id
         pair.defense = null
         s.players[player].hand.push(card)

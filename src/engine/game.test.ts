@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { beats, Card } from './cards'
 import { chooseAction } from './bot'
 import { botReaction, botReply } from './emotes'
-import { applyAction, canCheat, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options } from './game'
+import { applyAction, canCheat, catchChance, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options } from './game'
 
 const opts = (o: Partial<Options> = {}): Options => ({
   players: 2,
@@ -310,5 +310,26 @@ describe('bot emotes', () => {
     const s = fresh()
     expect(botReply('😂', s, () => 0.9)).toBeNull()
     expect(botReply('😂', s, () => 0)?.emoji).toBe('😂')
+  })
+})
+
+describe('bots catching bots', () => {
+  it('a stronger table spots cheats more often', () => {
+    expect(catchChance('easy')).toBeLessThan(catchChance('normal'))
+    expect(catchChance('normal')).toBeLessThan(catchChance('hard'))
+  })
+  it('all-bot cheater games finish, with bluffs now and then caught by the others', () => {
+    let caught = 0
+    for (let seed = 1; seed <= 40; seed++) {
+      let g = newGame({ players: 3, deckSize: 36, mode: 'podkidnoy', cheat: true, level: 'hard', names: ['A', 'B', 'C'], human: -1, seed })
+      for (let i = 0; i < 800 && !g.over; i++) {
+        const actor = currentActor(g)
+        if (actor === null) break
+        g = applyAction(g, actor, chooseAction(g, actor))
+      }
+      expect(g.over).toBe(true)
+      caught += g.caught?.length ?? 0
+    }
+    expect(caught).toBeGreaterThan(0)
   })
 })

@@ -1,10 +1,13 @@
 import { beats, Card, makeDeck, mulberry32, Suit } from './cards'
-import { Action, attackOrder, GameState, legalActions } from './game'
+import { Action, attackOrder, GameState, legalActions, type Level } from './game'
 
 /** Chance that a bot in cheater mode covers with a card that doesn't beat instead of taking. */
 export const BLUFF_CHANCE = 0.3
 
-export type Level = 'easy' | 'normal' | 'hard'
+/** Careless bots bluff more, careful ones less: the stronger a table, the likelier a trick is spotted. */
+const bluffChance = (level: Level) => (level === 'easy' ? 0.4 : level === 'hard' ? 0.15 : BLUFF_CHANCE)
+
+export type { Level }
 
 /** How often an easy bot botches a move: takes a cover it could play, leads at random. */
 export const EASY_SLIP = 0.35
@@ -55,7 +58,7 @@ function dice(s: GameState, player: number, salt: number) {
   return mulberry32(((s.options.seed ?? 1) + s.deck.length * 13 + s.discard.length * 7 + s.table.length * 17 + s.players[player].hand.length * 29 + salt) >>> 0)()
 }
 
-export function chooseAction(s: GameState, player: number, level: Level = 'normal'): Action {
+export function chooseAction(s: GameState, player: number, level: Level = s.options.level ?? 'normal'): Action {
   const legal = legalActions(s, player)
   if (legal.length === 0) throw new Error('Bot has no legal action')
   if (level === 'easy' && dice(s, player, 3) < EASY_SLIP) {
@@ -94,7 +97,7 @@ export function chooseAction(s: GameState, player: number, level: Level = 'norma
       if (c.suit !== trump || endgame) return transfers[0]
     }
     const plan = planDefense(s, player)
-    if (!plan) return bluffOrTake(s, player)
+    if (!plan) return bluffOrTake(s, player, level)
     // A strong bot keeps its trumps while the deck lasts: taking a couple of cheap cards costs less.
     if (hard && !endgame && s.deck.length > 4 && plan.some((st) => cardById(s, player, st.cardId).suit === trump) && s.table.every((p) => p.attack.rank <= 10)) return { type: 'take' }
     // Don't burn a high trump on a cheap card early in the game.
@@ -127,12 +130,13 @@ function easySlip(s: GameState, player: number, legal: Action[]): Action | null 
 }
 
 /** Deterministic from the game state, so a replayed game bluffs the same way. */
-function bluffOrTake(s: GameState, player: number): Action {
-  const watched = s.options.cheat && !s.caught?.includes(player) && attackOrder(s).some((id) => s.players[id].human && !s.players[id].out)
+function bluffOrTake(s: GameState, player: number, level: Level): Action {
+  // Someone has to be at the table to fool: a person, or another bot that may or may not spot it.
+  const watched = s.options.cheat && !s.caught?.includes(player) && attackOrder(s).some((id) => id !== player && !s.players[id].out)
   const pair = s.table.findIndex((p) => !p.defense)
   if (!watched || pair < 0) return { type: 'take' }
   const roll = mulberry32(((s.options.seed ?? 1) + s.deck.length * 11 + s.discard.length * 5 + s.table.length * 19 + s.players[player].hand.length * 23) >>> 0)
-  if (roll() >= BLUFF_CHANCE) return { type: 'take' }
+  if (roll() >= bluffChance(level)) return { type: 'take' }
   const hand = s.players[player].hand.slice().sort((a, b) => value(a, s.trump) - value(b, s.trump))
   return { type: 'bluff', cardId: hand[0].id, pair }
 }

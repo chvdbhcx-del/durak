@@ -233,7 +233,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     const show = (text: string, tone: Banner['tone']) => setBanner({ key: Date.now(), text, tone })
     const c = game.lastCaught
     if (c && JSON.stringify(c) !== JSON.stringify(before.lastCaught)) {
-      show(c.player === me ? `${game.players[c.by].name} заметил обман! Вы берёте и больше не мухлюете` : c.by === me ? `Поймали! ${game.players[c.player].name} берёт и больше не мухлюет` : `${game.players[c.player].name} пойман на обмане`, c.player === me ? 'bad' : 'good')
+      show(c.player === me ? `${game.players[c.by].name} заметил обман! Вы берёте и больше не мухлюете` : c.by === me ? `Поймали! ${game.players[c.player].name} берёт и больше не мухлюет` : `${game.players[c.by].name} поймал ${game.players[c.player].name} на обмане`, c.player === me ? 'bad' : 'good')
     }
     if (game.falseAlarm && JSON.stringify(game.falseAlarm) !== JSON.stringify(before.falseAlarm)) show(game.falseAlarm.by === me ? 'Всё честно' : `${game.players[game.falseAlarm.by].name} ошибся, всё честно`, 'info')
     const a = game.lastAction

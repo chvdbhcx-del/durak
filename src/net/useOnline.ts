@@ -21,7 +21,7 @@ export interface Online {
   create: (opts: { name: string; mode: Mode; deckSize: DeckSize; cheat?: boolean }) => void
   join: (code: string, name: string) => void
   leave: () => void
-  start: () => void
+  start: (level?: Level) => void
   act: (action: Action) => void
   setLobby: (patch: Partial<Pick<LobbyInfo, 'bots' | 'mode' | 'deckSize' | 'cheat'>>) => void
   kick: (token: string) => void
@@ -296,7 +296,7 @@ export function useOnline(token: string, fid: string): Online {
     return true
   }
 
-  const start = () => {
+  const start = (level: Level = 'normal') => {
     const l = lobbyRef.current
     if (!l || role !== 'host') return
     const online: Member[] = l.members.filter((m) => m.online)
@@ -309,6 +309,7 @@ export function useOnline(token: string, fid: string): Online {
       deckSize: l.deckSize,
       mode: l.mode,
       cheat: l.cheat,
+      level,
       names,
       human: 0,
       humans: online.map((_, i) => i),
@@ -349,7 +350,7 @@ export function useOnline(token: string, fid: string): Online {
     updateLobby((l) => ({ ...l, members: l.members.filter((m) => m.token !== t) }))
   }
 
-  const stepBot = (actor: number, level: Level = 'normal') =>
+  const stepBot = (actor: number, level?: Level) =>
     setGame((g) => (g && currentActor(g) === actor && !g.players[actor].human ? applyAction(g, actor, chooseAction(g, actor, level)) : g))
 
   // Unmounting (e.g. a reload) keeps the saved room; only `leave` forgets it.

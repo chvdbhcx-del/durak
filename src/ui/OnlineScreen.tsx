@@ -323,7 +323,7 @@ export function OnlineScreen({ online, settings, onChange, initialCode, friends,
                   <ModePicker value={lobby.mode} onChange={(m) => online.setLobby({ mode: m })} />
                   <DeckPicker value={lobby.deckSize} onChange={(d) => online.setLobby({ deckSize: d })} />
                   <CheatPicker value={!!lobby.cheat} onChange={(c) => online.setLobby({ cheat: c })} />
-                  <motion.button type="button" className="primary big" disabled={players < 2} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={online.start}>
+                  <motion.button type="button" className="primary big" disabled={players < 2} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={() => online.start(settings.difficulty)}>
                     {players < 2 ? 'Ждём хотя бы одного игрока' : 'Начать игру'}
                   </motion.button>
                 </>
