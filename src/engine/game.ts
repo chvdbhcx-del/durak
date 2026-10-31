@@ -79,16 +79,16 @@ export interface GameState {
 }
 
 /** Chance that a bot spots a person covering with a card that doesn't beat. */
-export const CATCH_CHANCE = 0.3
+export const CATCH_CHANCE = 0.4
 
 /** The chance a watching bot spots a cheat grows with its strength. */
-export const catchChance = (level: Level = 'normal') => (level === 'easy' ? 0.15 : level === 'hard' ? 0.6 : CATCH_CHANCE)
+export const catchChance = (level: Level = 'normal') => (level === 'easy' ? 0.25 : level === 'hard' ? 0.6 : CATCH_CHANCE)
 
 /**
  * A cheat that would end the player's game (the deck is gone and the hand is empty) is looked at
  * much harder: nobody lets a trick pass when it gets the cheater out of the game.
  */
-export const decisiveCatchChance = (level: Level = 'normal') => (level === 'easy' ? 0.5 : level === 'hard' ? 1 : 0.85)
+export const decisiveCatchChance = (level: Level = 'normal') => (level === 'easy' ? 0.6 : level === 'hard' ? 1 : 0.9)
 
 function catchOdds(s: GameState, player: number) {
   const level = s.options.level
