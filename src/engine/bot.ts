@@ -133,12 +133,12 @@ function solveEndgame(s: GameState, player: number, legal: Action[]): Action | n
     if (p.defense) known.add(face(p.defense))
   }
   const hidden = makeDeck(s.options.deckSize).filter((c) => !known.has(face(c)))
-  if (hidden.length !== s.players[foe].hand.length || hidden.length > 5) return null
+  if (hidden.length !== s.players[foe].hand.length || hidden.length > 6) return null
   const world: GameState = structuredClone({ ...s, options: { ...s.options, cheat: false } })
   world.players[foe].hand = hidden
   const moves = legal.filter((a) => a.type !== 'bluff')
   if (moves.length < 2) return null
-  let budget = 2500
+  let budget = 7000
   const memo = new Map<string, number>()
   const key = (g: GameState) =>
     [g.players.map((p) => p.hand.map((c) => c.id).sort().join('')).join('|'), g.table.map((p) => p.attack.id + (p.defense?.id ?? '-')).join(','), g.attacker, g.defender, g.taking ? 1 : 0, g.passed.join('')].join('/')
@@ -218,7 +218,8 @@ function worthThrowing(s: GameState, player: number, c: Card, level: Level, unse
   // Don't pile everything on: a few cards, more when the defender must take them anyway.
   const aim = taking ? 3 : 2
   if (phase !== 'late' && s.table.length >= aim) return false
-  const cap = phase === 'early' ? (taking ? 10 : 8) : phase === 'mid' ? (taking ? 12 : 9) : 14
+  // A strong bot knows throwing onto a defender who is picking up anyway costs nothing but cards it wants gone.
+  const cap = level === 'hard' && taking && phase !== 'early' ? 14 : phase === 'early' ? (taking ? 10 : 8) : phase === 'mid' ? (taking ? 12 : 9) : 14
   if (c.rank > cap) return false
   if (level === 'hard' && !taking && phase !== 'late' && coverRisk(c, unseen, s.trump) > 0.55) return false
   return true
