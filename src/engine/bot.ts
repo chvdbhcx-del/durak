@@ -10,7 +10,7 @@ const bluffChance = (level: Level) => (level === 'easy' ? 0.4 : level === 'hard'
 export type { Level }
 
 /** How often an easy bot botches a move: takes a cover it could play, leads at random. */
-export const EASY_SLIP = 0.35
+export const EASY_SLIP = 0.25
 
 const value = (c: Card, trump: Suit) => c.rank + (c.suit === trump ? 20 : 0)
 
@@ -64,8 +64,9 @@ function dice(s: GameState, player: number, salt: number) {
 export function chooseAction(s: GameState, player: number, level: Level = s.options.level ?? 'normal'): Action {
   const legal = legalActions(s, player)
   if (legal.length === 0) throw new Error('Bot has no legal action')
-  if (level === 'hard') {
-    const exact = solveEndgame(s, player, legal)
+  if (level !== 'easy') {
+    // A normal bot only reads the very end of the game; a hard one reads further.
+    const exact = solveEndgame(s, player, legal, level === 'hard' ? 6 : 3)
     if (exact) return exact
   }
   if (level === 'easy' && dice(s, player, 3) < EASY_SLIP) {
@@ -120,7 +121,7 @@ export function chooseAction(s: GameState, player: number, level: Level = s.opti
  * Endgame by counting: with the deck gone and one opponent left, every card not in sight is in
  * that opponent's hand, so a sharp bot can search the rest of the game to the end.
  */
-function solveEndgame(s: GameState, player: number, legal: Action[]): Action | null {
+function solveEndgame(s: GameState, player: number, legal: Action[], reach: number): Action | null {
   if (s.deck.length > 0 || s.over) return null
   const others = s.players.map((_, i) => i).filter((i) => i !== player && !s.players[i].out)
   if (others.length !== 1) return null
@@ -133,7 +134,7 @@ function solveEndgame(s: GameState, player: number, legal: Action[]): Action | n
     if (p.defense) known.add(face(p.defense))
   }
   const hidden = makeDeck(s.options.deckSize).filter((c) => !known.has(face(c)))
-  if (hidden.length !== s.players[foe].hand.length || hidden.length > 6) return null
+  if (hidden.length !== s.players[foe].hand.length || hidden.length > reach) return null
   const world: GameState = structuredClone({ ...s, options: { ...s.options, cheat: false } })
   world.players[foe].hand = hidden
   const moves = legal.filter((a) => a.type !== 'bluff')
