@@ -351,6 +351,23 @@ describe('bots catching bots', () => {
     expect(catchChance('easy')).toBeLessThan(catchChance('normal'))
     expect(catchChance('normal')).toBeLessThan(catchChance('hard'))
   })
+  it('a cheat that gets the player out of the game is never missed by a hard table', () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const s = newGame({ players: 2, deckSize: 36, mode: 'podkidnoy', cheat: true, level: 'hard', names: ['A', 'B'], human: 0, seed })
+      s.trump = 'S'
+      s.deck = []
+      s.attacker = 1
+      s.defender = 0
+      const c = (suit: Card['suit'], rank: number): Card => ({ id: `${suit}${rank}`, suit, rank })
+      s.players[0].hand = [c('D', 6)]
+      s.players[1].hand = [c('H', 14), c('C', 9)]
+      s.table = [{ attack: c('H', 10), defense: null }]
+      const out = applyAction(s, 0, { type: 'defend', cardId: 'D6', pair: 0 })
+      expect(out.caught).toContain(0)
+      expect(out.players[0].hand).toHaveLength(2)
+      expect(out.players[0].out).toBeFalsy()
+    }
+  })
   it('all-bot cheater games finish, with bluffs now and then caught by the others', () => {
     let caught = 0
     for (let seed = 1; seed <= 40; seed++) {

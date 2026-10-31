@@ -82,7 +82,18 @@ export interface GameState {
 export const CATCH_CHANCE = 0.3
 
 /** The chance a watching bot spots a cheat grows with its strength. */
-export const catchChance = (level: Level = 'normal') => (level === 'easy' ? 0.15 : level === 'hard' ? 0.5 : CATCH_CHANCE)
+export const catchChance = (level: Level = 'normal') => (level === 'easy' ? 0.15 : level === 'hard' ? 0.6 : CATCH_CHANCE)
+
+/**
+ * A cheat that would end the player's game (the deck is gone and the hand is empty) is looked at
+ * much harder: nobody lets a trick pass when it gets the cheater out of the game.
+ */
+export const decisiveCatchChance = (level: Level = 'normal') => (level === 'easy' ? 0.5 : level === 'hard' ? 1 : 0.85)
+
+function catchOdds(s: GameState, player: number) {
+  const level = s.options.level
+  return s.deck.length === 0 && s.players[player].hand.length === 0 ? decisiveCatchChance(level) : catchChance(level)
+}
 
 export const HAND_SIZE = 6
 
@@ -263,7 +274,7 @@ export function applyAction(prev: GameState, player: number, action: Action): Ga
   if (off.length > 0) {
     const watchers = s.players.filter((p) => !p.human && !p.out && p.id !== player)
     const roll = mulberry32(((s.options.seed ?? 1) + s.deck.length * 7 + s.discard.length * 13 + s.table.length * 17 + thrown.length * 31 + 5) >>> 0)
-    if (watchers.length > 0 && roll() < catchChance(s.options.level)) {
+    if (watchers.length > 0 && roll() < catchOdds(s, player)) {
       const by = watchers[Math.floor(roll() * watchers.length)].id
       s.table = s.table.filter((pair) => {
         if (!off.includes(pair.attack.id)) return true
@@ -283,7 +294,7 @@ export function applyAction(prev: GameState, player: number, action: Action): Ga
       const watchers = s.players.filter((p) => !p.human && !p.out && p.id !== player)
       // Deterministic from the game's own state, so a replay of the same game catches the same cheats.
       const roll = mulberry32(((s.options.seed ?? 1) + s.deck.length * 7 + s.discard.length * 13 + s.table.length * 17 + card.rank * 31) >>> 0)
-      if (watchers.length > 0 && roll() < catchChance(s.options.level)) {
+      if (watchers.length > 0 && roll() < catchOdds(s, player)) {
         const by = watchers[Math.floor(roll() * watchers.length)].id
         pair.defense = null
         s.players[player].hand.push(card)
