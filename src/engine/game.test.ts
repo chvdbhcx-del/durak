@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { beats, Card } from './cards'
-import { chooseAction } from './bot'
+import { chooseAction, LOOKAHEAD } from './bot'
 import { botReaction, botReply } from './emotes'
 import { applyAction, canCheat, catchChance, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options } from './game'
 
@@ -298,7 +298,26 @@ describe('cheating on a throw-in', () => {
   })
 })
 
+// The tests play hundreds of hard-bot games, so keep the look-ahead tiny here.
+LOOKAHEAD.samples = 2
+LOOKAHEAD.minSamples = 1
+
+describe('look-ahead', () => {
+  it('a hard bot always plays a legal move and finishes games with the sampling on', () => {
+    for (let seed = 1; seed <= 4; seed++) {
+      let g = newGame({ players: 3, deckSize: 36, mode: 'podkidnoy', names: ['A', 'B', 'C'], human: -1, seed })
+      for (let i = 0; i < 800 && !g.over; i++) {
+        const actor = currentActor(g)
+        if (actor === null) break
+        g = applyAction(g, actor, chooseAction(g, actor, 'hard'))
+      }
+      expect(g.over).toBe(true)
+    }
+  })
+})
+
 describe('bot levels', () => {
+
   const play = (level: 'easy' | 'normal' | 'hard', seed: number) => {
     let g = newGame({ players: 2, deckSize: 36, mode: 'podkidnoy', names: ['A', 'B'], human: -1, seed })
     for (let i = 0; i < 600 && !g.over; i++) {

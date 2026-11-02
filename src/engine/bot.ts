@@ -61,13 +61,17 @@ function dice(s: GameState, player: number, salt: number) {
   return mulberry32(((s.options.seed ?? 1) + s.deck.length * 13 + s.discard.length * 7 + s.table.length * 17 + s.players[player].hand.length * 29 + salt) >>> 0)()
 }
 
-export function chooseAction(s: GameState, player: number, level: Level = s.options.level ?? 'normal'): Action {
+export function chooseAction(s: GameState, player: number, level: Level = s.options.level ?? 'normal', fast = false): Action {
   const legal = legalActions(s, player)
   if (legal.length === 0) throw new Error('Bot has no legal action')
-  if (level !== 'easy') {
+  if (level !== 'easy' && !fast) {
     // A normal bot only reads the very end of the game; a hard one reads further.
     const exact = solveEndgame(s, player, legal, level === 'hard' ? 6 : 3)
     if (exact) return exact
+  }
+  if (level === 'hard' && !fast) {
+    const sampled = lookAhead(s, player, legal)
+    if (sampled) return sampled
   }
   if (level === 'easy' && dice(s, player, 3) < EASY_SLIP) {
     const slip = easySlip(s, player, legal)
@@ -177,6 +181,80 @@ function solveEndgame(s: GameState, player: number, legal: Action[], reach: numb
   } catch {
     return null
   }
+}
+
+/** How many guesses at the hidden cards a hard bot plays out, and how long it may think before settling for fewer. */
+export const LOOKAHEAD = { samples: 24, minSamples: 6, budgetMs: 160 }
+
+const clock = () => (typeof performance !== 'undefined' ? performance.now() : Date.now())
+
+/**
+ * Look ahead by guessing: deal the cards the bot can't see to the others at random (consistent with
+ * what it does know), play the game out from each candidate move with the plain heuristic bot, and
+ * pick the move that wins most often over many guesses. It sticks with the heuristic choice unless
+ * another move is clearly better, so noise doesn't talk it out of sound play.
+ */
+function lookAhead(s: GameState, player: number, legal: Action[]): Action | null {
+  const moves = legal.filter((a) => a.type !== 'bluff')
+  if (moves.length < 2 || s.over) return null
+  const foes = s.players.filter((p) => p.id !== player && !p.out)
+  if (foes.length === 0) return null
+  // The face-up trump sits at the bottom of the deck until the deck runs out, and is then in somebody's hand.
+  const known = new Set<string>()
+  if (s.deck.length > 0) known.add(face(s.trumpCard))
+  for (const c of s.discard) known.add(face(c))
+  for (const c of s.players[player].hand) known.add(face(c))
+  for (const p of s.table) {
+    known.add(face(p.attack))
+    if (p.defense) known.add(face(p.defense))
+  }
+  const pool = makeDeck(s.options.deckSize).filter((c) => !known.has(face(c)))
+  const inHands = foes.reduce((n, p) => n + p.hand.length, 0)
+  const inDeck = Math.max(0, s.deck.length - 1)
+  if (pool.length !== inHands + inDeck) return null
+  const fallback = chooseAction(s, player, 'normal', true)
+  const rnd = mulberry32(((s.options.seed ?? 1) + s.deck.length * 131 + s.discard.length * 17 + s.table.length * 29 + s.players[player].hand.length * 43 + 7) >>> 0)
+  const score = moves.map(() => 0)
+  const start = clock()
+  let done = 0
+  for (let k = 0; k < LOOKAHEAD.samples; k++) {
+    const cards = pool.slice()
+    for (let i = cards.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1))
+      ;[cards[i], cards[j]] = [cards[j], cards[i]]
+    }
+    const world: GameState = structuredClone({ ...s, options: { ...s.options, cheat: false } })
+    let at = 0
+    for (const p of foes) {
+      world.players[p.id].hand = cards.slice(at, at + p.hand.length)
+      at += p.hand.length
+    }
+    if (world.deck.length > 0) world.deck = [world.deck[0], ...cards.slice(at)]
+    moves.forEach((m, i) => {
+      score[i] += playOut(applyAction(world, player, m), player)
+    })
+    done++
+    if (done >= LOOKAHEAD.minSamples && clock() - start > LOOKAHEAD.budgetMs) break
+  }
+  const sameAs = (a: Action, b: Action) => JSON.stringify(a) === JSON.stringify(b)
+  let best = 0
+  for (let i = 1; i < moves.length; i++) if (score[i] > score[best]) best = i
+  const habit = moves.findIndex((m) => sameAs(m, fallback))
+  // Win rate difference needed before overruling the heuristic.
+  if (habit >= 0 && score[best] - score[habit] < done * 0.12) return moves[habit]
+  return moves[best]
+}
+
+/** Plays a position to the end with the plain heuristic bot; +1 if `player` doesn't end up the fool. */
+function playOut(start: GameState, player: number): number {
+  let g = start
+  for (let i = 0; i < 400 && !g.over; i++) {
+    const actor = currentActor(g)
+    if (actor === null) break
+    g = applyAction(g, actor, chooseAction(g, actor, 'normal', true))
+  }
+  if (!g.over) return 0
+  return g.loser === null ? 0 : g.loser === player ? -1 : 1
 }
 
 type Phase = 'early' | 'mid' | 'late'
