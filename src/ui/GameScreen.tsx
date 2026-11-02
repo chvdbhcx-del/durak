@@ -10,21 +10,23 @@ import { playCard, playDeal, playSweep } from './sfx'
 import { BOT_NAMES } from './pickers'
 import { AVATARS, type Stats } from './settings'
 import { SuitIcon } from './SuitIcon'
+import { MainAction, SOFT_EASE, type MainActionSpec } from './MainAction'
 
 const DEAL_STEP_MS = 75
-
-export const pop = {
-  initial: { opacity: 0, scale: 0.85, y: 6 },
-  animate: { opacity: 1, scale: 1, y: 0 },
-  exit: { opacity: 0, scale: 0.85, y: 6 },
-  transition: { type: 'spring', stiffness: 500, damping: 30 },
-} as const
 
 export const fade = {
   initial: { opacity: 0, y: 6 },
   animate: { opacity: 1, y: 0 },
   exit: { opacity: 0, y: -6 },
   transition: { duration: 0.18 },
+} as const
+
+/** Slides a small button into the row by growing its width, so its neighbours glide aside. */
+const slideIn = {
+  initial: { opacity: 0, scale: 0.7, width: 0, marginRight: -8 },
+  animate: { opacity: 1, scale: 1, width: 48, marginRight: 0 },
+  exit: { opacity: 0, scale: 0.7, width: 0, marginRight: -8 },
+  transition: { duration: 0.28, ease: SOFT_EASE },
 } as const
 
 export type Result = 'win' | 'loss' | 'draw'
@@ -426,7 +428,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const pass = legal.find((a) => a.type === 'pass')
   const passLabel = game.taking ? 'Пусть берёт' : me === game.attacker ? 'Бито' : 'Пас'
   const myTurn = actor === me && !game.over
-  const main: { label: string; tone: 'primary' | 'danger'; onClick?: () => void } =
+  const main: MainActionSpec =
     staged[0]?.type === 'transfer'
       ? { label: 'Перевести', tone: 'primary', onClick: confirm }
       : autoThrow
@@ -740,32 +742,14 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               )}
               <AnimatePresence>
                 {staged.length > 0 && (
-                  <motion.button key="cancel" type="button" className="icon cancel" aria-label="Вернуть карты в руку" whileTap={{ scale: 0.9 }} onClick={() => setPlan([])} {...pop}>
+                  <motion.button key="cancel" type="button" className="icon cancel" aria-label="Вернуть карты в руку" whileTap={{ scale: 0.9 }} onClick={() => setPlan([])} {...slideIn}>
                     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
                       <path fill="currentColor" d="M6.3 6.3a1 1 0 0 1 1.4 0L12 10.6l4.3-4.3a1 1 0 1 1 1.4 1.4L13.4 12l4.3 4.3a1 1 0 0 1-1.4 1.4L12 13.4l-4.3 4.3a1 1 0 0 1-1.4-1.4l4.3-4.3-4.3-4.3a1 1 0 0 1 0-1.4z" />
                     </svg>
                   </motion.button>
                 )}
               </AnimatePresence>
-              <AnimatePresence initial={false}>
-                {(main.onClick || autoThrow) && (
-                <motion.button
-                  key="main"
-                  {...pop}
-                type="button"
-                className={`main-action ${main.tone} ${main.onClick ? 'ready' : ''}`}
-                disabled={!main.onClick}
-                whileTap={main.onClick ? { scale: 0.95 } : undefined}
-                onClick={main.onClick}
-              >
-                <AnimatePresence mode="popLayout" initial={false}>
-                  <motion.span key={main.label} initial={{ y: 14, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -14, opacity: 0 }} transition={{ type: 'spring', stiffness: 520, damping: 34 }}>
-                    {main.label}
-                  </motion.span>
-                </AnimatePresence>
-              </motion.button>
-                )}
-              </AnimatePresence>
+              <MainAction spec={main} shown={!!(main.onClick || autoThrow)} />
             </div>
           </div>
           <div

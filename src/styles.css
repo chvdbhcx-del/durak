@@ -542,6 +542,7 @@ button:focus-visible,
 }
 
 .buttons {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -563,11 +564,24 @@ button:focus-visible,
   font-weight: 700;
   font-size: 15px;
   white-space: nowrap;
-  transition: background-color 0.2s, color 0.2s, border-color 0.2s, opacity 0.2s;
+  transition:
+    background-color 0.35s ease,
+    color 0.35s ease,
+    border-color 0.35s ease,
+    box-shadow 0.35s ease;
 }
 
 .main-action > span {
   grid-area: 1 / 1;
+}
+
+/* Invisible twin of the main button: only there to measure the next label's width. */
+.main-sizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .main-action.primary {
@@ -600,6 +614,8 @@ button:focus-visible,
 .icon.cancel {
   width: 48px;
   height: 48px;
+  flex-shrink: 0;
+  overflow: hidden;
   border-radius: 14px;
 }
 
@@ -1573,7 +1589,8 @@ button.card:disabled {
 
 @media (prefers-reduced-motion: reduce) {
   .hand .card,
-  .hand-slot {
+  .hand-slot,
+  .main-action {
     transition: none;
   }
 }
@@ -2163,7 +2180,8 @@ button.card:disabled {
     font-size: 12px;
   }
   .main-action {
-    width: 100%;
+    /* fills the side column here, so the eased width does not apply */
+    width: 100% !important;
   }
   .felt {
     padding: 8px 14px;
