@@ -1,5 +1,5 @@
 import { motion, type MotionStyle, type TargetAndTransition } from 'framer-motion'
-import { useEffect, type MouseEventHandler } from 'react'
+import { useEffect, useState, type MouseEventHandler, type ReactNode } from 'react'
 import { Card, isRed, rankLabel, Suit, SUIT_NAME } from '../engine/cards'
 import { SuitIcon } from './SuitIcon'
 
@@ -16,6 +16,8 @@ interface Props {
   label?: string
   /** a slow, staggered flight, used when cards are dealt out of the deck or swept away */
   flight?: Flight
+  /** wraps the card's face in a layer of its own, e.g. the hand fan's lift; the card's box itself stays put */
+  wrap?: (face: ReactNode) => ReactNode
 }
 
 export interface Flight {
@@ -50,7 +52,7 @@ const flipSpring = { type: 'spring', stiffness: 200, damping: 26 } as const
  */
 const lastFace = new Map<string, boolean>()
 
-export function CardView({ card, faceUp, trump, size = 'full', className = '', style, animate, onClick, disabled, label, flight }: Props) {
+export function CardView({ card, faceUp, trump, size = 'full', className = '', style, animate, onClick, disabled, label, flight, wrap }: Props) {
   const transition = flight ? { type: 'tween' as const, ...FLIGHT[flight.kind], delay: flight.delay } : cardSpring
   const name = `${rankLabel(card.rank)} ${SUIT_NAME[card.suit]}`
   const was = lastFace.get(card.id) ?? faceUp
@@ -58,23 +60,51 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
     lastFace.set(card.id, faceUp)
   }, [card.id, faceUp])
 
-  const classes = ['card', size, flight ? 'flying' : '', faceUp && isRed(card.suit) ? 'red' : '', faceUp && card.suit === trump ? 'trump' : '', className].filter(Boolean).join(' ')
-  const inner = (
-    <motion.span className="flipper" initial={{ rotateY: was ? 0 : 180 }} animate={{ rotateY: faceUp ? 0 : 180 }} transition={flight ? { ...flipSpring, delay: flight.delay + 0.15 } : flipSpring}>
-      <span className={`side front ${isRed(card.suit) ? 'red' : ''} ${card.suit === trump ? 'trump' : ''}`}>
-        <span className="corner tl">
-          <b>{rankLabel(card.rank)}</b>
-          <SuitIcon suit={card.suit} />
-        </span>
-        <span className="pip">
-          <SuitIcon suit={card.suit} size="100%" />
-        </span>
+  // A card is only built in 3D while it turns over. A resting card shows one flat side: the 3D
+  // flipper costs the browser several GPU layers per card, and a table full of them stutters.
+  const [turn, setTurn] = useState<{ face: boolean; from: boolean | null }>(() => ({ face: faceUp, from: was !== faceUp ? was : null }))
+  let from = turn.from
+  if (turn.face !== faceUp) {
+    from = turn.face
+    setTurn({ face: faceUp, from })
+  }
+  const turning = from !== null
+
+  const front = (
+    <span className={`side front ${isRed(card.suit) ? 'red' : ''} ${card.suit === trump ? 'trump' : ''}`}>
+      <span className="corner tl">
+        <b>{rankLabel(card.rank)}</b>
+        <SuitIcon suit={card.suit} />
       </span>
-      <span className="side back">
-        <span className="back-art" />
+      <span className="pip">
+        <SuitIcon suit={card.suit} size="100%" />
       </span>
-    </motion.span>
+    </span>
   )
+  const back = (
+    <span className="side back">
+      <span className="back-art" />
+    </span>
+  )
+  const classes = ['card', size, flight ? 'flying' : '', turning ? 'turning' : '', faceUp && isRed(card.suit) ? 'red' : '', faceUp && card.suit === trump ? 'trump' : '', className].filter(Boolean).join(' ')
+  const face = turning ? (
+    <motion.span
+      key="turning"
+      className="flipper"
+      initial={{ rotateY: from ? 0 : 180 }}
+      animate={{ rotateY: faceUp ? 0 : 180 }}
+      transition={flight ? { ...flipSpring, delay: flight.delay + 0.15 } : flipSpring}
+      onAnimationComplete={() => setTurn((t) => (t.face === faceUp ? { face: faceUp, from: null } : t))}
+    >
+      {front}
+      {back}
+    </motion.span>
+  ) : (
+    <span key="flat" className="flipper">
+      {faceUp ? front : back}
+    </span>
+  )
+  const inner = wrap ? wrap(face) : face
 
   if (onClick)
     return (

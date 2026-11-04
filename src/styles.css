@@ -690,9 +690,22 @@ button:focus-visible,
 
 .hand .card {
   --cw: var(--hw);
-  transition:
-    box-shadow 0.15s,
-    filter 0.2s;
+  box-shadow: none;
+  transition: filter 0.2s;
+}
+
+/* A hand card's face sits on a layer that rises under the pointer, so its shadow lives there too. */
+.pose {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: inherit;
+}
+.hand .pose {
+  box-shadow: 0 4px 12px var(--shadow);
+  transition: box-shadow 0.15s;
+  /* the fan moves these all the time: a layer each keeps that from repainting the hand */
+  will-change: transform;
 }
 
 /* Each hand card sits in a slot that can be dragged onto the table. */
@@ -728,13 +741,13 @@ button:focus-visible,
   background: color-mix(in srgb, var(--bg) 45%, transparent);
 }
 
-.hand .card.beats {
+.hand .card.beats .pose {
   box-shadow:
     0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent),
     0 6px 14px var(--shadow);
 }
 
-.hand .card.selected {
+.hand .card.selected .pose {
   box-shadow:
     0 0 0 2px var(--accent),
     0 12px 26px var(--shadow);
@@ -751,7 +764,6 @@ button:focus-visible,
   border: 0;
   background: transparent;
   box-shadow: 0 4px 12px var(--shadow);
-  perspective: 600px;
   user-select: none;
   font-family: var(--font-ui);
 }
@@ -770,8 +782,23 @@ button.card:disabled {
   position: absolute;
   inset: 0;
   display: block;
-  transform-style: preserve-3d;
   border-radius: inherit;
+}
+
+/* Only a card that is turning over is built in 3D; a resting one draws its visible side flat. */
+.card.turning {
+  perspective: 600px;
+}
+.card.turning .flipper,
+.card.turning .pose {
+  transform-style: preserve-3d;
+}
+.card.turning .side {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.card.turning .side.back {
+  transform: rotateY(180deg);
 }
 
 .side {
@@ -781,8 +808,6 @@ button.card:disabled {
   border-radius: inherit;
   border: 1px solid var(--card-line);
   overflow: hidden;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
 }
 
 .side.front {
@@ -836,7 +861,6 @@ button.card:disabled {
 }
 
 .side.back {
-  transform: rotateY(180deg);
   background: var(--back-a);
   border-color: color-mix(in srgb, var(--accent) 40%, var(--back-a));
 }
@@ -1640,6 +1664,7 @@ button.card:disabled {
 
 @media (prefers-reduced-motion: reduce) {
   .hand .card,
+  .hand .pose,
   .hand-slot {
     transition: none;
   }

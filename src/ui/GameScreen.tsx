@@ -1,7 +1,7 @@
 import { AnimatePresence, LayoutGroup, motion, useDragControls, type DragControls, type PanInfo } from 'framer-motion'
 import { Coin, Payout } from './Money'
 import { formatCoins, type PayoutInfo, type Wager } from './wallet'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { beats, Card, rankLabel, sortHand, SUIT_NAME } from '../engine/cards'
 import { EMOTES, type Emote } from '../engine/emotes'
 import type { Friends } from '../net/useFriends'
@@ -113,20 +113,27 @@ interface Banner {
   tone: 'good' | 'bad' | 'info'
 }
 
+const DEAL_FLIGHT: Flight = { kind: 'draw', delay: 0 }
+/** how the hand fans out under a finger or pointer */
+const FAN_SPRING = { type: 'spring', stiffness: 320, damping: 30 } as const
+
 /** Deals the opening hands one card at a time, round-robin, whenever a new game starts. */
 function useDealing(game: GameState) {
   const seed = game.options.seed
   const total = game.players.length * HAND_SIZE
+  // One step past the last card: the deal lasts until the last card has landed, so it flies like the others.
+  const done = total + 1
   const fresh = game.discard.length === 0 && game.table.length === 0 && !game.lastAction
-  const [state, setState] = useState({ seed, dealt: fresh ? 0 : total })
-  const dealt = state.seed === seed ? state.dealt : fresh ? 0 : total
-  const dealing = dealt < total
+  const [state, setState] = useState({ seed, dealt: fresh ? 0 : done })
+  const step = state.seed === seed ? state.dealt : fresh ? 0 : done
+  const dealing = step < done
   useEffect(() => {
     if (!dealing) return
-    const t = setTimeout(() => setState({ seed, dealt: dealt + 1 }), dealt === 0 ? 450 : DEAL_STEP_MS)
+    const wait = step === 0 ? 450 : step === total ? flightEnd(DEAL_FLIGHT) * 1000 : DEAL_STEP_MS
+    const t = setTimeout(() => setState({ seed, dealt: step + 1 }), wait)
     return () => clearTimeout(t)
-  }, [dealt, dealing, seed])
-  return { dealt, dealing }
+  }, [step, dealing, seed, total])
+  return { dealt: Math.min(step, total), dealing }
 }
 
 /** Where each card is, so a move between zones can be given its own flight. */
@@ -144,7 +151,6 @@ function zoneMap(g: GameState): Map<string, string> {
 
 /** How many cards of the deck and the discard pile are actually drawn. */
 const PILE_SHOWN = 9
-const DEAL_FLIGHT: Flight = { kind: 'draw', delay: 0 }
 
 export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onBotThrow, onFinished, series, wager, payout, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, room }: Props) {
   const { table: cw, hand: hw, flat } = useCardSizes()
@@ -165,7 +171,8 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const [hot, setHot] = useState<string | null>(null)
   const [resetKey, setResetKey] = useState(0)
   /** the card under a finger or pointer sliding over the fan: it rises and its neighbours part */
-  const [fan, setFan] = useState<number | null>(null)
+  const fanStore = useFanStore()
+  const setFan = fanStore.set
   const slotControls = useRef(new Map<string, DragControls>())
   const press = useRef<{ x: number; y: number; id: string | null; mode: 'wait' | 'scrub' | 'drag' } | null>(null)
   // A finger lifted outside the hand (or a gesture the system took over) must not leave a card raised.
@@ -730,9 +737,10 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               const accusable = !!game.options.cheat && !!pair.defense && me !== game.defender && game.players[me]?.human && !game.over && !game.taking && !coverPending
               const onPair = target && selected ? () => place(selected, `pair-${i}`) : attackPending ? () => unstage(pair.attack.id) : coverPending ? () => unstage(pair.defense!.id) : accusable ? () => play({ type: 'accuse', pair: i }) : undefined
               return (
+                // No layout animation on the pair box itself: its cards carry their own, and a moving
+                // pair under moving cards made them measure each other wrong and jump.
                 <motion.div
                   key={pair.attack.id}
-                  layout
                   data-drop={`pair-${i}`}
                   className={`pair ${target ? 'target' : ''} ${target && hot === `pair-${i}` ? 'drop-hot' : ''} ${onPair ? 'tappable' : ''}`}
                   onClick={onPair}
@@ -748,7 +756,8 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                 </motion.div>
               )
             })}
-            <AnimatePresence>
+            {/* popLayout takes the leaving slot out of the row at once, so the pairs glide over instead of jumping once it is gone */}
+            <AnimatePresence mode="popLayout">
               {transferCards.length > 0 && (
                 <motion.button
                   key="transfer-slot"
@@ -888,21 +897,12 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               const isSel = selected === c.id
               const isDrag = dragging === c.id
               const hint = defenseHint(view, c, can, me)
-              const dist = fan === null || isDrag ? 9 : Math.abs(i - fan)
-              const k = Math.max(0, 1 - dist / 2.4)
-              const push = fan === null || dist === 0 ? 0 : Math.sign(i - fan) * hw * 0.3 * Math.min(1, k * 1.7)
-              // neighbours part inside the fan; the edge cards don't get shoved past its ends
-              const x = Math.max(0, Math.min(fanGeo.width - hw, i * handStep + push))
               return (
-                // The outer box slides the card along the hand with a transform (cheap), the inner one is dragged.
-                <motion.div
-                  key={`${c.id}:${resetKey}`}
-                  className="hand-pos"
-                  style={{ zIndex: isDrag ? 200 : fan === i ? 100 : i + 1, transformOrigin: '50% 100%' }}
-                  initial={false}
-                  animate={{ x, y: -hw * 0.3 * k, scale: 1 + 0.2 * k }}
-                  transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-                >
+                // The slot only places the card in the hand; when its place changes the card glides there on its
+                // own layout animation. What moves all the time under a pointer (the fan's push, lift and zoom)
+                // happens on a layer inside the card, so it neither re-renders the table nor upsets the card's
+                // measurements: transforms on the boxes around a card made flights in and out of the hand jump.
+                <FanSlot key={`${c.id}:${resetKey}`} store={fanStore} index={i} left={i * handStep} lifted={isDrag}>
                 <HandSlot
                   id={c.id}
                   registry={slotControls}
@@ -944,11 +944,16 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                     className={`${can ? 'playable' : actor === me ? 'dim' : ''} ${isSel ? 'selected' : ''} ${hint ? 'beats' : ''}`}
                     flight={flightOf(c.id)}
                     animate={{ rotate: isDrag ? 0 : fanGeo.angle(i), y: isDrag ? 0 : fanGeo.drop(i) + (isSel ? -hw * 0.2 : 0) }}
+                    wrap={(inner) => (
+                      <FanPose store={fanStore} index={i} still={isDrag} hw={hw} left={i * handStep} maxLeft={fanGeo.width - hw}>
+                        {inner}
+                      </FanPose>
+                    )}
                     onClick={() => onCard(c)}
                     disabled={!can}
                   />
                 </HandSlot>
-                </motion.div>
+                </FanSlot>
               )
             })}
           </div>
@@ -1087,6 +1092,55 @@ function Counter({ value }: { value: number }) {
         </motion.b>
       </AnimatePresence>
     </span>
+  )
+}
+
+type FanStore = ReturnType<typeof useFanStore>
+
+/** The hand card under the pointer, kept out of React state so that sliding over the fan does not re-render the whole table. */
+function useFanStore() {
+  return useMemo(() => {
+    let value: number | null = null
+    const listeners = new Set<() => void>()
+    return {
+      get: () => value,
+      set: (next: number | null) => {
+        if (next === value) return
+        value = next
+        listeners.forEach((f) => f())
+      },
+      subscribe: (f: () => void) => {
+        listeners.add(f)
+        return () => {
+          listeners.delete(f)
+        }
+      },
+    }
+  }, [])
+}
+
+/** A hand card's place in the fan; the card under the pointer is drawn on top. */
+function FanSlot({ store, index, left, lifted, children }: { store: FanStore; index: number; left: number; lifted: boolean; children: ReactNode }) {
+  const fan = useSyncExternalStore(store.subscribe, store.get)
+  return (
+    <div className="hand-pos" style={{ left, zIndex: lifted ? 200 : fan === index ? 100 : index + 1 }}>
+      {children}
+    </div>
+  )
+}
+
+/** The face of a hand card rising under the pointer while its neighbours part. */
+function FanPose({ store, index, still, hw, left, maxLeft, children }: { store: FanStore; index: number; still: boolean; hw: number; left: number; maxLeft: number; children: ReactNode }) {
+  const fan = useSyncExternalStore(store.subscribe, store.get)
+  const dist = fan === null || still ? 9 : Math.abs(index - fan)
+  const k = Math.max(0, 1 - dist / 2.4)
+  const part = fan === null || dist === 0 ? 0 : Math.sign(index - fan) * hw * 0.3 * Math.min(1, k * 1.7)
+  // neighbours part inside the fan; the edge cards don't get shoved past its ends
+  const push = Math.max(0, Math.min(maxLeft, left + part)) - left
+  return (
+    <motion.span className="pose" style={{ originY: 1 }} initial={false} animate={{ x: push, y: -hw * 0.3 * k, scale: 1 + 0.2 * k }} transition={FAN_SPRING}>
+      {children}
+    </motion.span>
   )
 }
 
