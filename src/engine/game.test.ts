@@ -92,6 +92,39 @@ describe('rounds', () => {
   })
 })
 
+describe('throwing in while the defender covers', () => {
+  it('lets an attacker add a matching card before the defender has covered', () => {
+    let s = position([[card('H', 7), card('D', 7), card('S', 12)], [card('S', 6), card('H', 9), card('D', 10)]], { human: 0 })
+    s = applyAction(s, 0, { type: 'attack', cardId: 'H7' })
+    expect(currentActor(s)).toBe(1)
+    // Not the attacker's turn, yet the matching seven may go down now, but no other rank and no "bito".
+    expect(legalActions(s, 0)).toEqual([{ type: 'attack', cardId: 'D7' }])
+    s = applyAction(s, 0, { type: 'attack', cardId: 'D7' })
+    expect(s.table.map((p) => p.attack.id)).toEqual(['H7', 'D7'])
+    expect(currentActor(s)).toBe(1)
+    s = applyAction(s, 1, { type: 'defend', cardId: 'H9', pair: 0 })
+    s = applyAction(s, 1, { type: 'defend', cardId: 'D10', pair: 1 })
+    expect(currentActor(s)).toBe(0)
+  })
+
+  it('still counts the defender hand and the round limit', () => {
+    let s = position([[card('H', 7), card('D', 7), card('S', 7)], [card('S', 6), card('H', 9)]])
+    s = applyAction(s, 0, { type: 'attack', cardId: 'H7' })
+    s = applyAction(s, 0, { type: 'attack', cardId: 'D7' })
+    expect(legalActions(s, 0)).toEqual([])
+    expect(() => applyAction(s, 0, { type: 'attack', cardId: 'S7' })).toThrow()
+  })
+
+  it('lets every other attacker join in, never the defender', () => {
+    let s = position([[card('H', 7)], [card('S', 6), card('H', 9), card('D', 10)], [card('D', 7), card('S', 13)]])
+    s = applyAction(s, 0, { type: 'attack', cardId: 'H7' })
+    expect(legalActions(s, 2)).toEqual([{ type: 'attack', cardId: 'D7' }])
+    expect(legalActions(s, 1).some((a) => a.type === 'attack')).toBe(false)
+    s = applyAction(s, 2, { type: 'attack', cardId: 'D7' })
+    expect(s.table.length).toBe(2)
+  })
+})
+
 describe('full games', () => {
   for (const mode of ['podkidnoy', 'perevodnoy'] as const)
     for (const deckSize of [24, 36, 52] as const)

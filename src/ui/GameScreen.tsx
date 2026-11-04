@@ -187,12 +187,15 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     const swept: string[] = []
     const taken: string[] = []
     const drawn: string[] = []
+    const played: string[] = []
     for (const [id, zone] of zones) {
       const was = before.get(id)
       if (!was || was === zone) continue
       if (zone === 'discard') swept.push(id)
       else if (zone.startsWith('hand-') && was === 'deck') drawn.push(id)
       else if (zone.startsWith('hand-') && was === 'table') taken.push(id)
+      // Another player's lead, cover or throw-in glides out of their fan onto the table.
+      else if (zone === 'table' && was.startsWith('hand-') && was !== `hand-${me}`) played.push(id)
     }
     // A slight stagger between cards, kept within about a second however many cards move.
     const step = (n: number, most: number, total: number) => (n > 1 ? Math.min(most, total / (n - 1)) : 0)
@@ -205,8 +208,10 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     const start = out.size ? 0.45 : 0.05
     const drawStep = step(drawn.length, 0.09, 0.5)
     drawn.forEach((id, i) => out.set(id, { kind: 'draw', delay: start + i * drawStep }))
+    const playStep = step(played.length, 0.14, 0.5)
+    played.forEach((id, i) => out.set(id, { kind: 'play', delay: 0.02 + i * playStep }))
     return out
-  }, [zones, dealing, game.options.seed])
+  }, [zones, dealing, game.options.seed, me])
   useEffect(() => {
     prevZones.current = zones
     prevSeed.current = game.options.seed
@@ -216,7 +221,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   useEffect(() => {
     if (flights.size === 0) return
     const list = [...flights.values()]
-    const sweep = list.filter((f) => f.kind !== 'draw')
+    const sweep = list.filter((f) => f.kind === 'discard' || f.kind === 'take')
     if (sweep.length) playSweep(Math.min(...sweep.map((f) => f.delay)), sweep.length)
     list
       .filter((f) => f.kind === 'draw')
@@ -255,7 +260,6 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const staged = preview ? plan : []
   const view = preview ?? game
   const pending = useMemo(() => new Set(staged.flatMap((a) => (a.type === 'throw' ? a.cardIds : 'cardId' in a ? [a.cardId] : []))), [staged])
-  const throwIds = staged[0]?.type === 'throw' ? staged[0].cardIds : []
   const thrower = legal.some((a) => a.type === 'attack')
   const viewLegal = useMemo(() => (waiting || !preview ? legal : legalActions(view, me)), [waiting, preview, legal, view, me])
 
@@ -350,33 +354,24 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     tap('medium')
     for (const m of moves) act(m)
   }
-  const confirmRef = useRef(confirm)
-  confirmRef.current = confirm
-  // A lead or throw-in goes out by itself once no more cards are added.
-  const autoThrow = staged[0]?.type === 'throw'
-  useEffect(() => {
-    if (!autoThrow || dragging) return
-    const t = setTimeout(() => confirmRef.current(), 2200)
-    return () => clearTimeout(t)
-  }, [plan, autoThrow, dragging])
 
   const transferSeat = nextDefender(game)
   const optionsFor = (cardId: string) => viewLegal.filter((a) => 'cardId' in a && a.cardId === cardId)
+  // Leads and throw-ins go straight onto the table, one card at a time, whenever the rules allow:
+  // there is no waiting for the defender to finish covering.
   const throwWith = (cardId: string): string[] | null => {
-    if (!thrower || staged.some((a) => a.type !== 'throw')) return null
-    const more = [...throwIds, cardId]
-    if (canThrow(game, me, more)) return more
+    if (!thrower || staged.length > 0) return null
     return canThrow(game, me, [cardId]) ? [cardId] : null
   }
   const canStage = (cardId: string) => !!throwWith(cardId) || optionsFor(cardId).length > 0
 
   const stage = (move: Action) => {
-    // Covering is played straight away; leading and throwing in wait a moment for more cards of the same rank.
-    if (move.type === 'defend') return play(move)
+    // Covering, leading and throwing in are played straight away; only a transfer waits to be confirmed.
+    if (move.type === 'throw') playCard()
+    if (move.type === 'defend' || move.type === 'throw') return play(move)
     tap('light')
     setSelected(null)
-    if (move.type === 'throw') playCard()
-    setPlan(move.type === 'throw' ? [move] : [...staged, move])
+    setPlan([...staged, move])
   }
 
   /** Puts a card from the hand on the table, aimed at `zone` when it was dragged somewhere. */
@@ -410,12 +405,6 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   /** Takes a lined-up card back into the hand. */
   const unstage = (cardId: string) => {
     tap('light')
-    const first = staged[0]
-    if (first?.type === 'throw') {
-      const rest = first.cardIds.filter((id) => id !== cardId)
-      setPlan(rest.length && canThrow(game, me, rest) ? [{ type: 'throw', cardIds: rest }] : [])
-      return
-    }
     const rest = staged.filter((a) => !('cardId' in a && a.cardId === cardId))
     try {
       rest.reduce((s, a) => previewAction(s, me, a), game)
@@ -471,9 +460,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const main: { label: string; tone: 'primary' | 'danger'; onClick?: () => void } =
     staged[0]?.type === 'transfer'
       ? { label: 'Перевести', tone: 'primary', onClick: confirm }
-      : autoThrow
-        ? { label: 'Кладём…', tone: 'primary' }
-        : take && myTurn
+      : take && myTurn
           ? { label: 'Беру', tone: 'danger', onClick: () => play(take) }
           : pass && myTurn
             ? { label: passLabel, tone: 'primary', onClick: () => play(pass) }
@@ -725,8 +712,8 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                   animate={target && !dragging ? { y: [0, -4, 0] } : { y: 0, scale: target && hot === `pair-${i}` ? 1.06 : 1 }}
                   transition={target && !dragging ? { duration: 1, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 400, damping: 30 }}
                 >
-                  <CardView card={pair.attack} faceUp trump={game.trump} className={attackPending ? 'pending' : ''} />
-                  {pair.defense && <CardView card={pair.defense} faceUp trump={game.trump} className={`cover ${coverPending ? 'pending' : ''}`} style={{ rotate: 7 }} />}
+                  <CardView card={pair.attack} faceUp trump={game.trump} className={attackPending ? 'pending' : ''} flight={flightOf(pair.attack.id)} />
+                  {pair.defense && <CardView card={pair.defense} faceUp trump={game.trump} className={`cover ${coverPending ? 'pending' : ''}`} style={{ rotate: 7 }} flight={flightOf(pair.defense.id)} />}
                 </motion.div>
               )
             })}
@@ -810,14 +797,13 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                 )}
               </AnimatePresence>
               <AnimatePresence initial={false}>
-                {(main.onClick || autoThrow) && (
+                {main.onClick && (
                 <motion.button
                   key="main"
                   {...pop}
                 type="button"
-                className={`main-action ${main.tone} ${main.onClick ? 'ready' : ''}`}
-                disabled={!main.onClick}
-                whileTap={main.onClick ? { scale: 0.95 } : undefined}
+                className={`main-action ${main.tone} ready`}
+                whileTap={{ scale: 0.95 }}
                 onClick={main.onClick}
               >
                 <AnimatePresence mode="popLayout" initial={false}>
@@ -1091,7 +1077,6 @@ function HandSlot({ id, registry, children, ...props }: { id: string; registry: 
 
 function planText(plan: Action[], g: GameState): string {
   const first = plan[0]
-  if (first.type === 'throw') return 'Можно добавить ещё карты'
   if (first.type === 'transfer') return 'Перевести ход дальше?'
   return g.table.length ? 'Подтвердите' : ''
 }
@@ -1127,6 +1112,8 @@ function statusText(g: GameState, actor: number | null, me: number): string {
     if (!canAdd) return 'Подкинуть нечего'
     return g.attacker === me ? 'Подкиньте или «Бито»' : 'Подкиньте или «Пас»'
   }
+  // Throwing in doesn't wait for a turn: say so while the defender is still covering.
+  if (actor !== null && actor !== me && legalActions(g, me).some((a) => a.type === 'attack')) return 'Можно подкинуть'
   // Whose turn it is already shows on the seats, so only the player's own moves need words.
   return ''
 }
