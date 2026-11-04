@@ -257,16 +257,83 @@ button:focus-visible,
 }
 
 /* Opponents */
+/* One fixed-width slot per opponent: nothing inside a slot can push its neighbours or make the strip scroll. */
 .opponents {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(var(--seats, 1), var(--slot, minmax(0, 1fr)));
   justify-content: center;
-  gap: clamp(4px, 2.5vw, 28px);
+  gap: var(--seat-gap, 8px);
   min-width: 0;
 }
 
 .opponents .seat {
-  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.opponents .seat-head {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* The "thinking" dots sit on the avatar's corner like a badge, so they never take room from the name. */
+.opponents .thinking {
+  position: absolute;
+  top: -7px;
+  left: -10px;
+  z-index: 2;
+}
+
+.opponents .role {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Many opponents on a narrow screen: avatar on top with the card count on its corner, name below. */
+.opponents.compact .seat {
+  padding: 6px 2px;
+  gap: 4px;
+}
+.opponents.compact .seat-head {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  width: 100%;
+}
+.opponents.compact .seat-name {
+  max-width: 100%;
+  font-size: 12px;
+}
+.opponents.compact .count {
+  position: absolute;
+  top: -4px;
+  left: calc(50% + 8px);
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 14px;
+  border: 1px solid var(--line);
+}
+.opponents.compact .thinking {
+  top: -2px;
+  left: auto;
+  right: calc(50% + 14px);
+  padding: 0 3px;
+  gap: 2px;
+}
+.opponents.compact .seat-add {
+  position: absolute;
+  top: -4px;
+  right: calc(50% + 12px);
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+}
+.opponents.compact .role {
+  font-size: min(9px, calc(var(--slot) * 0.13));
+  letter-spacing: 0;
 }
 
 .seat-name {
@@ -283,7 +350,7 @@ button:focus-visible,
   border-radius: 16px;
   border: 1px solid transparent;
   transition: border-color 0.2s, background-color 0.2s;
-  min-width: 92px;
+  min-width: 0;
 }
 
 .seat.active {

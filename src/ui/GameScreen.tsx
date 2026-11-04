@@ -63,6 +63,21 @@ interface Props {
   room?: { code: string; notice: string | null; reconnecting?: boolean; roster?: { seat: number; name: string; fid?: string }[] }
 }
 
+/** The current width of an element, kept up to date as it resizes. */
+function useWidth<T extends HTMLElement>() {
+  const ref = useRef<T>(null)
+  const [w, setW] = useState(0)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setW(el.clientWidth))
+    ro.observe(el)
+    setW(el.clientWidth)
+    return () => ro.disconnect()
+  }, [])
+  return [ref, w] as const
+}
+
 /** Card sizes in px: table cards and the bigger cards in your own hand. */
 function useCardSizes() {
   const calc = () => {
@@ -130,6 +145,7 @@ const DEAL_FLIGHT: Flight = { kind: 'draw', delay: 0 }
 
 export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, series, wager, payout, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, room }: Props) {
   const { table: cw, hand: hw, flat } = useCardSizes()
+  const [stripRef, stripW] = useWidth<HTMLElement>()
   const { dealt, dealing } = useDealing(game)
   const zones = useMemo(() => zoneMap(game), [game])
   const prevZones = useRef(zones)
@@ -474,6 +490,15 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     setFan(Math.max(0, Math.min(hand.length - 1, i)))
   }
   const miniW = Math.round(cw * 0.42)
+  // Every opponent gets a slot of the same fixed width, so a big hand never pushes its neighbours aside
+  // and the strip never scrolls. With many players the fans get narrower and the cards smaller.
+  const seats = Math.max(1, opponents.length)
+  const seatGap = seats >= 4 ? 4 : seats === 3 ? 10 : 20
+  const stripWidth = stripW || Math.min(window.innerWidth, 1200) - 32
+  const slotW = Math.min(200, Math.floor((stripWidth - seatGap * (seats - 1)) / seats))
+  const compactSeats = slotW < 112
+  const fanMax = Math.max(16, slotW - (compactSeats ? 8 : 24))
+  const seatMini = Math.min(miniW, Math.round(fanMax * 0.62))
   const deckCards = [...game.deck.slice(1), ...undealt]
   const status = dealing ? 'Раздача…' : staged.length ? planText(staged, game) : selected ? 'Выберите карту на столе' : statusText(game, actor, me)
   const seriesDone = !!series && series.played >= series.total
@@ -559,11 +584,16 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
       </AnimatePresence>
 
       <LayoutGroup>
-        <section className="opponents" aria-label="Соперники">
+        <section
+          ref={stripRef}
+          className={`opponents ${compactSeats ? 'compact' : ''}`}
+          aria-label="Соперники"
+          style={{ ['--seats' as string]: seats, ['--slot' as string]: `${slotW}px`, ['--seat-gap' as string]: `${seatGap}px`, ['--mini' as string]: `${seatMini}px` }}
+        >
           <AnimatePresence initial>
             {opponents.map((p, idx) => {
               const cards = p.hand.filter((c) => !hiddenIds.has(c.id))
-              const step = cards.length > 1 ? Math.min(miniW * 0.42, (miniW * 2.6 - miniW) / (cards.length - 1)) : 0
+              const step = cards.length > 1 ? Math.min(seatMini * 0.42, (Math.min(seatMini * 2.6, fanMax) - seatMini) / (cards.length - 1)) : 0
               const role = p.out ? 'Вышел' : dealing ? null : p.id === game.defender ? (game.taking ? 'Берёт' : 'Отбивается') : p.id === game.attacker ? 'Ходит' : null
               const isTransferTarget = dragging !== null && focusTransfers && transferSeat === p.id
               return (
@@ -619,14 +649,14 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                       {cards.length}
                     </motion.span>
                   </div>
-                  <motion.div className="mini-hand" animate={{ width: miniW + step * Math.max(0, cards.length - 1) }} transition={{ type: 'spring', stiffness: 400, damping: 34 }}>
+                  <motion.div className="mini-hand" animate={{ width: seatMini + step * Math.max(0, cards.length - 1) }} transition={{ type: 'spring', stiffness: 400, damping: 34 }}>
                     {cards.map((c, i) => (
                       <CardView key={c.id} card={c} faceUp={false} trump={game.trump} size="mini" style={{ left: i * step }} flight={flightOf(c.id)} />
                     ))}
                   </motion.div>
                   <AnimatePresence mode="wait" initial={false}>
                     <motion.span key={isTransferTarget ? 'transfer' : role ?? 'wait'} className={`role ${role || isTransferTarget ? '' : 'empty'}`} {...fade}>
-                      {isTransferTarget ? 'Перевести сюда' : role ?? 'Ждёт'}
+                      {isTransferTarget ? (compactSeats ? 'Сюда' : 'Перевести сюда') : role ?? 'Ждёт'}
                     </motion.span>
                   </AnimatePresence>
                 </motion.div>
