@@ -25,9 +25,20 @@ export interface Flight {
 
 // Cards glide on eased curves instead of springs: a gentle start and a long soft landing, no overshoot.
 export const cardSpring = { type: 'tween', ease: [0.22, 1, 0.36, 1], duration: 0.5 } as const
-const flightSpring = { type: 'tween', ease: [0.33, 0.7, 0.2, 1], duration: 0.8 } as const
-// The sweep into the discard pile is the slowest and softest: the cards ease out, glide, and settle.
-const sweepSpring = { type: 'tween', ease: [0.4, 0.05, 0.2, 1], duration: 1.05 } as const
+// Flights between zones are slower still, each with an ease-in-out that picks the card up softly and sets it down softly.
+const FLIGHT: Record<Flight['kind'], { ease: [number, number, number, number]; duration: number }> = {
+  // out of the deck into a hand
+  draw: { ease: [0.3, 0.1, 0.2, 1], duration: 0.95 },
+  // from the table into the hand of the player who takes
+  take: { ease: [0.42, 0, 0.2, 1], duration: 1.15 },
+  // the sweep into the discard pile is the slowest and softest: the cards lift, glide, and settle
+  discard: { ease: [0.45, 0, 0.18, 1], duration: 1.4 },
+}
+
+/** When a flight lands, in seconds from the moment it was set off. */
+export function flightEnd(f: Flight): number {
+  return f.delay + FLIGHT[f.kind].duration
+}
 const flipSpring = { type: 'spring', stiffness: 200, damping: 26 } as const
 
 /**
@@ -38,7 +49,7 @@ const flipSpring = { type: 'spring', stiffness: 200, damping: 26 } as const
 const lastFace = new Map<string, boolean>()
 
 export function CardView({ card, faceUp, trump, size = 'full', className = '', style, animate, onClick, disabled, label, flight }: Props) {
-  const transition = flight ? { ...(flight.kind === 'discard' ? sweepSpring : flightSpring), delay: flight.delay } : cardSpring
+  const transition = flight ? { type: 'tween' as const, ...FLIGHT[flight.kind], delay: flight.delay } : cardSpring
   const name = `${rankLabel(card.rank)} ${SUIT_NAME[card.suit]}`
   const was = lastFace.get(card.id) ?? faceUp
   useEffect(() => {
@@ -47,7 +58,7 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
 
   const classes = ['card', size, flight ? 'flying' : '', faceUp && isRed(card.suit) ? 'red' : '', faceUp && card.suit === trump ? 'trump' : '', className].filter(Boolean).join(' ')
   const inner = (
-    <motion.span className="flipper" initial={{ rotateY: was ? 0 : 180 }} animate={{ rotateY: faceUp ? 0 : 180 }} transition={flipSpring}>
+    <motion.span className="flipper" initial={{ rotateY: was ? 0 : 180 }} animate={{ rotateY: faceUp ? 0 : 180 }} transition={flight ? { ...flipSpring, delay: flight.delay + 0.15 } : flipSpring}>
       <span className={`side front ${isRed(card.suit) ? 'red' : ''} ${card.suit === trump ? 'trump' : ''}`}>
         <span className="corner tl">
           <b>{rankLabel(card.rank)}</b>
