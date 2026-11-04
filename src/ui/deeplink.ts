@@ -5,8 +5,8 @@ import { isNative } from './native'
 /**
  * Invite links. A shared link is always the website (…/durak/#join-CODE), because that is the only
  * thing every phone can open. From there:
- * - the Android app claims durak://join/CODE and, once the person allows it in the app's
- *   "open by default" settings, the site's own https links too;
+ * - the Android app claims durak://join/CODE and the site's own https links, verified through
+ *   assetlinks.json at the domain root (the chvdbhcx-del.github.io repository, see site-root/);
  * - the iPhone app claims durak://join/CODE (universal links need a file at the domain root and a
  *   signed app, neither of which a github.io project site can have);
  * - a home-screen web app catches the link where the platform lets it (Android Chrome installs it as

@@ -25,9 +25,9 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="durak" android:host="join" />
             </intent-filter>
-            <!-- The shared https link itself. github.io gives no way to verify the domain, so Android
-                 opens it here only after "Открывать по умолчанию → Добавить ссылку" in the app's settings. -->
-            <intent-filter>
+            <!-- The shared https link itself, verified through https://chvdbhcx-del.github.io/.well-known/assetlinks.json
+                 (served from the chvdbhcx-del.github.io repository, see site-root/). -->
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
