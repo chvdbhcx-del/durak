@@ -2735,3 +2735,40 @@ small,
 .wallet-card-side b {
   color: var(--fg);
 }
+
+/* Invite opened in a plain browser tab: the app gets the first offer. */
+.app-handoff {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  width: 100%;
+  max-width: 360px;
+  padding: 18px 16px;
+  border-radius: 18px;
+  background: var(--raise);
+  border: 1px solid var(--line);
+  text-align: center;
+  margin-bottom: 6px;
+}
+.handoff-title {
+  font-weight: 700;
+  font-size: 16px;
+}
+.handoff-open {
+  width: 100%;
+  text-decoration: none;
+  text-align: center;
+  display: block;
+}
+.handoff-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.handoff-note.small {
+  font-size: 12px;
+}
+.handoff-copy {
+  font-size: 13px;
+}
