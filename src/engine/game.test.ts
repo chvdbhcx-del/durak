@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { beats, Card } from './cards'
-import { chooseAction, LOOKAHEAD } from './bot'
+import { chooseAction, eagerThrow, LOOKAHEAD } from './bot'
 import { botReaction, botReply } from './emotes'
 import { applyAction, canCheat, catchChance, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options } from './game'
 
@@ -89,6 +89,65 @@ describe('rounds', () => {
     expect(s.attacker).toBe(1)
     expect(s.defender).toBe(2)
     expect(s.table.length).toBe(2)
+  })
+})
+
+describe('throwing in while the defender covers', () => {
+  it('lets an attacker add a matching card before the defender has covered', () => {
+    let s = position([[card('H', 7), card('D', 7), card('S', 12)], [card('S', 6), card('H', 9), card('D', 10)]], { human: 0 })
+    s = applyAction(s, 0, { type: 'attack', cardId: 'H7' })
+    expect(currentActor(s)).toBe(1)
+    // Not the attacker's turn, yet the matching seven may go down now, but no other rank and no "bito".
+    expect(legalActions(s, 0)).toEqual([{ type: 'attack', cardId: 'D7' }])
+    s = applyAction(s, 0, { type: 'attack', cardId: 'D7' })
+    expect(s.table.map((p) => p.attack.id)).toEqual(['H7', 'D7'])
+    expect(currentActor(s)).toBe(1)
+    s = applyAction(s, 1, { type: 'defend', cardId: 'H9', pair: 0 })
+    s = applyAction(s, 1, { type: 'defend', cardId: 'D10', pair: 1 })
+    expect(currentActor(s)).toBe(0)
+  })
+
+  it('still counts the defender hand and the round limit', () => {
+    let s = position([[card('H', 7), card('D', 7), card('S', 7)], [card('S', 6), card('H', 9)]])
+    s = applyAction(s, 0, { type: 'attack', cardId: 'H7' })
+    s = applyAction(s, 0, { type: 'attack', cardId: 'D7' })
+    expect(legalActions(s, 0)).toEqual([])
+    expect(() => applyAction(s, 0, { type: 'attack', cardId: 'S7' })).toThrow()
+  })
+
+  it('lets every other attacker join in, never the defender', () => {
+    let s = position([[card('H', 7)], [card('S', 6), card('H', 9), card('D', 10)], [card('D', 7), card('S', 13)]])
+    s = applyAction(s, 0, { type: 'attack', cardId: 'H7' })
+    expect(legalActions(s, 2)).toEqual([{ type: 'attack', cardId: 'D7' }])
+    expect(legalActions(s, 1).some((a) => a.type === 'attack')).toBe(false)
+    s = applyAction(s, 2, { type: 'attack', cardId: 'D7' })
+    expect(s.table.length).toBe(2)
+  })
+})
+
+describe('bots throwing in during defense', () => {
+  it('a bot attacker throws a cheap matching card before the defender covers', () => {
+    let s = position([[card('H', 7), card('D', 7), card('S', 12)], [card('S', 6), card('H', 9), card('D', 10)]])
+    s = applyAction(s, 0, { type: 'attack', cardId: 'H7' })
+    expect(eagerThrow(s)).toEqual({ player: 0, action: { type: 'attack', cardId: 'D7' } })
+  })
+
+  it('games finish when bots throw in at random moments', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      let s = newGame(opts({ players: 2 + (seed % 3), seed, mode: seed % 2 ? 'podkidnoy' : 'perevodnoy' }))
+      let steps = 0
+      while (!s.over) {
+        const eager = (seed + steps) % 3 === 0 ? eagerThrow(s) : null
+        if (eager) s = applyAction(s, eager.player, eager.action)
+        else {
+          const actor = currentActor(s)!
+          s = applyAction(s, actor, chooseAction(s, actor, 'normal', true))
+        }
+        expect(cardCount(s)).toBe(36)
+        expect(s.table.filter((p) => !p.defense).length).toBeLessThanOrEqual(s.players[s.defender].hand.length)
+        if (++steps > 2000) throw new Error('game did not finish')
+      }
+    }
   })
 })
 

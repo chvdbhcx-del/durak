@@ -122,6 +122,20 @@ export function chooseAction(s: GameState, player: number, level: Level = s.opti
 }
 
 /**
+ * A bot that wants to throw in while the defender is still covering, as a person at the table would:
+ * the first bot attacker (in attack order) with a card it is happy to give away. Null when none is.
+ */
+export function eagerThrow(s: GameState, level: Level = s.options.level ?? 'normal'): { player: number; action: Action } | null {
+  if (s.over || s.table.length === 0 || s.taking || currentActor(s) !== s.defender) return null
+  for (const player of attackOrder(s)) {
+    if (s.players[player].human || !legalActions(s, player).some((a) => a.type === 'attack')) continue
+    const action = chooseAction(s, player, level, true)
+    if (action.type === 'attack') return { player, action }
+  }
+  return null
+}
+
+/**
  * Endgame by counting: with the deck gone and one opponent left, every card not in sight is in
  * that opponent's hand, so a sharp bot can search the rest of the game to the end.
  */

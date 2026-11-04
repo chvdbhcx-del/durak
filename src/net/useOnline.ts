@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DeckSize } from '../engine/cards'
-import { chooseAction, type Level } from '../engine/bot'
+import { chooseAction, eagerThrow, type Level } from '../engine/bot'
 import { EMOTES, type Emote } from '../engine/emotes'
 import { Action, applyAction, currentActor, GameState, maxPlayers, Mode, newGame, viewFor } from '../engine/game'
 import { BOT_NAMES } from '../ui/pickers'
@@ -27,6 +27,8 @@ export interface Online {
   kick: (token: string) => void
   /** host only: let the bot in `actor`'s seat make its move */
   stepBot: (actor: number, level?: Level) => void
+  /** host only: a bot throws in while the defender is still covering, if one wants to */
+  botThrow: () => void
   restore: () => boolean
   /** the latest emote at the table, from anyone */
   emote: Emote | null
@@ -354,12 +356,18 @@ export function useOnline(token: string, fid: string): Online {
   const stepBot = (actor: number, level?: Level) =>
     setGame((g) => (g && currentActor(g) === actor && !g.players[actor].human ? applyAction(g, actor, chooseAction(g, actor, level)) : g))
 
+  const botThrow = () =>
+    setGame((g) => {
+      const t = g && eagerThrow(g)
+      return t ? applyAction(g, t.player, t.action) : g
+    })
+
   // Unmounting (e.g. a reload) keeps the saved room; only `leave` forgets it.
   useEffect(() => () => {
     host.current?.close()
     guest.current?.close()
   }, [])
 
-  return { phase, role, error, lobby, game, seat, notice, reconnecting, create, join, leave, start, act, setLobby, kick, stepBot, restore, emote, sendEmote, emitEmote }
+  return { phase, role, error, lobby, game, seat, notice, reconnecting, create, join, leave, start, act, setLobby, kick, stepBot, restore, emote, sendEmote, emitEmote, botThrow }
 }
 

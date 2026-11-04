@@ -12,6 +12,7 @@ import { playCard, playDeal, playSweep } from './sfx'
 import { BOT_NAMES } from './pickers'
 import { AVATARS, type Stats } from './settings'
 import { SuitIcon } from './SuitIcon'
+import { fanLayout } from './fan'
 
 const DEAL_STEP_MS = 120
 
@@ -47,6 +48,8 @@ interface Props {
   botDelay: number
   /** called when a bot should move; left out for guests, whose bots run on the host */
   onBotTurn?: (actor: number) => void
+  /** called while the defender is covering, so a bot may throw in without waiting its turn */
+  onBotThrow?: () => void
   onFinished: (result: Result, loser: number | null) => void
   series?: Series | null
   /** this player's money on the game, if any */
@@ -143,9 +146,11 @@ function zoneMap(g: GameState): Map<string, string> {
 const PILE_SHOWN = 9
 const DEAL_FLIGHT: Flight = { kind: 'draw', delay: 0 }
 
-export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, series, wager, payout, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, room }: Props) {
+export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onBotThrow, onFinished, series, wager, payout, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, room }: Props) {
   const { table: cw, hand: hw, flat } = useCardSizes()
   const [stripRef, stripW] = useWidth<HTMLElement>()
+  const [meRef, meW] = useWidth<HTMLElement>()
+  const [controlsRef, controlsW] = useWidth<HTMLDivElement>()
   const { dealt, dealing } = useDealing(game)
   const zones = useMemo(() => zoneMap(game), [game])
   const prevZones = useRef(zones)
@@ -163,6 +168,20 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const [fan, setFan] = useState<number | null>(null)
   const slotControls = useRef(new Map<string, DragControls>())
   const press = useRef<{ x: number; y: number; id: string | null; mode: 'wait' | 'scrub' | 'drag' } | null>(null)
+  // A finger lifted outside the hand (or a gesture the system took over) must not leave a card raised.
+  useEffect(() => {
+    const end = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse') return
+      press.current = null
+      setFan(null)
+    }
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+    return () => {
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+    }
+  }, [])
   const handIds = useRef<string[]>([])
   const prev = useRef<GameState>(game)
   const counted = useRef<number | null>(null)
@@ -187,12 +206,15 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     const swept: string[] = []
     const taken: string[] = []
     const drawn: string[] = []
+    const played: string[] = []
     for (const [id, zone] of zones) {
       const was = before.get(id)
       if (!was || was === zone) continue
       if (zone === 'discard') swept.push(id)
       else if (zone.startsWith('hand-') && was === 'deck') drawn.push(id)
       else if (zone.startsWith('hand-') && was === 'table') taken.push(id)
+      // Another player's lead, cover or throw-in glides out of their fan onto the table.
+      else if (zone === 'table' && was.startsWith('hand-') && was !== `hand-${me}`) played.push(id)
     }
     // A slight stagger between cards, kept within about a second however many cards move.
     const step = (n: number, most: number, total: number) => (n > 1 ? Math.min(most, total / (n - 1)) : 0)
@@ -205,8 +227,10 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     const start = out.size ? 0.45 : 0.05
     const drawStep = step(drawn.length, 0.09, 0.5)
     drawn.forEach((id, i) => out.set(id, { kind: 'draw', delay: start + i * drawStep }))
+    const playStep = step(played.length, 0.14, 0.5)
+    played.forEach((id, i) => out.set(id, { kind: 'play', delay: 0.02 + i * playStep }))
     return out
-  }, [zones, dealing, game.options.seed])
+  }, [zones, dealing, game.options.seed, me])
   useEffect(() => {
     prevZones.current = zones
     prevSeed.current = game.options.seed
@@ -216,7 +240,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   useEffect(() => {
     if (flights.size === 0) return
     const list = [...flights.values()]
-    const sweep = list.filter((f) => f.kind !== 'draw')
+    const sweep = list.filter((f) => f.kind === 'discard' || f.kind === 'take')
     if (sweep.length) playSweep(Math.min(...sweep.map((f) => f.delay)), sweep.length)
     list
       .filter((f) => f.kind === 'draw')
@@ -255,7 +279,6 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const staged = preview ? plan : []
   const view = preview ?? game
   const pending = useMemo(() => new Set(staged.flatMap((a) => (a.type === 'throw' ? a.cardIds : 'cardId' in a ? [a.cardId] : []))), [staged])
-  const throwIds = staged[0]?.type === 'throw' ? staged[0].cardIds : []
   const thrower = legal.some((a) => a.type === 'attack')
   const viewLegal = useMemo(() => (waiting || !preview ? legal : legalActions(view, me)), [waiting, preview, legal, view, me])
 
@@ -270,6 +293,15 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     const t = setTimeout(() => onBotTurn(actor), Math.round(botDelay * weight))
     return () => clearTimeout(t)
   }, [game, actor, paused, botDelay, onBotTurn])
+
+  // Bots don't wait for the defender either: after a short look at the table, one may throw in.
+  // The defender (a person or a bot) keeps covering meanwhile; whoever is quicker goes first.
+  useEffect(() => {
+    if (actor === null || actor !== game.defender || game.taking || game.table.length === 0 || game.over || !onBotThrow || paused) return
+    if (!game.players.some((p, i) => !p.human && !p.out && i !== game.defender)) return
+    const t = setTimeout(onBotThrow, Math.round(botDelay * (0.55 + Math.random() * 0.6)))
+    return () => clearTimeout(t)
+  }, [game, actor, paused, botDelay, onBotThrow])
 
   // Round results and notable moves become a short banner over the table.
   useEffect(() => {
@@ -350,33 +382,24 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     tap('medium')
     for (const m of moves) act(m)
   }
-  const confirmRef = useRef(confirm)
-  confirmRef.current = confirm
-  // A lead or throw-in goes out by itself once no more cards are added.
-  const autoThrow = staged[0]?.type === 'throw'
-  useEffect(() => {
-    if (!autoThrow || dragging) return
-    const t = setTimeout(() => confirmRef.current(), 2200)
-    return () => clearTimeout(t)
-  }, [plan, autoThrow, dragging])
 
   const transferSeat = nextDefender(game)
   const optionsFor = (cardId: string) => viewLegal.filter((a) => 'cardId' in a && a.cardId === cardId)
+  // Leads and throw-ins go straight onto the table, one card at a time, whenever the rules allow:
+  // there is no waiting for the defender to finish covering.
   const throwWith = (cardId: string): string[] | null => {
-    if (!thrower || staged.some((a) => a.type !== 'throw')) return null
-    const more = [...throwIds, cardId]
-    if (canThrow(game, me, more)) return more
+    if (!thrower || staged.length > 0) return null
     return canThrow(game, me, [cardId]) ? [cardId] : null
   }
   const canStage = (cardId: string) => !!throwWith(cardId) || optionsFor(cardId).length > 0
 
   const stage = (move: Action) => {
-    // Covering is played straight away; leading and throwing in wait a moment for more cards of the same rank.
-    if (move.type === 'defend') return play(move)
+    // Covering, leading and throwing in are played straight away; only a transfer waits to be confirmed.
+    if (move.type === 'throw') playCard()
+    if (move.type === 'defend' || move.type === 'throw') return play(move)
     tap('light')
     setSelected(null)
-    if (move.type === 'throw') playCard()
-    setPlan(move.type === 'throw' ? [move] : [...staged, move])
+    setPlan([...staged, move])
   }
 
   /** Puts a card from the hand on the table, aimed at `zone` when it was dragged somewhere. */
@@ -410,12 +433,6 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   /** Takes a lined-up card back into the hand. */
   const unstage = (cardId: string) => {
     tap('light')
-    const first = staged[0]
-    if (first?.type === 'throw') {
-      const rest = first.cardIds.filter((id) => id !== cardId)
-      setPlan(rest.length && canThrow(game, me, rest) ? [{ type: 'throw', cardIds: rest }] : [])
-      return
-    }
     const rest = staged.filter((a) => !('cardId' in a && a.cardId === cardId))
     try {
       rest.reduce((s, a) => previewAction(s, me, a), game)
@@ -471,9 +488,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const main: { label: string; tone: 'primary' | 'danger'; onClick?: () => void } =
     staged[0]?.type === 'transfer'
       ? { label: 'Перевести', tone: 'primary', onClick: confirm }
-      : autoThrow
-        ? { label: 'Кладём…', tone: 'primary' }
-        : take && myTurn
+      : take && myTurn
           ? { label: 'Беру', tone: 'danger', onClick: () => play(take) }
           : pass && myTurn
             ? { label: passLabel, tone: 'primary', onClick: () => play(pass) }
@@ -481,7 +496,10 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
 
   const n = game.players.length
   const opponents = Array.from({ length: n - 1 }, (_, k) => game.players[(me + 1 + k) % n])
-  const handStep = hand.length > 1 ? Math.min(hw * 0.92, (Math.min(window.innerWidth - 32 - (flat ? 240 : 0), 860) - hw) / (hand.length - 1)) : 0
+  // The fan gets the width of its own row (beside the buttons on a phone lying on its side).
+  const handRoom = Math.min(860, meW ? meW - (flat ? controlsW + 12 : 0) : window.innerWidth - 32 - (flat ? 240 : 0))
+  const fanGeo = fanLayout(hand.length, hw, handRoom)
+  const handStep = fanGeo.step
   handIds.current = hand.map((c) => c.id)
   const fanAt = (e: React.PointerEvent) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -725,8 +743,8 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                   animate={target && !dragging ? { y: [0, -4, 0] } : { y: 0, scale: target && hot === `pair-${i}` ? 1.06 : 1 }}
                   transition={target && !dragging ? { duration: 1, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 400, damping: 30 }}
                 >
-                  <CardView card={pair.attack} faceUp trump={game.trump} className={attackPending ? 'pending' : ''} />
-                  {pair.defense && <CardView card={pair.defense} faceUp trump={game.trump} className={`cover ${coverPending ? 'pending' : ''}`} style={{ rotate: 7 }} />}
+                  <CardView card={pair.attack} faceUp trump={game.trump} className={attackPending ? 'pending' : ''} flight={flightOf(pair.attack.id)} />
+                  {pair.defense && <CardView card={pair.defense} faceUp trump={game.trump} className={`cover ${coverPending ? 'pending' : ''}`} style={{ rotate: 7 }} flight={flightOf(pair.defense.id)} />}
                 </motion.div>
               )
             })}
@@ -785,8 +803,8 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
           </AnimatePresence>
         </motion.section>
 
-        <section className="me" aria-label="Ваши карты">
-          <div className="controls">
+        <section ref={meRef} className="me" aria-label="Ваши карты">
+          <div ref={controlsRef} className="controls">
             <AnimatePresence mode="wait" initial={false}>
               <motion.p key={status} className={`status ${actor === me ? 'yours' : ''}`} {...fade}>
                 {status}
@@ -810,14 +828,13 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                 )}
               </AnimatePresence>
               <AnimatePresence initial={false}>
-                {(main.onClick || autoThrow) && (
+                {main.onClick && (
                 <motion.button
                   key="main"
                   {...pop}
                 type="button"
-                className={`main-action ${main.tone} ${main.onClick ? 'ready' : ''}`}
-                disabled={!main.onClick}
-                whileTap={main.onClick ? { scale: 0.95 } : undefined}
+                className={`main-action ${main.tone} ready`}
+                whileTap={{ scale: 0.95 }}
                 onClick={main.onClick}
               >
                 <AnimatePresence mode="popLayout" initial={false}>
@@ -832,7 +849,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
           </div>
           <div
             className="hand"
-            style={{ width: hand.length ? hw + handStep * (hand.length - 1) : hw }}
+            style={{ width: fanGeo.width, marginInline: fanGeo.pad, marginBottom: fanGeo.below }}
             onPointerDown={(e) => {
               const id = (e.target as HTMLElement).closest<HTMLElement>('[data-card]')?.dataset.card ?? null
               press.current = { x: e.clientX, y: e.clientY, id, mode: 'wait' }
@@ -867,8 +884,6 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
             onPointerLeave={() => !press.current && setFan(null)}
           >
             {hand.map((c, i) => {
-              const mid = (hand.length - 1) / 2
-              const off = i - mid
               const can = playable.has(c.id)
               const isSel = selected === c.id
               const isDrag = dragging === c.id
@@ -876,6 +891,8 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               const dist = fan === null || isDrag ? 9 : Math.abs(i - fan)
               const k = Math.max(0, 1 - dist / 2.4)
               const push = fan === null || dist === 0 ? 0 : Math.sign(i - fan) * hw * 0.3 * Math.min(1, k * 1.7)
+              // neighbours part inside the fan; the edge cards don't get shoved past its ends
+              const x = Math.max(0, Math.min(fanGeo.width - hw, i * handStep + push))
               return (
                 // The outer box slides the card along the hand with a transform (cheap), the inner one is dragged.
                 <motion.div
@@ -883,7 +900,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                   className="hand-pos"
                   style={{ zIndex: isDrag ? 200 : fan === i ? 100 : i + 1, transformOrigin: '50% 100%' }}
                   initial={false}
-                  animate={{ x: i * handStep + push, y: -hw * 0.3 * k, scale: 1 + 0.2 * k }}
+                  animate={{ x, y: -hw * 0.3 * k, scale: 1 + 0.2 * k }}
                   transition={{ type: 'spring', stiffness: 320, damping: 30 }}
                 >
                 <HandSlot
@@ -926,7 +943,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                     trump={game.trump}
                     className={`${can ? 'playable' : actor === me ? 'dim' : ''} ${isSel ? 'selected' : ''} ${hint ? 'beats' : ''}`}
                     flight={flightOf(c.id)}
-                    animate={{ rotate: isDrag ? 0 : off * Math.min(3, 14 / hand.length), y: isDrag ? 0 : Math.min(10, off * off * 0.7) + (isSel ? -hw * 0.2 : 0) }}
+                    animate={{ rotate: isDrag ? 0 : fanGeo.angle(i), y: isDrag ? 0 : fanGeo.drop(i) + (isSel ? -hw * 0.2 : 0) }}
                     onClick={() => onCard(c)}
                     disabled={!can}
                   />
@@ -1091,7 +1108,6 @@ function HandSlot({ id, registry, children, ...props }: { id: string; registry: 
 
 function planText(plan: Action[], g: GameState): string {
   const first = plan[0]
-  if (first.type === 'throw') return 'Можно добавить ещё карты'
   if (first.type === 'transfer') return 'Перевести ход дальше?'
   return g.table.length ? 'Подтвердите' : ''
 }
@@ -1127,6 +1143,8 @@ function statusText(g: GameState, actor: number | null, me: number): string {
     if (!canAdd) return 'Подкинуть нечего'
     return g.attacker === me ? 'Подкиньте или «Бито»' : 'Подкиньте или «Пас»'
   }
+  // Throwing in doesn't wait for a turn: say so while the defender is still covering.
+  if (actor !== null && actor !== me && legalActions(g, me).some((a) => a.type === 'attack')) return 'Можно подкинуть'
   // Whose turn it is already shows on the seats, so only the player's own moves need words.
   return ''
 }
