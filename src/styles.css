@@ -2405,7 +2405,10 @@ button.card:disabled {
 .friends-empty { display: grid; justify-items: center; gap: 8px; text-align: center; color: var(--muted); padding: 16px 8px; }
 .friends-empty-art { font-size: 40px; }
 .seat-add { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px dashed var(--muted); background: none; color: var(--muted); font-size: 15px; line-height: 1; }
-.seat-add.done { border-style: solid; border-color: var(--good); color: var(--good); }
+.seat-add.done { width: 16px; height: 16px; border: none; background: color-mix(in srgb, var(--good) 22%, transparent); color: var(--good); font-size: 10px; font-weight: 700; }
+/* The add button stays small next to the name; an invisible ring around it keeps a thumb-sized (44 px) tap area. */
+.seat-add { position: relative; flex: none; display: inline-grid; place-items: center; }
+.seat-add:not(:disabled)::after { content: ''; position: absolute; inset: -11px; border-radius: 50%; }
 .invite-list { display: grid; gap: 8px; }
 .invite-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 10px 10px 14px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); }
 .invite-who { display: flex; align-items: center; gap: 10px; min-width: 0; font-family: var(--font-ui); }
@@ -2503,7 +2506,6 @@ small,
   height: 44px;
 }
 .friend-actions button,
-.seat-add,
 .link {
   min-width: 44px;
   min-height: 44px;
