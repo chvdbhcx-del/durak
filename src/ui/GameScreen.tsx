@@ -12,6 +12,7 @@ import { playCard, playDeal, playSweep } from './sfx'
 import { BOT_NAMES } from './pickers'
 import { AVATARS, type Stats } from './settings'
 import { SuitIcon } from './SuitIcon'
+import { fanLayout } from './fan'
 
 const DEAL_STEP_MS = 120
 
@@ -148,6 +149,8 @@ const DEAL_FLIGHT: Flight = { kind: 'draw', delay: 0 }
 export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onBotThrow, onFinished, series, wager, payout, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, room }: Props) {
   const { table: cw, hand: hw, flat } = useCardSizes()
   const [stripRef, stripW] = useWidth<HTMLElement>()
+  const [meRef, meW] = useWidth<HTMLElement>()
+  const [controlsRef, controlsW] = useWidth<HTMLDivElement>()
   const { dealt, dealing } = useDealing(game)
   const zones = useMemo(() => zoneMap(game), [game])
   const prevZones = useRef(zones)
@@ -165,6 +168,20 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const [fan, setFan] = useState<number | null>(null)
   const slotControls = useRef(new Map<string, DragControls>())
   const press = useRef<{ x: number; y: number; id: string | null; mode: 'wait' | 'scrub' | 'drag' } | null>(null)
+  // A finger lifted outside the hand (or a gesture the system took over) must not leave a card raised.
+  useEffect(() => {
+    const end = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse') return
+      press.current = null
+      setFan(null)
+    }
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+    return () => {
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+    }
+  }, [])
   const handIds = useRef<string[]>([])
   const prev = useRef<GameState>(game)
   const counted = useRef<number | null>(null)
@@ -479,7 +496,10 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
 
   const n = game.players.length
   const opponents = Array.from({ length: n - 1 }, (_, k) => game.players[(me + 1 + k) % n])
-  const handStep = hand.length > 1 ? Math.min(hw * 0.92, (Math.min(window.innerWidth - 32 - (flat ? 240 : 0), 860) - hw) / (hand.length - 1)) : 0
+  // The fan gets the width of its own row (beside the buttons on a phone lying on its side).
+  const handRoom = Math.min(860, meW ? meW - (flat ? controlsW + 12 : 0) : window.innerWidth - 32 - (flat ? 240 : 0))
+  const fanGeo = fanLayout(hand.length, hw, handRoom)
+  const handStep = fanGeo.step
   handIds.current = hand.map((c) => c.id)
   const fanAt = (e: React.PointerEvent) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -783,8 +803,8 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
           </AnimatePresence>
         </motion.section>
 
-        <section className="me" aria-label="Ваши карты">
-          <div className="controls">
+        <section ref={meRef} className="me" aria-label="Ваши карты">
+          <div ref={controlsRef} className="controls">
             <AnimatePresence mode="wait" initial={false}>
               <motion.p key={status} className={`status ${actor === me ? 'yours' : ''}`} {...fade}>
                 {status}
@@ -829,7 +849,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
           </div>
           <div
             className="hand"
-            style={{ width: hand.length ? hw + handStep * (hand.length - 1) : hw }}
+            style={{ width: fanGeo.width, marginInline: fanGeo.pad, marginBottom: fanGeo.below }}
             onPointerDown={(e) => {
               const id = (e.target as HTMLElement).closest<HTMLElement>('[data-card]')?.dataset.card ?? null
               press.current = { x: e.clientX, y: e.clientY, id, mode: 'wait' }
@@ -864,8 +884,6 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
             onPointerLeave={() => !press.current && setFan(null)}
           >
             {hand.map((c, i) => {
-              const mid = (hand.length - 1) / 2
-              const off = i - mid
               const can = playable.has(c.id)
               const isSel = selected === c.id
               const isDrag = dragging === c.id
@@ -873,6 +891,8 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
               const dist = fan === null || isDrag ? 9 : Math.abs(i - fan)
               const k = Math.max(0, 1 - dist / 2.4)
               const push = fan === null || dist === 0 ? 0 : Math.sign(i - fan) * hw * 0.3 * Math.min(1, k * 1.7)
+              // neighbours part inside the fan; the edge cards don't get shoved past its ends
+              const x = Math.max(0, Math.min(fanGeo.width - hw, i * handStep + push))
               return (
                 // The outer box slides the card along the hand with a transform (cheap), the inner one is dragged.
                 <motion.div
@@ -880,7 +900,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                   className="hand-pos"
                   style={{ zIndex: isDrag ? 200 : fan === i ? 100 : i + 1, transformOrigin: '50% 100%' }}
                   initial={false}
-                  animate={{ x: i * handStep + push, y: -hw * 0.3 * k, scale: 1 + 0.2 * k }}
+                  animate={{ x, y: -hw * 0.3 * k, scale: 1 + 0.2 * k }}
                   transition={{ type: 'spring', stiffness: 320, damping: 30 }}
                 >
                 <HandSlot
@@ -923,7 +943,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                     trump={game.trump}
                     className={`${can ? 'playable' : actor === me ? 'dim' : ''} ${isSel ? 'selected' : ''} ${hint ? 'beats' : ''}`}
                     flight={flightOf(c.id)}
-                    animate={{ rotate: isDrag ? 0 : off * Math.min(3, 14 / hand.length), y: isDrag ? 0 : Math.min(10, off * off * 0.7) + (isSel ? -hw * 0.2 : 0) }}
+                    animate={{ rotate: isDrag ? 0 : fanGeo.angle(i), y: isDrag ? 0 : fanGeo.drop(i) + (isSel ? -hw * 0.2 : 0) }}
                     onClick={() => onCard(c)}
                     disabled={!can}
                   />
