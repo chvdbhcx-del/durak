@@ -29,6 +29,29 @@ jobs:
       # Same numbering as the release workflow (1.1.0 is commit 8856a81), so the web version matches the app's.
       - run: echo "WEB_VERSION=1.1.$(( $(git rev-list --count HEAD) - 19 ))" >> "$GITHUB_ENV"
       - run: npm run build
+      # Keep the script and sound files of the last few deploys. A phone or tab that still has the
+      # previous index.html (GitHub Pages lets browsers cache it for 10 minutes) asks for those old
+      # files; with them gone the game loaded as a blank page right after every deploy.
+      - name: Keep files from recent deploys
+        run: |
+          mkdir -p dist/deploys
+          ls dist/assets > "dist/deploys/$(printf '%08d' "$GITHUB_RUN_NUMBER").txt"
+          if git fetch -q origin gh-pages; then
+            mkdir -p old
+            git archive FETCH_HEAD | tar -x -C old
+            if [ -d old/deploys ]; then
+              for list in $(ls old/deploys | sort | tail -n 4); do cp old/deploys/"$list" dist/deploys/; done
+              keep=$(cat dist/deploys/*.txt | sort -u)
+            else
+              keep=$(ls old/assets)
+              ls old/assets > dist/deploys/00000000.txt
+            fi
+            for f in $keep; do
+              if [ -f "old/assets/$f" ] && [ ! -e "dist/assets/$f" ]; then cp "old/assets/$f" dist/assets/; fi
+            done
+            rm -rf old
+          fi
+          ls dist/assets | wc -l
       - name: Push dist to gh-pages
         run: |
           cd dist
