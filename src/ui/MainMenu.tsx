@@ -5,6 +5,8 @@ import type { Settings, Stats } from './settings'
 import { useEffect, useState } from 'react'
 import { WalletPill } from './Money'
 import type { Wallet } from './wallet'
+import { App as NativeApp } from '@capacitor/app'
+import { isNative } from './native'
 import { UpdateLog, watchUpdateLog, WEB_VERSION } from './updates'
 
 interface Props {
@@ -52,6 +54,15 @@ const enter = (delay: number) => ({
   transition: { delay, type: 'spring', stiffness: 380, damping: 30 },
 })
 
+/** The installed APK's version, which over-the-air updates leave behind the game's own version. */
+function useApkVersion() {
+  const [apkVersion, setApkVersion] = useState('')
+  useEffect(() => {
+    if (isNative) NativeApp.getInfo().then((i) => setApkVersion(i.version)).catch(() => {})
+  }, [])
+  return apkVersion
+}
+
 function useUpdateLog() {
   const [log, setLog] = useState<UpdateLog | null>(null)
   useEffect(() => watchUpdateLog(setLog), [])
@@ -61,6 +72,7 @@ function useUpdateLog() {
 export function MainMenu({ settings, stats, wallet, bonus, broke, onBonus, onRefill, canContinue, onContinue, onPlay, onOpen, friendCount }: Props) {
   const setup = `${settings.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'} · ${settings.deckSize} карт · ${settings.opponents} ${settings.opponents === 1 ? 'соперник' : settings.opponents < 5 ? 'соперника' : 'соперников'}`
   const updateLog = useUpdateLog()
+  const apkVersion = useApkVersion()
   return (
     <motion.main className="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.25 }}>
       <WalletPill wallet={wallet} bonus={bonus} broke={broke} onBonus={onBonus} onRefill={onRefill} />
@@ -119,6 +131,7 @@ export function MainMenu({ settings, stats, wallet, bonus, broke, onBonus, onRef
 
       <motion.p className="menu-version" {...enter(0.9)}>
         Версия {WEB_VERSION}
+        {apkVersion && apkVersion !== WEB_VERSION && ` · APK ${apkVersion}`}
         {updateLog && <span className="update-log">{updateLog.text}</span>}
       </motion.p>
     </motion.main>
