@@ -6,14 +6,14 @@ import { beats, Card, rankLabel, sortHand, SUIT_NAME } from '../engine/cards'
 import { EMOTES, type Emote } from '../engine/emotes'
 import type { Friends } from '../net/useFriends'
 import { Action, canThrow, currentActor, GameState, HAND_SIZE, legalActions, previewAction } from '../engine/game'
-import { CardView, type Flight } from './CardView'
+import { CardView, flightEnd, type Flight } from './CardView'
 import { notify, tap } from './native'
 import { playCard, playDeal, playSweep } from './sfx'
 import { BOT_NAMES } from './pickers'
 import { AVATARS, type Stats } from './settings'
 import { SuitIcon } from './SuitIcon'
 
-const DEAL_STEP_MS = 75
+const DEAL_STEP_MS = 120
 
 export const pop = {
   initial: { opacity: 0, scale: 0.85, y: 6 },
@@ -141,6 +141,7 @@ function zoneMap(g: GameState): Map<string, string> {
 
 /** How many cards of the deck and the discard pile are actually drawn. */
 const PILE_SHOWN = 9
+const DEAL_FLIGHT: Flight = { kind: 'draw', delay: 0 }
 
 export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, series, wager, payout, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, room }: Props) {
   const { table: cw, hand: hw, flat } = useCardSizes()
@@ -193,10 +194,17 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
       else if (zone.startsWith('hand-') && was === 'deck') drawn.push(id)
       else if (zone.startsWith('hand-') && was === 'table') taken.push(id)
     }
-    swept.forEach((id, i) => out.set(id, { kind: 'discard', delay: 0.35 + i * 0.07 }))
-    taken.forEach((id, i) => out.set(id, { kind: 'take', delay: 0.3 + i * 0.05 }))
-    const start = swept.length || taken.length ? 0.3 + (swept.length + taken.length) * 0.07 + 0.55 : 0.25
-    drawn.forEach((id, i) => out.set(id, { kind: 'draw', delay: start + i * 0.1 }))
+    // A slight stagger between cards, kept within about a second however many cards move.
+    const step = (n: number, most: number, total: number) => (n > 1 ? Math.min(most, total / (n - 1)) : 0)
+    // Cards set off almost at once: a card waiting for its turn would sit frozen where it was.
+    const sweepStep = step(swept.length, 0.08, 0.6)
+    const takeStep = step(taken.length, 0.06, 0.45)
+    swept.forEach((id, i) => out.set(id, { kind: 'discard', delay: 0.08 + i * sweepStep }))
+    taken.forEach((id, i) => out.set(id, { kind: 'take', delay: 0.05 + i * takeStep }))
+    // Refills follow close behind, while the swept or taken cards are still gliding.
+    const start = out.size ? 0.45 : 0.05
+    const drawStep = step(drawn.length, 0.09, 0.5)
+    drawn.forEach((id, i) => out.set(id, { kind: 'draw', delay: start + i * drawStep }))
     return out
   }, [zones, dealing, game.options.seed])
   useEffect(() => {
@@ -219,8 +227,21 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     if (dealing && dealt > 0) playDeal()
   }, [dealt, dealing])
 
-  const actor = dealing ? null : currentActor(game)
-  const legal = useMemo(() => (dealing ? [] : legalActions(game, me)), [game, dealing, me])
+  // The next move waits until every card in flight has landed, so a turn never cuts a flight short.
+  const [landed, setLanded] = useState(flights)
+  const settling = flights.size > 0 && landed !== flights
+  useEffect(() => {
+    if (flights.size === 0) return
+    const ms = Math.max(...[...flights.values()].map(flightEnd)) * 1000
+    const t = setTimeout(() => setLanded(flights), ms)
+    return () => clearTimeout(t)
+  }, [flights])
+  const waiting = dealing || settling
+  /** opening hands fly out of the deck one by one */
+  const flightOf = (id: string) => flights.get(id) ?? (dealing ? DEAL_FLIGHT : undefined)
+
+  const actor = waiting ? null : currentActor(game)
+  const legal = useMemo(() => (waiting ? [] : legalActions(game, me)), [game, waiting, me])
 
   // The table and hand as they would be after the lined-up moves; a plan that no longer fits is dropped.
   const preview = useMemo(() => {
@@ -236,7 +257,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
   const pending = useMemo(() => new Set(staged.flatMap((a) => (a.type === 'throw' ? a.cardIds : 'cardId' in a ? [a.cardId] : []))), [staged])
   const throwIds = staged[0]?.type === 'throw' ? staged[0].cardIds : []
   const thrower = legal.some((a) => a.type === 'attack')
-  const viewLegal = useMemo(() => (dealing || !preview ? legal : legalActions(view, me)), [dealing, preview, legal, view, me])
+  const viewLegal = useMemo(() => (waiting || !preview ? legal : legalActions(view, me)), [waiting, preview, legal, view, me])
 
   const mine = view.players[me]
   const hand = useMemo(() => sortHand(mine.hand, game.trump).filter((c) => !hiddenIds.has(c.id)), [mine.hand, game.trump, hiddenIds])
@@ -630,7 +651,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                   </div>
                   <motion.div className="mini-hand" animate={{ width: seatMini + step * Math.max(0, cards.length - 1) }} transition={{ type: 'spring', stiffness: 400, damping: 34 }}>
                     {cards.map((c, i) => (
-                      <CardView key={c.id} card={c} faceUp={false} trump={game.trump} size="mini" style={{ left: i * step }} flight={flights.get(c.id)} />
+                      <CardView key={c.id} card={c} faceUp={false} trump={game.trump} size="mini" style={{ left: i * step }} flight={flightOf(c.id)} />
                     ))}
                   </motion.div>
                   <AnimatePresence mode="wait" initial={false}>
@@ -740,9 +761,9 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
 
           <div className="discard-zone">
             <div className="discard">
-              {game.discard.slice(-PILE_SHOWN).map((c) => {
+              {game.discard.slice(-Math.max(PILE_SHOWN, game.discard.filter((c) => flights.has(c.id)).length)).map((c) => {
                 const t = hashTilt(c.id)
-                return <CardView key={c.id} card={c} faceUp={false} trump={game.trump} className="stacked" style={{ rotate: (t - 0.5) * 50, x: (t - 0.5) * 10, y: (0.5 - t) * 8 }} flight={flights.get(c.id)} />
+                return <CardView key={c.id} card={c} faceUp={false} trump={game.trump} className="stacked" style={{ rotate: (t - 0.5) * 50, x: (t - 0.5) * 10, y: (0.5 - t) * 8 }} flight={flightOf(c.id)} />
               })}
             </div>
             <span className="zone-label">{game.discard.length ? `Бито: ${game.discard.length}` : 'Бито'}</span>
@@ -904,7 +925,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                     faceUp
                     trump={game.trump}
                     className={`${can ? 'playable' : actor === me ? 'dim' : ''} ${isSel ? 'selected' : ''} ${hint ? 'beats' : ''}`}
-                    flight={flights.get(c.id)}
+                    flight={flightOf(c.id)}
                     animate={{ rotate: isDrag ? 0 : off * Math.min(3, 14 / hand.length), y: isDrag ? 0 : Math.min(10, off * off * 0.7) + (isSel ? -hw * 0.2 : 0) }}
                     onClick={() => onCard(c)}
                     disabled={!can}
