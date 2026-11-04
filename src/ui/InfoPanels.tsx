@@ -2,6 +2,8 @@ import { animate, motion, useMotionValue, useTransform } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import type { Suit } from '../engine/cards'
 import { AVATARS, type HistoryEntry, type Settings, type Stats } from './settings'
+import { Coin } from './Money'
+import { formatCoins, type Wallet } from './wallet'
 import { AvatarPicker, LookPicker, plural } from './pickers'
 import { Sheet, sheetItem } from './Sheet'
 import { SuitIcon } from './SuitIcon'
@@ -49,7 +51,7 @@ function CountUp({ value }: { value: number }) {
       unsub()
     }
   }, [value, mv, rounded])
-  return <>{text}</>
+  return <>{formatCoins(text)}</>
 }
 
 const SLICE_NAMES: [string, string][] = [
@@ -103,7 +105,7 @@ function gameNote(h: HistoryEntry) {
   return `${h.online ? 'Онлайн' : 'С ботами'} · ${h.mode === 'podkidnoy' ? 'подкидной' : 'переводной'} · ${h.players} ${plural(h.players, 'игрок', 'игрока', 'игроков')}`
 }
 
-export function StatsPanel({ stats, settings, onSettings, onClose, onReset }: { stats: Stats; settings: Settings; onSettings: (s: Settings) => void; onClose: () => void; onReset: () => void }) {
+export function StatsPanel({ stats, wallet, settings, onSettings, onClose, onReset }: { stats: Stats; wallet: Wallet; settings: Settings; onSettings: (s: Settings) => void; onClose: () => void; onReset: () => void }) {
   const [confirm, setConfirm] = useState(false)
   const games = stats.wins + stats.losses + stats.draws
   const rate = games ? stats.wins / games : 0
@@ -122,6 +124,29 @@ export function StatsPanel({ stats, settings, onSettings, onClose, onReset }: { 
         <AvatarPicker value={settings.avatar} onChange={(avatar) => onSettings({ ...settings, avatar })} />
       </motion.div>
       <LookPicker back={settings.cardBack} table={settings.tableStyle} onBack={(cardBack) => onSettings({ ...settings, cardBack })} onTable={(tableStyle) => onSettings({ ...settings, tableStyle })} />
+
+      <motion.div className="wallet-card" variants={sheetItem}>
+        <span className="wallet-card-main">
+          <Coin size={34} />
+          <span>
+            <span className="wallet-card-num">
+              <CountUp value={wallet.balance} />
+            </span>
+            <span className="stat-label">Монеты</span>
+          </span>
+        </span>
+        <span className="wallet-card-side">
+          <span>
+            Рекорд <b>{formatCoins(wallet.best)}</b>
+          </span>
+          <span>
+            Выиграно <b className="good">+{formatCoins(wallet.won)}</b>
+          </span>
+          <span>
+            Проиграно <b className="bad">−{formatCoins(wallet.lost)}</b>
+          </span>
+        </span>
+      </motion.div>
 
       <motion.div className="ring-wrap" variants={sheetItem}>
         <svg viewBox="0 0 120 120" className="ring" aria-hidden="true">

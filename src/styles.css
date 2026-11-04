@@ -2485,3 +2485,186 @@ small,
   font-size: var(--fs-sm);
 }
 .server-field > .link:hover { color: var(--fg); }
+
+/* Money: coins, balance, stakes and payouts */
+.coin {
+  flex: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+.coin-rim {
+  fill: #c98a2b;
+}
+.coin-face {
+  fill: #f0c46a;
+  stroke: #b47820;
+  stroke-width: 1;
+}
+.coin-mark {
+  fill: #b47820;
+}
+
+.wallet-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.wallet-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px 7px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.coins-num {
+  font-variant-numeric: tabular-nums;
+}
+.wallet-gift {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  font-size: 13px;
+}
+.wallet-gift span {
+  display: inline-block;
+}
+
+.tiles.four .tile {
+  padding-inline: 4px;
+}
+.stake-art {
+  position: relative;
+  width: 100%;
+  height: 40px;
+}
+.stake-coin {
+  position: absolute;
+  display: grid;
+}
+.stake-none {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: 24px;
+  color: var(--muted);
+}
+.stake-terms {
+  margin: 10px 2px 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--fg);
+}
+.stake-terms .good,
+.payout.good,
+.wallet-card .good {
+  color: var(--good);
+}
+.stake-terms .bad,
+.payout.bad,
+.wallet-card .bad {
+  color: var(--danger);
+}
+.stake-warn {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger);
+  text-align: center;
+  text-wrap: balance;
+}
+.stake-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+
+.payout {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin: 16px auto 0;
+  padding: 12px 16px;
+  border-radius: 18px;
+  background: var(--raise);
+  border: 1px solid var(--line);
+  width: fit-content;
+  min-width: 200px;
+}
+.payout.good {
+  border-color: color-mix(in srgb, var(--good) 40%, var(--line));
+  background: color-mix(in srgb, var(--good) 8%, var(--raise));
+}
+.payout.bad {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+  background: color-mix(in srgb, var(--danger) 8%, var(--raise));
+}
+.payout-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 28px;
+  line-height: 1;
+}
+.payout-balance {
+  font-size: 13px;
+  color: var(--muted);
+}
+.payout-balance .coins-num {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.wallet-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: linear-gradient(140deg, color-mix(in srgb, var(--accent) 12%, var(--raise)), var(--raise) 60%);
+}
+.wallet-card-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wallet-card-main > span:last-child {
+  display: grid;
+}
+.wallet-card-num {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.wallet-card-side {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.wallet-card-side b {
+  color: var(--fg);
+}

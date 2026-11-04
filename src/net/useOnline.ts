@@ -23,7 +23,7 @@ export interface Online {
   leave: () => void
   start: (level?: Level) => void
   act: (action: Action) => void
-  setLobby: (patch: Partial<Pick<LobbyInfo, 'bots' | 'mode' | 'deckSize' | 'cheat'>>) => void
+  setLobby: (patch: Partial<Pick<LobbyInfo, 'bots' | 'mode' | 'deckSize' | 'cheat' | 'stake'>>) => void
   kick: (token: string) => void
   /** host only: let the bot in `actor`'s seat make its move */
   stepBot: (actor: number, level?: Level) => void
@@ -309,6 +309,7 @@ export function useOnline(token: string, fid: string): Online {
       deckSize: l.deckSize,
       mode: l.mode,
       cheat: l.cheat,
+      stake: l.stake ?? 0,
       level,
       names,
       human: 0,

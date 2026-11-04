@@ -34,6 +34,8 @@ export interface LobbyInfo {
   mode: GameState['options']['mode']
   deckSize: GameState['options']['deckSize']
   cheat?: boolean
+  /** coins at stake per game, chosen by the host; 0 or missing plays for nothing */
+  stake?: number
   roster?: RosterEntry[]
 }
 

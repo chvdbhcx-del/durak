@@ -19,6 +19,8 @@ export interface Options {
   /** bot strength, normal when missing */
   level?: Level
   seed?: number
+  /** coins each player puts on this game; only the app's wallet reads it, the rules ignore it */
+  stake?: number
 }
 
 export interface Player {
