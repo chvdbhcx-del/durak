@@ -47,6 +47,8 @@ interface Props {
   botDelay: number
   /** called when a bot should move; left out for guests, whose bots run on the host */
   onBotTurn?: (actor: number) => void
+  /** called while the defender is covering, so a bot may throw in without waiting its turn */
+  onBotThrow?: () => void
   onFinished: (result: Result, loser: number | null) => void
   series?: Series | null
   /** this player's money on the game, if any */
@@ -143,7 +145,7 @@ function zoneMap(g: GameState): Map<string, string> {
 const PILE_SHOWN = 9
 const DEAL_FLIGHT: Flight = { kind: 'draw', delay: 0 }
 
-export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, series, wager, payout, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, room }: Props) {
+export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onBotThrow, onFinished, series, wager, payout, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, room }: Props) {
   const { table: cw, hand: hw, flat } = useCardSizes()
   const [stripRef, stripW] = useWidth<HTMLElement>()
   const { dealt, dealing } = useDealing(game)
@@ -274,6 +276,15 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
     const t = setTimeout(() => onBotTurn(actor), Math.round(botDelay * weight))
     return () => clearTimeout(t)
   }, [game, actor, paused, botDelay, onBotTurn])
+
+  // Bots don't wait for the defender either: after a short look at the table, one may throw in.
+  // The defender (a person or a bot) keeps covering meanwhile; whoever is quicker goes first.
+  useEffect(() => {
+    if (actor === null || actor !== game.defender || game.taking || game.table.length === 0 || game.over || !onBotThrow || paused) return
+    if (!game.players.some((p, i) => !p.human && !p.out && i !== game.defender)) return
+    const t = setTimeout(onBotThrow, Math.round(botDelay * (0.55 + Math.random() * 0.6)))
+    return () => clearTimeout(t)
+  }, [game, actor, paused, botDelay, onBotThrow])
 
   // Round results and notable moves become a short banner over the table.
   useEffect(() => {

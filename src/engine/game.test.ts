@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { beats, Card } from './cards'
-import { chooseAction, LOOKAHEAD } from './bot'
+import { chooseAction, eagerThrow, LOOKAHEAD } from './bot'
 import { botReaction, botReply } from './emotes'
 import { applyAction, canCheat, catchChance, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options } from './game'
 
@@ -122,6 +122,32 @@ describe('throwing in while the defender covers', () => {
     expect(legalActions(s, 1).some((a) => a.type === 'attack')).toBe(false)
     s = applyAction(s, 2, { type: 'attack', cardId: 'D7' })
     expect(s.table.length).toBe(2)
+  })
+})
+
+describe('bots throwing in during defense', () => {
+  it('a bot attacker throws a cheap matching card before the defender covers', () => {
+    let s = position([[card('H', 7), card('D', 7), card('S', 12)], [card('S', 6), card('H', 9), card('D', 10)]])
+    s = applyAction(s, 0, { type: 'attack', cardId: 'H7' })
+    expect(eagerThrow(s)).toEqual({ player: 0, action: { type: 'attack', cardId: 'D7' } })
+  })
+
+  it('games finish when bots throw in at random moments', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      let s = newGame(opts({ players: 2 + (seed % 3), seed, mode: seed % 2 ? 'podkidnoy' : 'perevodnoy' }))
+      let steps = 0
+      while (!s.over) {
+        const eager = (seed + steps) % 3 === 0 ? eagerThrow(s) : null
+        if (eager) s = applyAction(s, eager.player, eager.action)
+        else {
+          const actor = currentActor(s)!
+          s = applyAction(s, actor, chooseAction(s, actor, 'normal', true))
+        }
+        expect(cardCount(s)).toBe(36)
+        expect(s.table.filter((p) => !p.defense).length).toBeLessThanOrEqual(s.players[s.defender].hand.length)
+        if (++steps > 2000) throw new Error('game did not finish')
+      }
+    }
   })
 })
 
