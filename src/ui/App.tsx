@@ -1,6 +1,6 @@
 import { AnimatePresence } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { chooseAction } from '../engine/bot'
+import { chooseAction, eagerThrow } from '../engine/bot'
 import { botReaction, botReply, type Emote, fingerprint } from '../engine/emotes'
 import { Action, applyAction, currentActor, GameState, maxPlayers, newGame } from '../engine/game'
 import { normalizeCode, setRoomServer } from '../net/room'
@@ -119,6 +119,15 @@ export function App() {
   const onlineRef = useRef(online)
   onlineRef.current = online
   const stepOnlineBot = useCallback((actor: number) => onlineRef.current.stepBot(actor), [])
+  const throwOnlineBot = useCallback(() => onlineRef.current.botThrow(), [])
+  const throwLocalBot = useCallback(
+    () =>
+      setGame((g) => {
+        const t = g && eagerThrow(g)
+        return t ? applyAction(g, t.player, t.action) : g
+      }),
+    [],
+  )
   const stepLocalBot = useCallback((actor: number) => setGame((g) => (g && currentActor(g) === actor ? applyAction(g, actor, chooseAction(g, actor)) : g)), [])
   // The finished game's setup goes into the history, so keep the live game in a ref.
   const liveRef = useRef<{ game: GameState | null; online: boolean }>({ game: null, online: false })
@@ -302,6 +311,7 @@ export function App() {
         paused={false}
         botDelay={BOT_DELAY[settings.speed]}
         onBotTurn={host ? stepOnlineBot : undefined}
+        onBotThrow={host ? throwOnlineBot : undefined}
         emote={online.emote}
         onEmote={online.sendEmote}
         friends={friends}
@@ -325,6 +335,7 @@ export function App() {
         paused={panel !== null}
         botDelay={BOT_DELAY[settings.speed]}
         onBotTurn={stepLocalBot}
+        onBotThrow={throwLocalBot}
         onFinished={recordResult}
         wager={wallet.wager?.seed === game.options.seed ? wallet.wager : null}
         payout={payout?.seed === game.options.seed ? payout : null}

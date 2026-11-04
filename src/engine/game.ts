@@ -220,8 +220,17 @@ export function canCheat(s: GameState, player: number) {
   return !!s.options.cheat && s.players[player].human && !s.caught?.includes(player)
 }
 
+/**
+ * Whether `player` may throw in right now without waiting for a turn: anyone attacking may add
+ * cards while the defender is still covering, as at a real table.
+ */
+function mayThrowAnytime(s: GameState, player: number): boolean {
+  const p = s.players[player]
+  return !s.over && !!p && !p.out && player !== s.defender && s.table.length > 0
+}
+
 export function legalActions(s: GameState, player: number): Action[] {
-  if (currentActor(s) !== player) return []
+  if (currentActor(s) !== player) return mayThrowAnytime(s, player) ? throwInCards(s, player).map((c): Action => ({ type: 'attack', cardId: c.id })) : []
   const hand = s.players[player].hand
   if (s.table.length === 0) return hand.map((c) => ({ type: 'attack', cardId: c.id }))
 

@@ -20,7 +20,7 @@ interface Props {
 
 export interface Flight {
   delay: number
-  kind: 'draw' | 'discard' | 'take'
+  kind: 'draw' | 'discard' | 'take' | 'play'
 }
 
 // Cards glide on eased curves instead of springs: a gentle start and a long soft landing, no overshoot.
@@ -29,6 +29,8 @@ export const cardSpring = { type: 'tween', ease: [0.22, 1, 0.36, 1], duration: 0
 const FLIGHT: Record<Flight['kind'], { ease: [number, number, number, number]; duration: number }> = {
   // out of the deck into a hand
   draw: { ease: [0.3, 0.1, 0.2, 1], duration: 0.95 },
+  // out of another player's fan onto the table: a lead, a cover or a throw-in
+  play: { ease: [0.35, 0, 0.2, 1], duration: 0.8 },
   // from the table into the hand of the player who takes
   take: { ease: [0.42, 0, 0.2, 1], duration: 1.15 },
   // the sweep into the discard pile is the slowest and softest: the cards lift, glide, and settle
