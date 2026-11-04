@@ -125,6 +125,8 @@ export interface HostEvents {
   onReconnecting: (on: boolean) => void
 }
 
+export const SAME_DEVICE = 'Эта комната открыта на этом же устройстве. Отправьте ссылку другому игроку.'
+
 export class HostRoom {
   private peer: Peer | null = null
   private conns = new Map<string, DataConnection>()
@@ -133,10 +135,15 @@ export class HostRoom {
   private retry: ReturnType<typeof setTimeout> | null = null
   code = ''
 
-  /** `code` reopens a room that already exists, e.g. after the app was reloaded. */
+  /**
+   * `code` reopens a room that already exists, e.g. after the app was reloaded. `ownToken` is the host's
+   * device token: a guest arriving with it is this same browser profile (another tab, or a home-screen
+   * site sharing the browser's storage) and would take over the host's seat, so it is turned away.
+   */
   constructor(
     private events: HostEvents,
     code?: string,
+    private ownToken = '',
   ) {
     this.code = code ?? randomCode()
     this.open(0, !!code)
@@ -184,6 +191,11 @@ export class HostRoom {
       conn.on('data', (raw) => {
         const msg = raw as ToHost
         if (msg.t === 'hello') {
+          if (this.ownToken && msg.token === this.ownToken) {
+            conn.send({ t: 'closed', reason: SAME_DEVICE } satisfies ToGuest)
+            setTimeout(() => conn.close(), 200)
+            return
+          }
           token = msg.token
           const old = this.conns.get(token)
           this.conns.set(token, conn)

@@ -235,7 +235,7 @@ export function useOnline(token: string, fid: string): Online {
         setPhase('error')
         writeSaved(null)
       },
-    }, restore?.code)
+    }, restore?.code, token)
   }
 
   const create: Online['create'] = ({ name, mode, deckSize, cheat }) => openHost(name, null, { mode, deckSize, cheat })

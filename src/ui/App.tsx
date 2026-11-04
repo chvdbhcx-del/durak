@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { chooseAction, eagerThrow } from '../engine/bot'
 import { botReaction, botReply, type Emote, fingerprint } from '../engine/emotes'
 import { Action, applyAction, currentActor, GameState, maxPlayers, newGame } from '../engine/game'
-import { normalizeCode, setRoomServer } from '../net/room'
+import { setRoomServer } from '../net/room'
+import { inBrowserTab, type Invite, parseInvite, watchInvites } from './deeplink'
 import { useFriends } from '../net/useFriends'
 import { hasSavedRoom, useOnline } from '../net/useOnline'
 import { GameScreen, Result, Series } from './GameScreen'
@@ -54,20 +55,12 @@ function startGame(s: Settings, stake: number): GameState {
 
 
 /** A room code from an invite link like …/durak/#join-AB3CD, plus the private server a link may carry (&s=…). */
-function inviteFromHash(): { code: string; server: string } {
-  const m = /^#join-([A-Za-z0-9]+)(?:&s=(.+))?/.exec(window.location.hash)
-  if (!m) return { code: '', server: '' }
-  let server = ''
-  try {
-    server = m[2] ? decodeURIComponent(m[2]) : ''
-  } catch {
-    /* a mangled link just falls back to the public server */
-  }
-  return { code: normalizeCode(m[1]), server }
+function inviteFromUrl(): Invite {
+  return parseInvite(window.location.href) ?? { code: '', server: '' }
 }
 
 export function App() {
-  const [invite] = useState(inviteFromHash)
+  const [invite, setInvite] = useState(inviteFromUrl)
   const [settings, setSettings] = useState<Settings>(() => {
     const s = loadSettings()
     return invite.server ? { ...s, server: invite.server } : s
@@ -112,8 +105,23 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useEffect(() => {
-    if (inviteCode) history.replaceState(null, '', window.location.pathname + window.location.search)
+    if (inviteCode && window.location.hash) history.replaceState(null, '', window.location.pathname + window.location.search)
   }, [inviteCode])
+  // A link that reaches the app while it is already open (or launches the native app) lands in the same join screen.
+  const inviteWatch = useRef<(inv: Invite) => void>(() => {})
+  inviteWatch.current = (inv) => {
+    if (inv.code === invite.code && screen === 'online') return
+    if (busyRef.current) {
+      friends.say(`Приглашение в комнату ${inv.code}: доиграйте партию и войдите по коду`)
+      return
+    }
+    if (inv.server && inv.server !== settings.server) setSettings((s) => ({ ...s, server: inv.server }))
+    online.leave()
+    setPanel(null)
+    setInvite(inv)
+    setScreen('online')
+  }
+  useEffect(() => watchInvites((inv) => inviteWatch.current(inv)), [])
 
   // Callbacks handed to the table stay stable, so a re-render doesn't restart its bot timer.
   const onlineRef = useRef(online)
@@ -350,17 +358,19 @@ export function App() {
   } else if (screen === 'online') {
     view = (
       <OnlineScreen
-        key="online"
+        key={`online-${inviteCode}`}
         online={online}
         settings={settings}
         wallet={wallet}
         onChange={setSettings}
         initialCode={inviteCode}
+        offerApp={!!inviteCode && !invite.noApp && inBrowserTab()}
         friends={friends}
         onInviteFriend={inviteFriend}
         onBack={() => {
           online.leave()
           setScreen(inviteCode ? 'menu' : 'play')
+          setInvite({ code: '', server: '' })
         }}
       />
     )

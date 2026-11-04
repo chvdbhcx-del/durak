@@ -18,6 +18,21 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Invites: durak://join/CODE, which the site's "Открыть в приложении" button opens. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="durak" android:host="join" />
+            </intent-filter>
+            <!-- The shared https link itself, verified through https://chvdbhcx-del.github.io/.well-known/assetlinks.json
+                 (served from the chvdbhcx-del.github.io repository, see site-root/). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="chvdbhcx-del.github.io" android:pathPrefix="/durak" />
+            </intent-filter>
         </activity>
 
         <provider

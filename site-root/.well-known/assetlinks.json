@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.chvdbhcx.durak",
+      "sha256_cert_fingerprints": ["07:61:B4:4E:2B:99:9B:6C:11:73:2E:4A:05:83:87:ED:C7:A2:4C:3C:A3:AB:67:82:B4:3C:50:2A:60:9A:24:9F"]
+    }
+  }
+]

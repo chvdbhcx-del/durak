@@ -11,8 +11,8 @@ import { BackButton } from './PlayScreen'
 import { BOT_NAMES, CheatPicker, DeckPicker, Group, ModePicker, plural } from './pickers'
 import type { Settings } from './settings'
 import { sheetList } from './Sheet'
+import { appLink, inviteUrl, webPlatform } from './deeplink'
 
-export const SITE_URL = 'https://chvdbhcx-del.github.io/durak/'
 
 interface Props {
   online: Online
@@ -20,6 +20,8 @@ interface Props {
   wallet: Wallet
   onChange: (s: Settings) => void
   initialCode: string
+  /** opened from an invite in a plain browser tab: offer the installed app first */
+  offerApp?: boolean
   friends: Friends
   onInviteFriend: (fid: string) => void
   onBack: () => void
@@ -71,6 +73,44 @@ function ServerField({ value, onChange }: { value: string; onChange: (s: string)
   )
 }
 
+/**
+ * Shown when an invite opens in a plain browser tab. The browser keeps its own profile (name, coins,
+ * friends) apart from the app and from a site on the home screen, so the invite is offered there first.
+ */
+function AppHandoff({ code, server }: { code: string; server: string }) {
+  const platform = webPlatform()
+  const link = appLink({ code, server }, platform)
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    } catch {
+      /* clipboard blocked: the code is on screen */
+    }
+  }
+  return (
+    <motion.section className="app-handoff" initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 320, damping: 26 }}>
+      <span className="handoff-title">Вас позвали в комнату {code}</span>
+      {link && (
+        <motion.a className="primary big handoff-open" href={link} whileTap={{ scale: 0.96 }}>
+          Открыть в приложении
+        </motion.a>
+      )}
+      <p className="handoff-note">
+        {platform === 'ios'
+          ? 'Дурак на экране «Домой»? Откройте его и введите код: iPhone не передаёт ему ссылки сам.'
+          : 'Дурак на рабочем столе как сайт? Откройте его и введите код.'}
+      </p>
+      <motion.button type="button" className="ghost handoff-copy" whileTap={{ scale: 0.95 }} onClick={copy}>
+        {copied ? 'Код скопирован' : `Скопировать код ${code}`}
+      </motion.button>
+      <p className="handoff-note small">В браузере свой профиль: имя и монеты здесь не те, что в приложении.</p>
+    </motion.section>
+  )
+}
+
 function NameBadge({ name, onChange }: { name: string; onChange: (n: string) => void }) {
   const [editing, setEditing] = useState(false)
   return (
@@ -116,7 +156,7 @@ function CardSpinner() {
   )
 }
 
-export function OnlineScreen({ online, settings, wallet, onChange, initialCode, friends, onInviteFriend, onBack }: Props) {
+export function OnlineScreen({ online, settings, wallet, onChange, initialCode, offerApp = false, friends, onInviteFriend, onBack }: Props) {
   const [mode, setMode] = useState<'choose' | 'join'>(initialCode ? 'join' : 'choose')
   const [code, setCode] = useState(initialCode)
   const [copied, setCopied] = useState(false)
@@ -138,7 +178,7 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
 
   const invite = async () => {
     if (!lobby) return
-    const url = `${SITE_URL}#join-${lobby.code}${settings.server.trim() ? `&s=${encodeURIComponent(settings.server.trim())}` : ''}`
+    const url = inviteUrl(lobby.code, settings.server)
     const text = `Сыграем в дурака? Код комнаты: ${lobby.code}`
     try {
       if (navigator.share) {
@@ -212,7 +252,8 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
                 </div>
               ) : (
                 <motion.div className="join-block" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
-                  <p className="join-label">Код комнаты</p>
+                  {offerApp && code === initialCode && <AppHandoff code={initialCode} server={settings.server} />}
+                  <p className="join-label">{offerApp && code === initialCode ? 'Или играйте здесь, в браузере' : 'Код комнаты'}</p>
                   <CodeInput value={code} onChange={setCode} onDone={() => online.join(code, settings.name.trim() || 'Игрок')} />
                   <motion.button
                     type="button"
