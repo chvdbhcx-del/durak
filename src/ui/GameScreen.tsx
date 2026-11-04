@@ -1,4 +1,6 @@
 import { AnimatePresence, LayoutGroup, motion, useDragControls, type DragControls, type PanInfo } from 'framer-motion'
+import { Coin, Payout } from './Money'
+import { formatCoins, type PayoutInfo, type Wager } from './wallet'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { beats, Card, rankLabel, sortHand, SUIT_NAME } from '../engine/cards'
 import { EMOTES, type Emote } from '../engine/emotes'
@@ -47,6 +49,9 @@ interface Props {
   onBotTurn?: (actor: number) => void
   onFinished: (result: Result, loser: number | null) => void
   series?: Series | null
+  /** this player's money on the game, if any */
+  wager?: Wager | null
+  payout?: PayoutInfo | null
   emote?: Emote | null
   /** online rooms: lets a player turn an opponent into a friend */
   friends?: Friends
@@ -122,7 +127,7 @@ function zoneMap(g: GameState): Map<string, string> {
 /** How many cards of the deck and the discard pile are actually drawn. */
 const PILE_SHOWN = 9
 
-export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, series, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, room }: Props) {
+export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onFinished, series, wager, payout, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, room }: Props) {
   const { table: cw, hand: hw, flat } = useCardSizes()
   const { dealt, dealing } = useDealing(game)
   const zones = useMemo(() => zoneMap(game), [game])
@@ -484,6 +489,12 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                 {game.options.cheat ? 'Шулер' : 'Классика'}
               </motion.span>
             </AnimatePresence>
+            {wager && (
+              <motion.span className="chip stake-chip" {...fade} title="Ставка на партию">
+                <Coin size={13} />
+                {formatCoins(wager.stake)}
+              </motion.span>
+            )}
           </span>
         </div>
         <div className="bar-actions">
@@ -927,6 +938,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                 <p className="result-sub">
                   {game.loser === null ? 'Последние карты ушли одновременно.' : game.loser === me ? 'Карты остались только у вас. Отыграйтесь.' : `Дураком остался ${game.players[game.loser].name}.`}
                 </p>
+                {payout && <Payout delta={payout.delta} balance={payout.balance} />}
                 {series && (
                   <ul className="series-board" aria-label="Счёт турнира">
                     {game.players.map((p, i) => (

@@ -3,11 +3,18 @@ import type { Card } from '../engine/cards'
 import { CardView } from './CardView'
 import type { Settings, Stats } from './settings'
 import { useEffect, useState } from 'react'
+import { WalletPill } from './Money'
+import type { Wallet } from './wallet'
 import { UpdateLog, watchUpdateLog, WEB_VERSION } from './updates'
 
 interface Props {
   settings: Settings
   stats: Stats
+  wallet: Wallet
+  bonus: boolean
+  broke: boolean
+  onBonus: () => void
+  onRefill: () => void
   canContinue: boolean
   onContinue: () => void
   onPlay: () => void
@@ -51,11 +58,12 @@ function useUpdateLog() {
   return log
 }
 
-export function MainMenu({ settings, stats, canContinue, onContinue, onPlay, onOpen, friendCount }: Props) {
+export function MainMenu({ settings, stats, wallet, bonus, broke, onBonus, onRefill, canContinue, onContinue, onPlay, onOpen, friendCount }: Props) {
   const setup = `${settings.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'} · ${settings.deckSize} карт · ${settings.opponents} ${settings.opponents === 1 ? 'соперник' : settings.opponents < 5 ? 'соперника' : 'соперников'}`
   const updateLog = useUpdateLog()
   return (
     <motion.main className="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.25 }}>
+      <WalletPill wallet={wallet} bonus={bonus} broke={broke} onBonus={onBonus} onRefill={onRefill} />
       <div className="menu-hero">
         <div className="fan" aria-hidden="true">
           {FAN.map((c, i) => {

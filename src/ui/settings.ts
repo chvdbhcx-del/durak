@@ -32,6 +32,8 @@ export interface Settings {
   server: string
   /** games in a bot tournament; 1 means a single game */
   series: number
+  /** coins at stake in bot games, one of STAKES */
+  stake: number
 }
 
 export interface HistoryEntry {
@@ -111,6 +113,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tableStyle: 'forest',
   server: '',
   series: 1,
+  stake: 100,
 }
 /** How long a bot "thinks" before a move, in ms. Each move varies around this. */
 export const BOT_DELAY: Record<Speed, number> = { calm: 2600, normal: 1800, fast: 1000 }

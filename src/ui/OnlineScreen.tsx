@@ -1,4 +1,6 @@
 import { presenceText } from './FriendsPanel'
+import { Coin, StakePicker } from './Money'
+import { affordableStake, formatCoins, type Wallet } from './wallet'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { maxPlayers } from '../engine/game'
@@ -15,6 +17,7 @@ export const SITE_URL = 'https://chvdbhcx-del.github.io/durak/'
 interface Props {
   online: Online
   settings: Settings
+  wallet: Wallet
   onChange: (s: Settings) => void
   initialCode: string
   friends: Friends
@@ -113,7 +116,7 @@ function CardSpinner() {
   )
 }
 
-export function OnlineScreen({ online, settings, onChange, initialCode, friends, onInviteFriend, onBack }: Props) {
+export function OnlineScreen({ online, settings, wallet, onChange, initialCode, friends, onInviteFriend, onBack }: Props) {
   const [mode, setMode] = useState<'choose' | 'join'>(initialCode ? 'join' : 'choose')
   const [code, setCode] = useState(initialCode)
   const [copied, setCopied] = useState(false)
@@ -338,6 +341,7 @@ export function OnlineScreen({ online, settings, onChange, initialCode, friends,
                   <ModePicker value={lobby.mode} onChange={(m) => online.setLobby({ mode: m })} />
                   <DeckPicker value={lobby.deckSize} onChange={(d) => online.setLobby({ deckSize: d })} />
                   <CheatPicker value={!!lobby.cheat} onChange={(c) => online.setLobby({ cheat: c })} />
+                  <StakePicker title="Ставка в комнате" value={lobby.stake ?? 0} onChange={(stake) => online.setLobby({ stake })} wallet={wallet} players={Math.max(2, players)} mult={1} />
                   <motion.button type="button" className="primary big" disabled={players < 2} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={() => online.start(settings.difficulty)}>
                     {players < 2 ? 'Ждём хотя бы одного игрока' : 'Начать игру'}
                   </motion.button>
@@ -347,6 +351,15 @@ export function OnlineScreen({ online, settings, onChange, initialCode, friends,
                   <span className="chip">
                     {lobby.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'} · {lobby.deckSize} карт
                   </span>
+                  {(lobby.stake ?? 0) > 0 && (
+                    <span className="chip stake-chip">
+                      <Coin size={13} />
+                      Ставка {formatCoins(lobby.stake!)} · у вас {formatCoins(wallet.balance)}
+                    </span>
+                  )}
+                  {(lobby.stake ?? 0) > 0 && affordableStake(wallet, lobby.stake!, Math.max(2, players)) < lobby.stake! && (
+                    <p className="stake-warn">Монет не хватает на всю ставку: сыграете на {formatCoins(affordableStake(wallet, lobby.stake!, Math.max(2, players)))}.</p>
+                  )}
                   <p className="big-note">
                     Ждём, пока {hostName} начнёт
                     {[0, 1, 2].map((i) => (
