@@ -29,6 +29,13 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
+// The page started, so the reload safety net in index.html may fire again next time.
+try {
+  sessionStorage.removeItem('durak-reloaded')
+} catch {
+  /* storage blocked */
+}
+
 // Offline support for the installable web version; the native apps bundle their files already.
 if (!isNative && 'serviceWorker' in navigator && location.protocol === 'https:') {
   try {
