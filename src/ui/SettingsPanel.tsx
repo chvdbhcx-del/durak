@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { maxPlayers } from '../engine/game'
 import { Group, HAPTICS_ICON, LookPicker, SOUND_ICON, SpeedPicker, Switch, ThemePicker } from './pickers'
 import type { Settings } from './settings'
-import { Sheet, sheetItem } from './Sheet'
+import { AutoHeight, Sheet, sheetItem } from './Sheet'
 
 export function withValidOpponents(s: Settings): Settings {
   return { ...s, opponents: Math.min(s.opponents, maxPlayers(s.deckSize) - 1) }
@@ -44,13 +44,14 @@ const page = {
   variants: { hidden: { opacity: 0, x: 16 }, shown: { opacity: 1, x: 0, transition: { duration: 0.18, staggerChildren: 0.04 } } },
   initial: 'hidden',
   animate: 'shown',
-  exit: { opacity: 0, x: -16, transition: { duration: 0.12 } },
+  exit: { opacity: 0, x: -16, transition: { duration: 0.15 } },
 } as const
+// The height itself is animated by AutoHeight around it; the fold only fades.
 const fold = {
-  variants: { hidden: { opacity: 0, height: 0 }, shown: { opacity: 1, height: 'auto', transition: { duration: 0.22, staggerChildren: 0.04 } } },
+  variants: { hidden: { opacity: 0, y: -8 }, shown: { opacity: 1, y: 0, transition: { duration: 0.25, staggerChildren: 0.04 } } },
   initial: 'hidden',
   animate: 'shown',
-  exit: { opacity: 0, height: 0 },
+  exit: { opacity: 0, transition: { duration: 0.15 } },
 } as const
 
 /** Settings from the main menu: preferences only, split into sections. A game is set up on the "Играть" screen. */
@@ -64,7 +65,8 @@ export function SettingsPanel({ settings, onChange, onClose }: { settings: Setti
   return (
     <Sheet title="Настройки" onClose={onClose}>
       <Tabs value={tab} onChange={setTab} />
-      <AnimatePresence mode="wait" initial={false}>
+      <AutoHeight>
+      <AnimatePresence mode="popLayout" initial={false}>
         <motion.div key={tab} className="tab-page" {...page}>
           {tab === 'game' && (
             <>
@@ -86,6 +88,7 @@ export function SettingsPanel({ settings, onChange, onClose }: { settings: Setti
           )}
         </motion.div>
       </AnimatePresence>
+      </AutoHeight>
     </Sheet>
   )
 }
@@ -154,14 +157,16 @@ export function GameMenu({ settings, onChange, onClose, onRules, onExit, online,
           <path fill="currentColor" d="M5.3 8.3a1 1 0 0 1 1.4 0L12 13.6l5.3-5.3a1 1 0 1 1 1.4 1.4l-6 6a1 1 0 0 1-1.4 0l-6-6a1 1 0 0 1 0-1.4z" />
         </motion.svg>
       </motion.button>
+      <AutoHeight>
       <AnimatePresence initial={false}>
         {look && (
-          <motion.div key="look" className="tab-page" {...fold} style={{ overflow: 'hidden' }}>
+          <motion.div key="look" className="tab-page" {...fold}>
             <ThemePicker value={settings.theme} onChange={(theme) => set({ theme })} />
             <LookPicker back={settings.cardBack} table={settings.tableStyle} onBack={(cardBack) => set({ cardBack })} onTable={(tableStyle) => set({ tableStyle })} />
           </motion.div>
         )}
       </AnimatePresence>
+      </AutoHeight>
     </Sheet>
   )
 }

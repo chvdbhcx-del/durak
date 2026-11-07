@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 // Rows inside a sheet reveal one after another.
 export const sheetList = { hidden: {}, shown: { transition: { staggerChildren: 0.045, delayChildren: 0.08 } } }
@@ -55,6 +55,29 @@ export function Sheet({ title, onClose, children, footer, wide }: Props) {
           </motion.div>
         )}
       </motion.div>
+    </motion.div>
+  )
+}
+
+/**
+ * Glides to the height of its content instead of jumping, so a sheet grows and shrinks smoothly
+ * when a tab or a folded section changes what it holds.
+ */
+export function AutoHeight({ children, className }: { children: ReactNode; className?: string }) {
+  const inner = useRef<HTMLDivElement>(null)
+  const [h, setH] = useState<number | 'auto'>('auto')
+  useEffect(() => {
+    const el = inner.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => setH(el.offsetHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return (
+    <motion.div className={className} initial={false} animate={{ height: h }} transition={{ type: 'spring', stiffness: 260, damping: 34, mass: 0.9 }} style={{ overflow: 'hidden' }}>
+      <div ref={inner} style={{ position: 'relative' }}>
+        {children}
+      </div>
     </motion.div>
   )
 }

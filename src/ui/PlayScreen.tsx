@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useState } from 'react'
 import { maxPlayers } from '../engine/game'
-import { CheatPicker, DeckPicker, DifficultyPicker, ModePicker, OpponentsPicker, SeriesPicker } from './pickers'
+import { DeckPicker, DifficultyPicker, ModePicker, OpponentsPicker, Section, SeriesPicker, Switch } from './pickers'
 import type { Settings } from './settings'
 import { withValidOpponents } from './SettingsPanel'
 import { StakePicker } from './Money'
@@ -84,15 +84,23 @@ export function PlayScreen({ settings, wallet, pendingStake, onChange, onBots, o
           {choice === 'bots' && (
             <motion.div key="bots" className="setup" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 34 }}>
               <motion.div className="setup-inner" variants={sheetList} initial="hidden" animate="shown">
-                <ModePicker value={settings.mode} onChange={(mode) => set({ mode })} />
-                <OpponentsPicker value={settings.opponents} max={maxPlayers(settings.deckSize) - 1} onChange={(opponents) => set({ opponents })} />
-                <DeckPicker value={settings.deckSize} onChange={(deckSize) => set({ deckSize })} />
-                <DifficultyPicker value={settings.difficulty} onChange={(difficulty) => set({ difficulty })} />
-                <StakePicker value={stake} onChange={(s) => set({ stake: s })} wallet={wallet} players={players} mult={LEVEL_BONUS[settings.difficulty]} />
-                <SeriesPicker value={settings.series} onChange={(series) => set({ series })} />
-                <CheatPicker value={settings.cheat} onChange={(cheat) => set({ cheat })} />
+                <Section title="Партия">
+                  <ModePicker value={settings.mode} onChange={(mode) => set({ mode })} />
+                  <DeckPicker value={settings.deckSize} onChange={(deckSize) => set({ deckSize })} />
+                  <div className="switches">
+                    <Switch label="Шулер" note="Можно мухлевать, но могут поймать" value={settings.cheat} onChange={(cheat) => set({ cheat })} />
+                  </div>
+                </Section>
+                <Section title="Соперники">
+                  <OpponentsPicker title="Сколько" value={settings.opponents} max={maxPlayers(settings.deckSize) - 1} onChange={(opponents) => set({ opponents })} />
+                  <DifficultyPicker value={settings.difficulty} onChange={(difficulty) => set({ difficulty })} />
+                </Section>
+                <Section title="Ставка">
+                  <StakePicker title="Монеты" value={stake} onChange={(s) => set({ stake: s })} wallet={wallet} players={players} mult={LEVEL_BONUS[settings.difficulty]} />
+                  <SeriesPicker value={settings.series} onChange={(series) => set({ series })} />
+                </Section>
                 {pendingStake > 0 && <p className="stake-warn">Незаконченная партия ещё идёт: если начать новую, её ставка {formatCoins(pendingStake)} сгорит.</p>}
-                <motion.button type="button" className="primary big" whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={onBots}>
+                <motion.button type="button" className="primary big setup-start" whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={onBots}>
                   {stake ? `Начать партию · ставка ${formatCoins(stake)}` : 'Начать партию'}
                 </motion.button>
               </motion.div>
