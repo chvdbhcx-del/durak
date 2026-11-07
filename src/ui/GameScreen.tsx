@@ -10,7 +10,7 @@ import { CardView, flightEnd, type Flight } from './CardView'
 import { notify, tap } from './native'
 import { playCard, playDeal, playSweep } from './sfx'
 import { BOT_NAMES } from './pickers'
-import { AVATARS, type Stats } from './settings'
+import { AVATARS } from './settings'
 import { SuitIcon } from './SuitIcon'
 import { fanLayout } from './fan'
 
@@ -43,7 +43,6 @@ interface Props {
   game: GameState
   me: number
   act: (action: Action) => void
-  stats: Stats
   paused: boolean
   botDelay: number
   /** called when a bot should move; left out for guests, whose bots run on the host */
@@ -152,7 +151,24 @@ function zoneMap(g: GameState): Map<string, string> {
 /** How many cards of the deck and the discard pile are actually drawn. */
 const PILE_SHOWN = 9
 
-export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, onBotThrow, onFinished, series, wager, payout, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, room }: Props) {
+// The "tap a suspicious card" tip shows until the player has tried it once.
+const ACCUSE_KEY = 'durak.accuseKnown'
+function accuseKnown() {
+  try {
+    return localStorage.getItem(ACCUSE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+function rememberAccuse() {
+  try {
+    localStorage.setItem(ACCUSE_KEY, '1')
+  } catch {
+    /* storage unavailable: the tip just keeps showing */
+  }
+}
+
+export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotThrow, onFinished, series, wager, payout, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, room }: Props) {
   const { table: cw, hand: hw, flat } = useCardSizes()
   const [stripRef, stripW] = useWidth<HTMLElement>()
   const [meRef, meW] = useWidth<HTMLElement>()
@@ -542,49 +558,34 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
       transition={{ duration: 0.3 }}
     >
       <motion.header className="bar" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-        <div className="brand">
-          <motion.button type="button" className="icon" aria-label="Главное меню" whileTap={{ scale: 0.9 }} whileHover={{ x: -2 }} onClick={onExit}>
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-              <path fill="currentColor" d="M14.7 5.3a1 1 0 0 1 0 1.4L9.4 12l5.3 5.3a1 1 0 1 1-1.4 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0z" />
-            </svg>
-          </motion.button>
-          <span className="logo">Дурак</span>
-          <span className="chips" title={`${game.options.deckSize} карт${room ? `, комната ${room.code}` : ''}`}>
-            <AnimatePresence mode="popLayout" initial={false}>
-              <motion.span key={game.options.mode} className="chip" {...fade}>
-                {game.options.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'}
-              </motion.span>
-            </AnimatePresence>
-            <AnimatePresence mode="popLayout" initial={false}>
-              <motion.span key={game.options.cheat ? 'cheat' : 'classic'} className={`chip ${game.options.cheat ? 'warn' : ''}`} {...fade}>
-                {game.options.cheat ? 'Шулер' : 'Классика'}
-              </motion.span>
-            </AnimatePresence>
-            {wager && (
-              <motion.span className="chip stake-chip" {...fade} title="Ставка на партию">
-                <Coin size={13} />
-                {formatCoins(wager.stake)}
-              </motion.span>
-            )}
-          </span>
-        </div>
-        <div className="bar-actions">
-          <span className="score" title="Победы · поражения · ничьи">
-            <Counter value={stats.wins} />
-            <i>·</i>
-            <Counter value={stats.losses} />
-            <i>·</i>
-            <Counter value={stats.draws} />
-          </span>
-          <motion.button type="button" className="icon" aria-label="Настройки" whileTap={{ scale: 0.9, rotate: 30 }} whileHover={{ rotate: 15 }} onClick={onOpenSettings}>
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M4 7h10.2a3 3 0 0 1 5.6 0H20a1 1 0 1 1 0 2h-.2a3 3 0 0 1-5.6 0H4a1 1 0 0 1 0-2zm13 2a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM4 15h.2a3 3 0 0 1 5.6 0H20a1 1 0 1 1 0 2H9.8a3 3 0 0 1-5.6 0H4a1 1 0 1 1 0-2zm3 2a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"
-              />
-            </svg>
-          </motion.button>
-        </div>
+        <span className="chips" title={`${game.options.deckSize} карт`}>
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span key={game.options.mode} className="chip" {...fade}>
+              {game.options.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'}
+            </motion.span>
+          </AnimatePresence>
+          {game.options.cheat && (
+            <motion.span className="chip warn" {...fade}>
+              Шулер
+            </motion.span>
+          )}
+          {wager && (
+            <motion.span className="chip stake-chip" {...fade} title="Ставка на партию">
+              <Coin size={13} />
+              {formatCoins(wager.stake)}
+            </motion.span>
+          )}
+          {room?.code && (
+            <span className="chip" title="Код комнаты">
+              {room.code}
+            </span>
+          )}
+        </span>
+        <motion.button type="button" className="icon" aria-label="Меню" whileTap={{ scale: 0.9 }} onClick={onOpenSettings}>
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path fill="currentColor" d="M4 6.5h16a1 1 0 1 1 0 2H4a1 1 0 0 1 0-2zm0 4.5h16a1 1 0 1 1 0 2H4a1 1 0 0 1 0-2zm0 4.5h16a1 1 0 1 1 0 2H4a1 1 0 0 1 0-2z" />
+          </svg>
+        </motion.button>
       </motion.header>
       {series && !game.over && (
         <motion.div className="series-strip" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} aria-label="Счёт турнира">
@@ -716,26 +717,19 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
             </div>
             {game.deck.length > 0 && (
               <span className="zone-label">
-                <b>{deckCards.length + 1} в колоде</b>
+                <b>{deckCards.length + 1}</b>
               </span>
             )}
           </div>
 
           <div className="battle">
-            <AnimatePresence>
-              {view.table.length === 0 && !game.over && dealing && (
-                <motion.span key="hint" className="empty-hint" {...fade}>
-                  Раздаём карты…
-                </motion.span>
-              )}
-            </AnimatePresence>
             {view.table.map((pair, i) => {
               const target = targetPairs.has(i)
               const attackPending = pending.has(pair.attack.id)
               const coverPending = !!pair.defense && pending.has(pair.defense.id)
               // Cheater mode: tapping a cover someone else laid down says "that's a trick".
               const accusable = !!game.options.cheat && !!pair.defense && me !== game.defender && game.players[me]?.human && !game.over && !game.taking && !coverPending
-              const onPair = target && selected ? () => place(selected, `pair-${i}`) : attackPending ? () => unstage(pair.attack.id) : coverPending ? () => unstage(pair.defense!.id) : accusable ? () => play({ type: 'accuse', pair: i }) : undefined
+              const onPair = target && selected ? () => place(selected, `pair-${i}`) : attackPending ? () => unstage(pair.attack.id) : coverPending ? () => unstage(pair.defense!.id) : accusable ? () => (rememberAccuse(), play({ type: 'accuse', pair: i })) : undefined
               return (
                 // No layout animation on the pair box itself: its cards carry their own, and a moving
                 // pair under moving cards made them measure each other wrong and jump.
@@ -782,7 +776,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
             </AnimatePresence>
           </div>
 
-          {game.options.cheat && me !== game.defender && game.players[me]?.human && !game.taking && !game.over && view.table.some((p) => p.defense) && (
+          {game.options.cheat && me !== game.defender && game.players[me]?.human && !game.taking && !game.over && view.table.some((p) => p.defense) && !accuseKnown() && (
             <span className="cheat-hint">Подозрительная карта? Нажмите на неё</span>
           )}
 
@@ -793,7 +787,7 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                 return <CardView key={c.id} card={c} faceUp={false} trump={game.trump} className="stacked" style={{ rotate: (t - 0.5) * 50, x: (t - 0.5) * 10, y: (0.5 - t) * 8 }} flight={flightOf(c.id)} />
               })}
             </div>
-            <span className="zone-label">{game.discard.length ? `Бито: ${game.discard.length}` : 'Бито'}</span>
+            {game.discard.length > 0 && <span className="zone-label">{game.discard.length}</span>}
           </div>
 
           <AnimatePresence>
@@ -1022,9 +1016,6 @@ export function GameScreen({ game, me, act, stats, paused, botDelay, onBotTurn, 
                     ))}
                   </ul>
                 )}
-                <p className="result-stats">
-                  Победы <b>{stats.wins}</b> · Поражения <b>{stats.losses}</b> · Ничьи <b>{stats.draws}</b>
-                </p>
                 <div className="result-actions">
                   <motion.button type="button" className="ghost" whileTap={{ scale: 0.95 }} onClick={onExit}>
                     В меню
@@ -1083,17 +1074,6 @@ export function Stagger({ children, delay = 0, step = 0.05 }: { children: ReactN
 }
 
 /** A number that rolls up or down when it changes. */
-function Counter({ value }: { value: number }) {
-  return (
-    <span className="counter">
-      <AnimatePresence mode="popLayout" initial={false}>
-        <motion.b key={value} initial={{ y: -12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 12, opacity: 0 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
-          {value}
-        </motion.b>
-      </AnimatePresence>
-    </span>
-  )
-}
 
 type FanStore = ReturnType<typeof useFanStore>
 

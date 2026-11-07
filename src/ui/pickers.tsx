@@ -61,9 +61,9 @@ function MiniCard({ rank, suit, red, tilt = 0, x = 0 }: { rank: string; suit: 'S
 }
 
 export function ModePicker({ value, onChange }: { value: Mode; onChange: (m: Mode) => void }) {
-  const modes: { value: Mode; title: string; note: string }[] = [
-    { value: 'podkidnoy', title: 'Подкидной', note: 'Подкидывают' },
-    { value: 'perevodnoy', title: 'Переводной', note: 'Можно переводить' },
+  const modes: { value: Mode; title: string }[] = [
+    { value: 'podkidnoy', title: 'Подкидной' },
+    { value: 'perevodnoy', title: 'Переводной' },
   ]
   return (
     <Group title="Игра">
@@ -86,7 +86,6 @@ export function ModePicker({ value, onChange }: { value: Mode; onChange: (m: Mod
               )}
             </span>
             <span className="tile-title">{m.title}</span>
-            <span className="tile-note">{m.note}</span>
           </Tile>
         ))}
       </div>
@@ -200,8 +199,8 @@ export function ThemePicker({ value, onChange }: { value: Theme; onChange: (t: T
 
 export function CheatPicker({ value, onChange }: { value: boolean; onChange: (on: boolean) => void }) {
   const options: { value: boolean; title: string; note: string }[] = [
-    { value: false, title: 'По правилам', note: 'Честная игра' },
-    { value: true, title: 'Шулер', note: 'Любая карта в отбой и подброс. Бот может поймать (15–50%)' },
+    { value: false, title: 'По правилам', note: '' },
+    { value: true, title: 'Шулер', note: 'Можно мухлевать, но могут поймать' },
   ]
   return (
     <Group title="Шулер">
@@ -214,7 +213,7 @@ export function CheatPicker({ value, onChange }: { value: boolean; onChange: (on
               <span className="art-badge">{o.value ? '!' : '✓'}</span>
             </span>
             <span className="tile-title">{o.title}</span>
-            <span className="tile-note">{o.note}</span>
+            {o.note && <span className="tile-note">{o.note}</span>}
           </Tile>
         ))}
       </div>
@@ -222,34 +221,35 @@ export function CheatPicker({ value, onChange }: { value: boolean; onChange: (on
   )
 }
 
-export function SoundPicker({ value, onChange }: { value: boolean; onChange: (on: boolean) => void }) {
-  const options: { value: boolean; title: string; note: string }[] = [
-    { value: true, title: 'Вкл', note: 'Шуршание карт' },
-    { value: false, title: 'Выкл', note: 'Без звука' },
-  ]
+/** One on/off line: label on the left, a switch on the right. */
+export function Switch({ label, value, onChange, icon }: { label: string; value: boolean; onChange: (on: boolean) => void; icon?: ReactNode }) {
   return (
-    <Group title="Звук">
-      <div className="tiles two">
-        {options.map((o) => (
-          <Tile key={String(o.value)} group="sound" on={value === o.value} onClick={() => onChange(o.value)} label={o.title}>
-            <span className={`sound-art ${o.value ? 'on' : 'off'}`} aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="28" height="28">
-                <path fill="currentColor" d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4H4z" />
-                {o.value ? (
-                  <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11" />
-                ) : (
-                  <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" d="M16 9.5l5 5M21 9.5l-5 5" />
-                )}
-              </svg>
-            </span>
-            <span className="tile-title">{o.title}</span>
-            <span className="tile-note">{o.note}</span>
-          </Tile>
-        ))}
-      </div>
-    </Group>
+    <motion.button type="button" role="switch" aria-checked={value} className={`switch-row ${value ? 'on' : ''}`} variants={sheetItem} whileTap={{ scale: 0.98 }} onClick={() => onChange(!value)}>
+      {icon && (
+        <span className="switch-icon" aria-hidden="true">
+          {icon}
+        </span>
+      )}
+      <span className="switch-label">{label}</span>
+      <span className="switch" aria-hidden="true">
+        <motion.span className="switch-knob" layout transition={{ type: 'spring', stiffness: 600, damping: 34 }} />
+      </span>
+    </motion.button>
   )
 }
+
+export const SOUND_ICON = (
+  <svg viewBox="0 0 24 24" width="22" height="22">
+    <path fill="currentColor" d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4H4z" />
+    <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11" />
+  </svg>
+)
+export const HAPTICS_ICON = (
+  <svg viewBox="0 0 24 24" width="22" height="22">
+    <rect x="8" y="4" width="8" height="16" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" d="M4.5 9v6M19.5 9v6" />
+  </svg>
+)
 
 export function DifficultyPicker({ value, onChange }: { value: Difficulty; onChange: (d: Difficulty) => void }) {
   const levels: { value: Difficulty; title: string; note: string; bars: number }[] = [
@@ -269,24 +269,6 @@ export function DifficultyPicker({ value, onChange }: { value: Difficulty; onCha
             </span>
             <span className="tile-title">{l.title}</span>
             <span className="tile-note">{l.note}</span>
-          </Tile>
-        ))}
-      </div>
-    </Group>
-  )
-}
-
-export function HapticsPicker({ value, onChange }: { value: boolean; onChange: (on: boolean) => void }) {
-  const options: { value: boolean; title: string }[] = [
-    { value: true, title: 'Вкл' },
-    { value: false, title: 'Выкл' },
-  ]
-  return (
-    <Group title="Вибрация">
-      <div className="tiles two">
-        {options.map((o) => (
-          <Tile key={String(o.value)} group="haptics" on={value === o.value} onClick={() => onChange(o.value)} label={o.title}>
-            <span className="tile-title">{o.title}</span>
           </Tile>
         ))}
       </div>
@@ -353,12 +335,12 @@ export function AvatarPicker({ value, onChange }: { value: number; onChange: (i:
 
 export function SeriesPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const options = [
-    { value: 1, title: 'Одна партия', note: 'Сыграли и всё' },
-    { value: 3, title: 'Турнир на 3', note: 'Меньше дураков — победа' },
-    { value: 5, title: 'Турнир на 5', note: 'Длинная серия' },
+    { value: 1, title: 'Одна партия' },
+    { value: 3, title: 'Турнир на 3' },
+    { value: 5, title: 'Турнир на 5' },
   ]
   return (
-    <Group title="Турнир с ботами">
+    <Group title="Партий">
       <div className="tiles three">
         {options.map((o) => (
           <Tile key={o.value} group="series" on={value === o.value} onClick={() => onChange(o.value)} label={o.title}>
@@ -368,7 +350,6 @@ export function SeriesPicker({ value, onChange }: { value: number; onChange: (n:
               ))}
             </span>
             <span className="tile-title">{o.title}</span>
-            <span className="tile-note">{o.note}</span>
           </Tile>
         ))}
       </div>

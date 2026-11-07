@@ -1876,7 +1876,7 @@ button.card:disabled {
 .name-badge {
   display: grid;
   grid-template-columns: auto 1fr;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto;
   column-gap: 14px;
   align-items: center;
   padding: 14px 16px;
@@ -1886,7 +1886,7 @@ button.card:disabled {
 }
 
 .name-avatar {
-  grid-row: 1 / 3;
+  grid-row: 1;
   display: grid;
   place-items: center;
   width: 52px;
@@ -2798,4 +2798,172 @@ small,
 }
 .handoff-copy {
   font-size: 13px;
+}
+
+/* ---- Settings sections and the in-game menu ---- */
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.tab {
+  position: relative;
+  min-height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: var(--fs-md);
+  transition: color 0.15s;
+}
+.tab.on {
+  color: var(--fg);
+}
+.tab > span {
+  position: relative;
+}
+.tab-pill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--raise);
+  box-shadow: 0 1px 3px var(--shadow);
+}
+.tab-page {
+  display: grid;
+  gap: 22px;
+}
+.switches {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--raise);
+  overflow: hidden;
+}
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  font-size: var(--fs-md);
+  font-weight: 500;
+}
+.switch-row + .switch-row {
+  border-top: 1px solid var(--line);
+}
+.switch-icon {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+.switch-row.on .switch-icon {
+  color: var(--accent);
+}
+.switch-label {
+  flex: 1;
+}
+.switch {
+  flex: none;
+  display: flex;
+  justify-content: flex-start;
+  width: 48px;
+  height: 28px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--line);
+  transition: background-color 0.2s;
+}
+.switch-row.on .switch {
+  justify-content: flex-end;
+  background: var(--accent);
+}
+.switch-knob {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.game-menu-actions {
+  display: grid;
+  gap: 10px;
+}
+.game-menu-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.game-menu-row .big {
+  padding-inline: 10px;
+  font-size: var(--fs-md);
+}
+.danger.big {
+  width: 100%;
+  padding: 15px 20px;
+  font-size: 16px;
+  border-radius: 16px;
+}
+.disclose {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 0 4px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.disclose:hover {
+  color: var(--fg);
+}
+
+/* Game bar: the table's facts on the left, one menu button on the right */
+.bar .chips {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.bar .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Join by code: the paste button sits beside the label */
+.join-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 44px;
+}
+.paste-code {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+.paste-invite {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding-inline: 18px;
+  color: var(--fg);
+}
+.handoff-copy {
+  width: 100%;
 }

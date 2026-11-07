@@ -11,7 +11,7 @@ import { BackButton } from './PlayScreen'
 import { BOT_NAMES, CheatPicker, DeckPicker, Group, ModePicker, plural } from './pickers'
 import type { Settings } from './settings'
 import { sheetList } from './Sheet'
-import { appLink, inviteUrl, webPlatform } from './deeplink'
+import { appLink, type Invite, inviteFromText, inviteUrl, webPlatform } from './deeplink'
 
 
 interface Props {
@@ -54,25 +54,6 @@ function CodeInput({ value, onChange, onDone }: { value: string; onChange: (v: s
   )
 }
 
-function ServerField({ value, onChange }: { value: string; onChange: (s: string) => void }) {
-  const [open, setOpen] = useState(!!value)
-  return (
-    <div className="server-field">
-      <button type="button" className="link" onClick={() => setOpen(!open)} aria-expanded={open}>
-        {value.trim() ? 'Свой сервер комнат' : 'Сервер комнат: общий'}
-      </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ overflow: 'hidden' }}>
-            <input className="profile-name" value={value} placeholder="Пусто: общий сервер. Или адрес вашего" inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-label="Адрес сервера комнат" onChange={(e) => onChange(e.target.value)} />
-            <p className="name-hint">Все игроки комнаты должны быть на одном сервере. Ссылка-приглашение передаёт адрес сама.</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
 /**
  * Shown when an invite opens in a plain browser tab. The browser keeps its own profile (name, coins,
  * friends) apart from the app and from a site on the home screen, so the invite is offered there first.
@@ -81,11 +62,11 @@ function AppHandoff({ code, server }: { code: string; server: string }) {
   const platform = webPlatform()
   const link = appLink({ code, server }, platform)
   const [copied, setCopied] = useState(false)
+  // On iPhone the whole link is copied: the home-screen game pastes it in one tap.
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(code)
+      await navigator.clipboard.writeText(platform === 'ios' ? inviteUrl(code, server) : code)
       setCopied(true)
-      setTimeout(() => setCopied(false), 1800)
     } catch {
       /* clipboard blocked: the code is on screen */
     }
@@ -98,16 +79,42 @@ function AppHandoff({ code, server }: { code: string; server: string }) {
           Открыть в приложении
         </motion.a>
       )}
-      <p className="handoff-note">
-        {platform === 'ios'
-          ? 'Дурак на экране «Домой»? Откройте его и введите код: iPhone не передаёт ему ссылки сам.'
-          : 'Дурак на рабочем столе как сайт? Откройте его и введите код.'}
-      </p>
-      <motion.button type="button" className="ghost handoff-copy" whileTap={{ scale: 0.95 }} onClick={copy}>
-        {copied ? 'Код скопирован' : `Скопировать код ${code}`}
+      <motion.button type="button" className={`${link ? 'ghost' : 'primary'} big handoff-copy`} whileTap={{ scale: 0.95 }} onClick={copy}>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span key={copied ? 'ok' : 'copy'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+            {copied ? 'Скопировано' : platform === 'ios' ? 'Скопировать приглашение' : `Скопировать код ${code}`}
+          </motion.span>
+        </AnimatePresence>
       </motion.button>
-      <p className="handoff-note small">В браузере свой профиль: имя и монеты здесь не те, что в приложении.</p>
+      {platform === 'ios' && (
+        <p className="handoff-note">
+          {copied ? 'Теперь откройте Дурак с экрана «Домой» и нажмите «Вставить приглашение».' : 'Дурак на экране «Домой»? iPhone не передаёт ему ссылки: скопируйте приглашение и вставьте его там.'}
+        </p>
+      )}
     </motion.section>
+  )
+}
+
+/** Fills the code from the clipboard: a copied invite message, link or bare code. */
+function PasteButton({ onCode }: { onCode: (inv: Invite) => void }) {
+  const [miss, setMiss] = useState(false)
+  if (!navigator.clipboard?.readText) return null
+  const paste = async () => {
+    try {
+      const inv = inviteFromText(await navigator.clipboard.readText())
+      if (inv) onCode(inv)
+      else {
+        setMiss(true)
+        setTimeout(() => setMiss(false), 1800)
+      }
+    } catch {
+      /* the person declined the paste prompt */
+    }
+  }
+  return (
+    <motion.button type="button" className="link paste-code" whileTap={{ scale: 0.95 }} onClick={paste}>
+      {miss ? 'В буфере нет кода' : 'Вставить'}
+    </motion.button>
   )
 }
 
@@ -141,7 +148,6 @@ function NameBadge({ name, onChange }: { name: string; onChange: (n: string) => 
           </svg>
         </button>
       )}
-      <span className="name-hint">Так вас увидят друзья</span>
     </div>
   )
 }
@@ -221,7 +227,6 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
           {phase === 'idle' && (
             <motion.div key={`idle-${mode}`} className="online-block" variants={sheetList} initial="hidden" animate="shown" exit={{ opacity: 0, y: -10 }}>
               <NameBadge name={settings.name} onChange={(name) => onChange({ ...settings, name })} />
-              <ServerField value={settings.server} onChange={(server) => onChange({ ...settings, server })} />
               {mode === 'choose' ? (
                 <div className="way-cards">
                   <motion.button
@@ -238,7 +243,7 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
                       +
                     </span>
                     <span className="way-title">Создать комнату</span>
-                    <span className="way-note">Получите код и позовите друзей</span>
+                    <span className="way-note">Позовите друзей по ссылке</span>
                   </motion.button>
                   <motion.button type="button" className="way" whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} onClick={() => setMode('join')}>
                     <span className="way-art key" aria-hidden="true">
@@ -247,13 +252,23 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
                       </svg>
                     </span>
                     <span className="way-title">Войти по коду</span>
-                    <span className="way-note">Если друг уже создал комнату</span>
+                    <span className="way-note">Код из приглашения</span>
                   </motion.button>
                 </div>
               ) : (
                 <motion.div className="join-block" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
                   {offerApp && code === initialCode && <AppHandoff code={initialCode} server={settings.server} />}
-                  <p className="join-label">{offerApp && code === initialCode ? 'Или играйте здесь, в браузере' : 'Код комнаты'}</p>
+                  <div className="join-head">
+                    <p className="join-label">{offerApp && code === initialCode ? 'Или играйте здесь, в браузере' : 'Код комнаты'}</p>
+                    {!(offerApp && code === initialCode) && (
+                      <PasteButton
+                        onCode={(inv) => {
+                          setCode(inv.code)
+                          if (inv.server && inv.server !== settings.server) onChange({ ...settings, server: inv.server })
+                        }}
+                      />
+                    )}
+                  </div>
                   <CodeInput value={code} onChange={setCode} onDone={() => online.join(code, settings.name.trim() || 'Игрок')} />
                   <motion.button
                     type="button"
