@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('@capacitor/app', () => ({ App: {} }))
 vi.mock('./native', () => ({ isNative: false }))
 
-const { appLink, inviteUrl, parseInvite } = await import('./deeplink')
+const { appLink, inviteFromText, inviteUrl, parseInvite } = await import('./deeplink')
 
 describe('invite links', () => {
   it('reads the shared site link', () => {
@@ -35,7 +35,20 @@ describe('invite links', () => {
     expect(link.startsWith('intent://join/AB3CD#Intent;scheme=durak;package=com.chvdbhcx.durak;')).toBe(true)
     const back = decodeURIComponent(/S\.browser_fallback_url=([^;]+)/.exec(link)![1])
     expect(parseInvite(back)?.noApp).toBe(true)
-    expect(appLink({ code: 'AB3CD', server: '' }, 'ios')).toBe('durak://join/AB3CD')
+    expect(appLink({ code: 'AB3CD', server: '' }, 'ios', true)).toBe('durak://join/AB3CD')
+    // no iPhone app is published yet, so the page never offers a link Safari can't open
+    expect(appLink({ code: 'AB3CD', server: '' }, 'ios')).toBeNull()
     expect(appLink({ code: 'AB3CD', server: '' }, 'other')).toBeNull()
+  })
+
+  it('finds the invite in pasted text', () => {
+    const msg = 'Сыграем в дурака? Код комнаты: AB3CD\nhttps://chvdbhcx-del.github.io/durak/#join-AB3CD'
+    expect(inviteFromText(msg)).toEqual({ code: 'AB3CD', server: '' })
+    expect(inviteFromText(`${inviteUrl('XY7QZ', 'https://h')} `)).toEqual({ code: 'XY7QZ', server: 'https://h' })
+    expect(inviteFromText('Код комнаты: ab3cd')?.code).toBe('AB3CD')
+    expect(inviteFromText(' ab3cd ')?.code).toBe('AB3CD')
+    expect(inviteFromText('durak://join/AB3CD')?.code).toBe('AB3CD')
+    expect(inviteFromText('привет, как дела')).toBeNull()
+    expect(inviteFromText('')).toBeNull()
   })
 })

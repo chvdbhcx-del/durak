@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import type { Card } from '../engine/cards'
 import { CardView } from './CardView'
-import type { Settings, Stats } from './settings'
+import type { Stats } from './settings'
 import { useEffect, useState } from 'react'
 import { WalletPill } from './Money'
 import type { Wallet } from './wallet'
@@ -10,7 +10,6 @@ import { isNative } from './native'
 import { UpdateLog, watchUpdateLog, WEB_VERSION } from './updates'
 
 interface Props {
-  settings: Settings
   stats: Stats
   wallet: Wallet
   bonus: boolean
@@ -22,6 +21,8 @@ interface Props {
   onPlay: () => void
   onOpen: (panel: 'settings' | 'rules' | 'stats' | 'friends') => void
   friendCount: number
+  /** a site on the iPhone home screen, which links never reach: offer to paste the invite instead */
+  onPasteInvite?: () => void
 }
 
 // The hero fan: an ace of trumps flanked by court cards.
@@ -69,8 +70,7 @@ function useUpdateLog() {
   return log
 }
 
-export function MainMenu({ settings, stats, wallet, bonus, broke, onBonus, onRefill, canContinue, onContinue, onPlay, onOpen, friendCount }: Props) {
-  const setup = `${settings.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'} · ${settings.deckSize} карт · ${settings.opponents} ${settings.opponents === 1 ? 'соперник' : settings.opponents < 5 ? 'соперника' : 'соперников'}`
+export function MainMenu({ stats, wallet, bonus, broke, onBonus, onRefill, canContinue, onContinue, onPlay, onOpen, friendCount, onPasteInvite }: Props) {
   const updateLog = useUpdateLog()
   const apkVersion = useApkVersion()
   return (
@@ -97,9 +97,6 @@ export function MainMenu({ settings, stats, wallet, bonus, broke, onBonus, onRef
         <motion.h1 className="menu-logo" {...enter(0.35)}>
           Дурак
         </motion.h1>
-        <motion.p className="menu-tag" {...enter(0.42)}>
-          С ботами или с друзьями онлайн
-        </motion.p>
       </div>
 
       <div className="menu-actions">
@@ -111,9 +108,14 @@ export function MainMenu({ settings, stats, wallet, bonus, broke, onBonus, onRef
         <motion.button type="button" className={canContinue ? 'ghost big' : 'primary big'} {...enter(canContinue ? 0.56 : 0.5)} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={onPlay}>
           {canContinue ? 'Новая партия' : 'Играть'}
         </motion.button>
-        <motion.button type="button" className="setup-chip" {...enter(0.62)} whileTap={{ scale: 0.97 }} onClick={() => onOpen('settings')}>
-          {setup}
-        </motion.button>
+        {onPasteInvite && (
+          <motion.button type="button" className="setup-chip paste-invite" {...enter(0.62)} whileTap={{ scale: 0.97 }} onClick={onPasteInvite}>
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path fill="currentColor" d="M9 3h6a1 1 0 0 1 1 1v1h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2V4a1 1 0 0 1 1-1zm1 2v2h4V5h-4zm-2 7v2h8v-2H8zm0 4v2h5v-2H8z" />
+            </svg>
+            Вставить приглашение
+          </motion.button>
+        )}
       </div>
 
       <div className="menu-tiles four">

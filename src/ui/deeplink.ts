@@ -53,6 +53,24 @@ export function parseInvite(url: string): Invite | null {
   return null
 }
 
+/**
+ * Finds an invite in pasted text: the shared message ("…Код комнаты: AB3CD" plus the link), a bare
+ * link, or just the five letters. Used where a link can't reach the game by itself (a site on the
+ * iPhone home screen), so the person copies the invite in the messenger and pastes it in the game.
+ */
+export function inviteFromText(text: string): Invite | null {
+  const t = text.trim()
+  const link = /\S*#join-[A-Za-z0-9]+(?:&[^\s#]*)?/.exec(t) ?? new RegExp(`${APP_SCHEME}://join/\\S+`).exec(t)
+  if (link) {
+    const inv = parseInvite(link[0])
+    if (inv) return { code: inv.code, server: inv.server }
+  }
+  const labelled = /код[^:]*:\s*([A-Za-z0-9]{5})\b/i.exec(t)
+  const bare = /^[A-Za-z0-9]{5}$/.test(t) ? t : labelled?.[1]
+  const code = bare ? normalizeCode(bare) : ''
+  return code.length === 5 ? { code, server: '' } : null
+}
+
 /** The link people share. */
 export function inviteUrl(code: string, server: string): string {
   return `${SITE_URL}#join-${code}${server.trim() ? `&s=${encodeURIComponent(server.trim())}` : ''}`
@@ -80,19 +98,30 @@ export function inBrowserTab(): boolean {
   }
 }
 
+/** True on an iPhone/iPad site opened from the home screen: the one place a link never reaches. */
+export function iosHomeScreen(): boolean {
+  return !isNative && webPlatform() === 'ios' && !inBrowserTab()
+}
+
+/**
+ * There is no iPhone app to hand a link to yet (it needs a signed build), and a durak:// link with
+ * nothing to open it only shows Safari's "address is invalid". Turn on once the app is in the App Store.
+ */
+export const IOS_APP_PUBLISHED = false
+
 /**
  * A link that opens the installed app straight in the room. On Android it is an intent:// link, so
  * Chrome opens the app if it is there and otherwise comes back to this page marked noapp; on iOS a
- * plain durak:// link (Safari says the address is invalid when the app is missing).
+ * plain durak:// link, only once there is an iPhone app (see IOS_APP_PUBLISHED).
  */
-export function appLink(invite: Invite, platform: WebPlatform = webPlatform()): string | null {
+export function appLink(invite: Invite, platform: WebPlatform = webPlatform(), iosApp = IOS_APP_PUBLISHED): string | null {
   const query = invite.server ? `?s=${encodeURIComponent(invite.server)}` : ''
   const path = `join/${invite.code}${query}`
   if (platform === 'android') {
     const back = `${inviteUrl(invite.code, invite.server)}&noapp=1`
     return `intent://${path}#Intent;scheme=${APP_SCHEME};package=${ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(back)};end`
   }
-  if (platform === 'ios') return `${APP_SCHEME}://${path}`
+  if (platform === 'ios' && iosApp) return `${APP_SCHEME}://${path}`
   return null
 }
 

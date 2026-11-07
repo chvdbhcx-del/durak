@@ -4,7 +4,7 @@ import { chooseAction, eagerThrow } from '../engine/bot'
 import { botReaction, botReply, type Emote, fingerprint } from '../engine/emotes'
 import { Action, applyAction, currentActor, GameState, maxPlayers, newGame } from '../engine/game'
 import { setRoomServer } from '../net/room'
-import { inBrowserTab, type Invite, parseInvite, watchInvites } from './deeplink'
+import { inBrowserTab, inviteFromText, type Invite, iosHomeScreen, parseInvite, watchInvites } from './deeplink'
 import { useFriends } from '../net/useFriends'
 import { hasSavedRoom, useOnline } from '../net/useOnline'
 import { GameScreen, Result, Series } from './GameScreen'
@@ -16,7 +16,7 @@ import { setHaptics, syncStatusBar, tap } from './native'
 import { OnlineScreen } from './OnlineScreen'
 import { BOT_NAMES } from './pickers'
 import { PlayScreen } from './PlayScreen'
-import { SettingsPanel } from './SettingsPanel'
+import { GameMenu, SettingsPanel } from './SettingsPanel'
 import { addResult, applyLook, applyTheme, BOT_DELAY, deviceToken, EMPTY_STATS, loadSettings, loadStats, saveSettings, saveStats, Settings, Stats } from './settings'
 import { setSoundEnabled, unlockSound } from './sfx'
 import { UpdateToast } from './UpdateToast'
@@ -25,7 +25,7 @@ import { applyIfIdle, startUpdates, UpdateState } from './updates'
 
 const ME = 0
 type Screen = 'menu' | 'play' | 'online' | 'game'
-type Panel = 'settings' | 'rules' | 'stats' | 'friends'
+type Panel = 'settings' | 'game' | 'rules' | 'stats' | 'friends'
 
 // The bot game is saved as it goes, so closing or reloading the app never loses a hand.
 const GAME_KEY = 'durak.game'
@@ -235,6 +235,22 @@ export function App() {
     setPendingJoin(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingJoin])
+  // iPhone never hands a link to a site on the home screen, so the invite comes over through the clipboard.
+  const pasteInvite = async () => {
+    let text = ''
+    try {
+      text = await navigator.clipboard.readText()
+    } catch {
+      friends.say('Не удалось прочитать буфер. Войдите по коду: Играть → С друзьями')
+      return
+    }
+    const inv = inviteFromText(text)
+    if (!inv) {
+      friends.say('В буфере нет приглашения. Скопируйте ссылку в Telegram и нажмите ещё раз')
+      return
+    }
+    joinFromInvite(inv.code, inv.server)
+  }
   const inviteFriend = (id: string) => {
     const hosting = online.role === 'host' && online.lobby
     if (hosting) {
@@ -272,19 +288,17 @@ export function App() {
 
   const panels = (
     <AnimatePresence>
-      {panel === 'settings' && (
-        <SettingsPanel
-          key="settings"
+      {panel === 'settings' && <SettingsPanel key="settings" settings={settings} onClose={() => setPanel(null)} onChange={setSettings} />}
+      {panel === 'game' && (onlineGame || screen === 'game') && (
+        <GameMenu
+          key="game-menu"
           settings={settings}
-          inGame={screen === 'game'}
-          onClose={() => setPanel(null)}
           onChange={setSettings}
-          onStart={(s) => {
-            setSettings(s)
-            setPanel(null)
-            if (onlineGame) online.leave()
-            newRound(s)
-          }}
+          onClose={() => setPanel(null)}
+          onRules={() => setPanel('rules')}
+          onExit={() => (onlineGame ? online.leave() : setScreen('menu'))}
+          online={!!onlineGame}
+          botSpeed={onlineGame ? online.role === 'host' && onlineGame.players.some((p) => !p.human) : true}
         />
       )}
       {panel === 'friends' && <FriendsPanel key="friends" friends={friends} onInvite={inviteFriend} onClose={() => setPanel(null)} />}
@@ -315,7 +329,6 @@ export function App() {
         game={onlineGame}
         me={online.seat}
         act={playOnline}
-        stats={stats}
         paused={false}
         botDelay={BOT_DELAY[settings.speed]}
         onBotTurn={host ? stepOnlineBot : undefined}
@@ -327,7 +340,7 @@ export function App() {
         wager={wallet.roomWager?.seed === onlineGame.options.seed ? wallet.roomWager : null}
         payout={payout?.seed === onlineGame.options.seed ? payout : null}
         onExit={() => online.leave()}
-        onOpenSettings={() => setPanel('settings')}
+        onOpenSettings={() => setPanel('game')}
         onPlayAgain={host ? () => online.start(settings.difficulty) : undefined}
         room={{ code: online.lobby?.code ?? '', notice: online.notice, reconnecting: online.reconnecting, roster: online.lobby?.roster }}
       />
@@ -339,7 +352,6 @@ export function App() {
         game={game}
         me={ME}
         act={playLocal}
-        stats={stats}
         paused={panel !== null}
         botDelay={BOT_DELAY[settings.speed]}
         onBotTurn={stepLocalBot}
@@ -348,7 +360,7 @@ export function App() {
         wager={wallet.wager?.seed === game.options.seed ? wallet.wager : null}
         payout={payout?.seed === game.options.seed ? payout : null}
         onExit={() => setScreen('menu')}
-        onOpenSettings={() => setPanel('settings')}
+        onOpenSettings={() => setPanel('game')}
         series={series}
         emote={shownEmote}
         onEmote={sendMyEmote}
@@ -379,7 +391,7 @@ export function App() {
   } else {
     view = <MainMenu
         key="menu"
-        settings={settings}
+        onPasteInvite={iosHomeScreen() ? pasteInvite : undefined}
         stats={stats}
         wallet={wallet}
         bonus={bonusReady(wallet)}

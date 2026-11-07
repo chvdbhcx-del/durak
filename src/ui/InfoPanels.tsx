@@ -4,7 +4,7 @@ import type { Suit } from '../engine/cards'
 import { AVATARS, type HistoryEntry, type Settings, type Stats } from './settings'
 import { Coin } from './Money'
 import { formatCoins, type Wallet } from './wallet'
-import { AvatarPicker, LookPicker, plural } from './pickers'
+import { AvatarPicker, plural } from './pickers'
 import { Sheet, sheetItem } from './Sheet'
 import { SuitIcon } from './SuitIcon'
 
@@ -123,7 +123,6 @@ export function StatsPanel({ stats, wallet, settings, onSettings, onClose, onRes
       <motion.div variants={sheetItem}>
         <AvatarPicker value={settings.avatar} onChange={(avatar) => onSettings({ ...settings, avatar })} />
       </motion.div>
-      <LookPicker back={settings.cardBack} table={settings.tableStyle} onBack={(cardBack) => onSettings({ ...settings, cardBack })} onTable={(tableStyle) => onSettings({ ...settings, tableStyle })} />
 
       <motion.div className="wallet-card" variants={sheetItem}>
         <span className="wallet-card-main">

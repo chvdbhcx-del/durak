@@ -62,7 +62,7 @@ export function PlayScreen({ settings, wallet, pendingStake, onChange, onBots, o
               ))}
             </span>
             <span className="way-title">С ботами</span>
-            <span className="way-note">На этом устройстве, даже без интернета</span>
+            <span className="way-note">Даже без интернета</span>
           </motion.button>
 
           <motion.button type="button" className="way" {...enter(0.12)} whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} onClick={onOnline}>
@@ -75,8 +75,8 @@ export function PlayScreen({ settings, wallet, pendingStake, onChange, onBots, o
                 />
               </svg>
             </span>
-            <span className="way-title">Онлайн с друзьями</span>
-            <span className="way-note">Создайте комнату и отправьте код</span>
+            <span className="way-title">С друзьями</span>
+            <span className="way-note">Комната по ссылке или коду</span>
           </motion.button>
         </div>
 
