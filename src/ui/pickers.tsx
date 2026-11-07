@@ -66,7 +66,7 @@ export function ModePicker({ value, onChange }: { value: Mode; onChange: (m: Mod
     { value: 'perevodnoy', title: 'Переводной' },
   ]
   return (
-    <Group title="Игра">
+    <Group title="Режим">
       <div className="tiles two">
         {modes.map((m) => (
           <Tile key={m.value} group="mode" on={value === m.value} onClick={() => onChange(m.value)} label={m.title}>
@@ -222,7 +222,7 @@ export function CheatPicker({ value, onChange }: { value: boolean; onChange: (on
 }
 
 /** One on/off line: label on the left, a switch on the right. */
-export function Switch({ label, value, onChange, icon }: { label: string; value: boolean; onChange: (on: boolean) => void; icon?: ReactNode }) {
+export function Switch({ label, note, value, onChange, icon }: { label: string; note?: string; value: boolean; onChange: (on: boolean) => void; icon?: ReactNode }) {
   return (
     <motion.button type="button" role="switch" aria-checked={value} className={`switch-row ${value ? 'on' : ''}`} variants={sheetItem} whileTap={{ scale: 0.98 }} onClick={() => onChange(!value)}>
       {icon && (
@@ -230,7 +230,10 @@ export function Switch({ label, value, onChange, icon }: { label: string; value:
           {icon}
         </span>
       )}
-      <span className="switch-label">{label}</span>
+      <span className="switch-label">
+        {label}
+        {note && <small>{note}</small>}
+      </span>
       <span className="switch" aria-hidden="true">
         <motion.span className="switch-knob" layout transition={{ type: 'spring', stiffness: 600, damping: 34 }} />
       </span>
@@ -258,7 +261,7 @@ export function DifficultyPicker({ value, onChange }: { value: Difficulty; onCha
     { value: 'hard', title: 'Сильный', note: 'Считает карты', bars: 3 },
   ]
   return (
-    <Group title="Сила ботов">
+    <Group title="Сила">
       <div className="tiles three">
         {levels.map((l) => (
           <Tile key={l.value} group="difficulty" on={value === l.value} onClick={() => onChange(l.value)} label={l.title}>
@@ -334,25 +337,43 @@ export function AvatarPicker({ value, onChange }: { value: number; onChange: (i:
 }
 
 export function SeriesPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
-  const options = [
-    { value: 1, title: 'Одна партия' },
-    { value: 3, title: 'Турнир на 3' },
-    { value: 5, title: 'Турнир на 5' },
-  ]
   return (
     <Group title="Партий">
-      <div className="tiles three">
-        {options.map((o) => (
-          <Tile key={o.value} group="series" on={value === o.value} onClick={() => onChange(o.value)} label={o.title}>
-            <span className="series-art" aria-hidden="true">
-              {Array.from({ length: o.value === 1 ? 1 : o.value }, (_, i) => (
-                <span key={i} />
-              ))}
-            </span>
-            <span className="tile-title">{o.title}</span>
-          </Tile>
-        ))}
-      </div>
+      <Segmented
+        group="series"
+        label="Сколько партий"
+        value={value}
+        onChange={onChange}
+        options={[
+          { value: 1, label: 'Одна' },
+          { value: 3, label: 'Турнир из 3' },
+          { value: 5, label: 'Турнир из 5' },
+        ]}
+      />
     </Group>
+  )
+}
+
+/** A compact one-line choice: a pill slides between the options. */
+export function Segmented<T extends string | number>({ group, value, options, onChange, label }: { group: string; value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string }) {
+  return (
+    <div className="tabs segmented" role="radiogroup" aria-label={label} style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+      {options.map((o) => (
+        <button key={String(o.value)} type="button" role="radio" aria-checked={value === o.value} className={`tab ${value === o.value ? 'on' : ''}`} onClick={() => onChange(o.value)}>
+          {value === o.value && <motion.span layoutId={`seg-${group}`} className="tab-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
+          <span>{o.label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** A titled block of related choices on a setup screen. */
+export function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <motion.section className="setup-section" variants={sheetItem}>
+      <h3 className="setup-title">{title}</h3>
+      {children}
+    </motion.section>
   )
 }

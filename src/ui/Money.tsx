@@ -100,7 +100,7 @@ export function StakePicker({ value, onChange, wallet, players, mult, title = '�
                 )}
               </span>
               <span className="tile-title">{s ? formatCoins(s) : name.title}</span>
-              <span className="tile-note">{s ? name.title : 'Просто игра'}</span>
+              {s > 0 && <span className="tile-note">{name.title}</span>}
             </Tile>
           )
         })}

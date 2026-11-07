@@ -2967,3 +2967,45 @@ small,
 .handoff-copy {
   width: 100%;
 }
+
+/* Game setup before a bot game: three titled cards and a start button that stays in reach */
+.setup {
+  overflow: clip;
+}
+.setup-inner {
+  gap: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.setup-section {
+  display: grid;
+  gap: 18px;
+  padding: 16px 16px 18px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.setup-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-lg);
+}
+.setup-start {
+  position: sticky;
+  bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  z-index: 5;
+  box-shadow: 0 10px 30px var(--shadow);
+}
+.segmented .tab {
+  font-size: var(--fs-sm);
+}
+.switch-label small {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--muted);
+}
