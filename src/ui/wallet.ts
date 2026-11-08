@@ -1,4 +1,4 @@
-import type { Difficulty } from './settings'
+import { type Difficulty, sanitize } from './settings'
 
 /** Coins the player starts with. */
 export const START_BALANCE = 1000
@@ -119,7 +119,9 @@ export function refill(w: Wallet): Wallet {
 export function loadWallet(): Wallet {
   try {
     const raw = localStorage.getItem('durak.wallet')
-    return raw ? { ...NEW_WALLET, ...JSON.parse(raw) } : NEW_WALLET
+    const w = raw ? sanitize(NEW_WALLET, JSON.parse(raw)) : NEW_WALLET
+    const wager = (g: unknown): Wager | null => (g && typeof g === 'object' && [(g as Wager).seed, (g as Wager).held, (g as Wager).prize, (g as Wager).stake].every((n) => Number.isFinite(n)) ? (g as Wager) : null)
+    return { ...w, balance: Math.max(0, w.balance), wager: wager(w.wager), roomWager: wager(w.roomWager) }
   } catch {
     return NEW_WALLET
   }

@@ -1,4 +1,4 @@
-import { beats, Card, DeckSize, makeDeck, mulberry32, shuffle, Suit } from './cards'
+import { beats, Card, DeckSize, makeDeck, mulberry32, randomSeed, shuffle, Suit } from './cards'
 
 export type Mode = 'podkidnoy' | 'perevodnoy'
 
@@ -18,7 +18,12 @@ export interface Options {
   human: number
   /** bot strength, normal when missing */
   level?: Level
+  /** shuffles the deck: whoever knows it can rebuild every hand, so it never leaves the device running the game */
   seed?: number
+  /** names this game for the wallet, stats and animations; safe to share, unlike `seed` */
+  id?: number
+  /** house rule: the first round (until the first discard) holds at most 5 attacks */
+  firstBeatFive?: boolean
   /** coins each player puts on this game; only the app's wallet reads it, the rules ignore it */
   stake?: number
 }
@@ -78,6 +83,32 @@ export interface GameState {
   falseAlarm?: { by: number } | null
   /** seats caught cheating: from then on they may only cover honestly */
   caught?: number[]
+  /** cards everyone saw go into a hand (taken from the table, or handed back to a caught cheater), as "S10", per seat; public knowledge */
+  seen?: Record<number, string[]>
+}
+
+const faceOf = (c: Card) => `${c.suit}${c.rank}`
+
+/** Remembers that everyone watched `cards` go into `player`'s hand. */
+function noteSeen(s: GameState, player: number, cards: Card[]) {
+  if (cards.length === 0) return
+  const seen = { ...(s.seen ?? {}) }
+  seen[player] = [...(seen[player] ?? []), ...cards.map(faceOf)]
+  s.seen = seen
+}
+
+/** A card left `player`'s hand face up, so it no longer needs remembering. */
+function forgetSeen(s: GameState, player: number, card: Card) {
+  const mine = s.seen?.[player]
+  if (!mine) return
+  const f = faceOf(card)
+  if (!mine.includes(f)) return
+  s.seen = { ...s.seen, [player]: mine.filter((x) => x !== f) }
+}
+
+/** Most attacks a round may hold: six, or five in the first round under the house rule. */
+export function roundLimit(s: Pick<GameState, 'options' | 'discard'>, defenderHand: number) {
+  return Math.min(s.options.firstBeatFive && s.discard.length === 0 ? 5 : HAND_SIZE, defenderHand)
 }
 
 /** Chance that a bot spots a person covering with a card that doesn't beat. */
@@ -103,8 +134,12 @@ export function maxPlayers(deckSize: DeckSize) {
   return Math.min(6, Math.floor(deckSize / HAND_SIZE))
 }
 
-export function newGame(options: Options): GameState {
-  const rng = mulberry32(options.seed ?? Date.now())
+/** The game's public name: `id`, or the seed for games saved before ids existed. */
+export const gameIdOf = (g: GameState): number => g.options.id ?? g.options.seed ?? 0
+
+export function newGame(opts: Options): GameState {
+  const options: Options = { ...opts, seed: opts.seed ?? randomSeed(), id: opts.id ?? randomSeed() }
+  const rng = mulberry32(options.seed!)
   // Ids are opaque per game so an online view can hide a card's face without hiding which card moved.
   const deck = shuffle(makeDeck(options.deckSize), rng).map((c, i) => ({ ...c, id: `${Math.floor(rng() * 1e9).toString(36)}${i}` }))
   const trumpCard = deck[0]
@@ -141,7 +176,7 @@ export function newGame(options: Options): GameState {
     defender,
     taking: false,
     passed: [],
-    limit: Math.min(HAND_SIZE, players[defender].hand.length),
+    limit: Math.min(options.firstBeatFive ? 5 : HAND_SIZE, players[defender].hand.length),
     over: false,
     loser: null,
     lastRound: null,
@@ -290,6 +325,7 @@ export function applyAction(prev: GameState, player: number, action: Action): Ga
       s.table = s.table.filter((pair) => {
         if (!off.includes(pair.attack.id)) return true
         s.players[player].hand.push(pair.attack)
+        noteSeen(s, player, [pair.attack])
         return false
       })
       s.caught = [...(s.caught ?? []), player]
@@ -309,6 +345,7 @@ export function applyAction(prev: GameState, player: number, action: Action): Ga
         const by = watchers[Math.floor(roll() * watchers.length)].id
         pair.defense = null
         s.players[player].hand.push(card)
+        noteSeen(s, player, [card])
         s.taking = true
         s.passed = []
         s.lastCaught = { by, player }
@@ -327,7 +364,11 @@ export function previewAction(prev: GameState, player: number, action: Action): 
   if (action.type === 'throw') {
     if (!canThrow(prev, player, action.cardIds)) throw new Error(`Illegal throw ${JSON.stringify(action.cardIds)} by ${player}`)
     const s: GameState = structuredClone(prev)
-    for (const id of action.cardIds) s.table.push({ attack: removeFromHand(s.players[player], id), defense: null })
+    for (const id of action.cardIds) {
+      const c = removeFromHand(s.players[player], id)
+      forgetSeen(s, player, c)
+      s.table.push({ attack: c, defense: null })
+    }
     s.passed = []
     s.lastAction = { player, action }
     s.lastCaught = null
@@ -343,19 +384,27 @@ export function previewAction(prev: GameState, player: number, action: Action): 
   s.falseAlarm = null
 
   switch (action.type) {
-    case 'attack':
-      s.table.push({ attack: removeFromHand(p, action.cardId), defense: null })
+    case 'attack': {
+      const c = removeFromHand(p, action.cardId)
+      forgetSeen(s, player, c)
+      s.table.push({ attack: c, defense: null })
       s.passed = []
       break
-    case 'defend':
-      s.table[action.pair].defense = removeFromHand(p, action.cardId)
+    }
+    case 'defend': {
+      const c = removeFromHand(p, action.cardId)
+      forgetSeen(s, player, c)
+      s.table[action.pair].defense = c
       s.passed = []
       break
+    }
     case 'transfer': {
-      s.table.push({ attack: removeFromHand(p, action.cardId), defense: null })
+      const c = removeFromHand(p, action.cardId)
+      forgetSeen(s, player, c)
+      s.table.push({ attack: c, defense: null })
       s.attacker = s.defender
       s.defender = transferTarget(s)
-      s.limit = Math.min(HAND_SIZE, s.players[s.defender].hand.length)
+      s.limit = roundLimit(s, s.players[s.defender].hand.length)
       s.passed = []
       break
     }
@@ -378,7 +427,9 @@ function bluff(prev: GameState, player: number, action: Extract<Action, { type: 
   s.lastAction = { player, action }
   s.lastCaught = null
   s.falseAlarm = null
-  s.table[action.pair].defense = removeFromHand(s.players[player], action.cardId)
+  const c = removeFromHand(s.players[player], action.cardId)
+  forgetSeen(s, player, c)
+  s.table[action.pair].defense = c
   s.passed = []
   return s
 }
@@ -395,6 +446,7 @@ function accuse(prev: GameState, player: number, pair: number): GameState {
   if (!beats(card, s.table[pair].attack, s.trump)) {
     s.table[pair].defense = null
     s.players[s.defender].hand.push(card)
+    noteSeen(s, s.defender, [card])
     s.caught = [...(s.caught ?? []), s.defender]
     s.taking = true
     s.passed = []
@@ -410,8 +462,8 @@ function settle(s: GameState): GameState {
   if (s.table.length === 0 || (!s.taking && unbeaten(s) > 0)) return s
   for (const id of attackOrder(s)) {
     if (s.passed.includes(id)) continue
-    // People always confirm with a button, even when they have nothing to add.
-    if (s.players[id].human || throwInCards(s, id).length > 0) return s
+    // People always confirm with a button, even when they have nothing to add; with no cards left there is nothing to confirm.
+    if ((s.players[id].human && s.players[id].hand.length > 0) || throwInCards(s, id).length > 0) return s
     s.passed.push(id)
   }
   return endRound(s)
@@ -420,8 +472,10 @@ function settle(s: GameState): GameState {
 function endRound(s: GameState): GameState {
   const cards = s.table.flatMap((p) => (p.defense ? [p.attack, p.defense] : [p.attack]))
   const took = s.taking
-  if (took) s.players[s.defender].hand.push(...cards)
-  else s.discard.push(...cards)
+  if (took) {
+    s.players[s.defender].hand.push(...cards)
+    noteSeen(s, s.defender, cards)
+  } else s.discard.push(...cards)
   s.lastRound = { end: took ? 'taken' : 'beaten', defender: s.defender }
   s.table = []
 
@@ -444,7 +498,7 @@ function endRound(s: GameState): GameState {
   const oldDefender = s.defender
   s.attacker = took || s.players[oldDefender].out ? nextActive(s, oldDefender) : oldDefender
   s.defender = nextActive(s, s.attacker)
-  s.limit = Math.min(HAND_SIZE, s.players[s.defender].hand.length)
+  s.limit = roundLimit(s, s.players[s.defender].hand.length)
   s.taking = false
   s.passed = []
   return s
@@ -457,10 +511,50 @@ export function cardCount(s: GameState) {
 /** What one seat may see: other hands and the closed deck lose their faces, ids stay. */
 export function viewFor(s: GameState, seat: number): GameState {
   const hide = (c: Card): Card => ({ id: c.id, suit: 'S', rank: 0 })
+  // The seed would let a guest replay the shuffle and see every hand, so it stays on the host.
+  const { seed: _secret, ...options } = s.options
   return {
     ...s,
+    options: { ...options, id: gameIdOf(s) },
     players: s.players.map((p) => (p.id === seat ? p : { ...p, hand: p.hand.map(hide) })),
     deck: s.deck.map((c, i) => (i === 0 ? c : hide(c))),
     discard: s.discard.map(hide),
   }
+}
+
+/**
+ * Whether a saved game can be picked up again: the right shape, and every card of its deck accounted
+ * for. A save from an older version, or a damaged one, is dropped instead of breaking the table.
+ */
+export function isValidGame(raw: unknown): raw is GameState {
+  try {
+    const g = raw as GameState
+    if (!g || typeof g !== 'object' || !g.options || !Array.isArray(g.players) || !Array.isArray(g.deck) || !Array.isArray(g.table) || !Array.isArray(g.discard)) return false
+    if (![24, 36, 52].includes(g.options.deckSize) || g.players.length !== g.options.players || g.players.length < 2) return false
+    if (!g.trumpCard || !['S', 'H', 'D', 'C'].includes(g.trump) || !Array.isArray(g.passed)) return false
+    if (!g.players.every((p, i) => p && p.id === i && Array.isArray(p.hand) && typeof p.name === 'string')) return false
+    if (g.attacker < 0 || g.attacker >= g.players.length || g.defender < 0 || g.defender >= g.players.length) return false
+    const ids = new Set<string>()
+    const all = [...g.deck, ...g.discard, ...g.table.flatMap((p) => (p.defense ? [p.attack, p.defense] : [p.attack])), ...g.players.flatMap((p) => p.hand)]
+    for (const c of all) {
+      if (!c || typeof c.id !== 'string' || ids.has(c.id)) return false
+      ids.add(c.id)
+    }
+    return all.length === g.options.deckSize && cardCount(g) === g.options.deckSize
+  } catch {
+    return false
+  }
+}
+
+/** What happens for a person whose time ran out: the defender takes, an attacker passes, a lead goes with the lowest card. */
+export function timeoutAction(s: GameState, player: number): Action | null {
+  if (currentActor(s) !== player) return null
+  const legal = legalActions(s, player)
+  const fallback = legal.find((a) => a.type === 'take') ?? legal.find((a) => a.type === 'pass')
+  if (fallback) return fallback
+  const hand = s.players[player].hand
+  const lowest = hand
+    .filter((c) => legal.some((a) => a.type === 'attack' && a.cardId === c.id))
+    .sort((a, b) => Number(a.suit === s.trump) - Number(b.suit === s.trump) || a.rank - b.rank)[0]
+  return lowest ? { type: 'attack', cardId: lowest.id } : null
 }

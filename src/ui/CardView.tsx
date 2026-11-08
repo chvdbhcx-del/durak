@@ -1,6 +1,7 @@
-import { motion, type MotionStyle, type TargetAndTransition } from 'framer-motion'
-import { useEffect, useState, type MouseEventHandler, type ReactNode } from 'react'
+import { m, type MotionStyle, type TargetAndTransition } from 'framer-motion'
+import { useEffect, useState, useSyncExternalStore, type MouseEventHandler, type ReactNode } from 'react'
 import { Card, isRed, rankLabel, Suit, SUIT_NAME } from '../engine/cards'
+import { getCardFace, watchCardFace } from './settings'
 import { SuitIcon } from './SuitIcon'
 
 interface Props {
@@ -70,17 +71,21 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
   }
   const turning = from !== null
 
-  const front = (
-    <span className={`side front ${isRed(card.suit) ? 'red' : ''} ${card.suit === trump ? 'trump' : ''}`}>
-      <span className="corner tl">
-        <b>{rankLabel(card.rank)}</b>
-        <SuitIcon suit={card.suit} />
+  const faceStyle = useSyncExternalStore(watchCardFace, getCardFace)
+  const front =
+    faceStyle === 'classic' && card.rank > 0 ? (
+      <ClassicFace card={card} trump={trump} />
+    ) : (
+      <span className={`side front ${isRed(card.suit) ? 'red' : ''} ${card.suit === trump ? 'trump' : ''}`}>
+        <span className="corner tl">
+          <b>{rankLabel(card.rank)}</b>
+          <SuitIcon suit={card.suit} />
+        </span>
+        <span className="pip">
+          <SuitIcon suit={card.suit} size="100%" />
+        </span>
       </span>
-      <span className="pip">
-        <SuitIcon suit={card.suit} size="100%" />
-      </span>
-    </span>
-  )
+    )
   const back = (
     <span className="side back">
       <span className="back-art" />
@@ -88,7 +93,7 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
   )
   const classes = ['card', size, flight ? 'flying' : '', turning ? 'turning' : '', faceUp && isRed(card.suit) ? 'red' : '', faceUp && card.suit === trump ? 'trump' : '', className].filter(Boolean).join(' ')
   const face = turning ? (
-    <motion.span
+    <m.span
       key="turning"
       className="flipper"
       initial={{ rotateY: from ? 0 : 180 }}
@@ -98,7 +103,7 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
     >
       {front}
       {back}
-    </motion.span>
+    </m.span>
   ) : (
     <span key="flat" className="flipper">
       {faceUp ? front : back}
@@ -108,7 +113,7 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
 
   if (onClick)
     return (
-      <motion.button
+      <m.button
         type="button"
         layoutId={card.id}
         transition={transition}
@@ -121,11 +126,68 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
         aria-label={label ?? name}
       >
         {inner}
-      </motion.button>
+      </m.button>
     )
   return (
-    <motion.div layoutId={card.id} transition={transition} className={classes} style={style} animate={animate} aria-label={faceUp ? name : undefined} role={faceUp ? 'img' : undefined}>
+    <m.div layoutId={card.id} transition={transition} className={classes} style={style} animate={animate} aria-label={faceUp ? name : undefined} role={faceUp ? 'img' : undefined}>
       {inner}
-    </motion.div>
+    </m.div>
+  )
+}
+
+/**
+ * Where the pips sit on a printed card, as [column, row] in a 3 × 7 grid (columns 0–2, rows 0–6).
+ * Pips in the lower half are drawn upside down, as on real cards.
+ */
+const PIPS: Record<number, [number, number][]> = {
+  2: [[1, 0], [1, 6]],
+  3: [[1, 0], [1, 3], [1, 6]],
+  4: [[0, 0], [2, 0], [0, 6], [2, 6]],
+  5: [[0, 0], [2, 0], [1, 3], [0, 6], [2, 6]],
+  6: [[0, 0], [2, 0], [0, 3], [2, 3], [0, 6], [2, 6]],
+  7: [[0, 0], [2, 0], [1, 1.5], [0, 3], [2, 3], [0, 6], [2, 6]],
+  8: [[0, 0], [2, 0], [1, 1.5], [0, 3], [2, 3], [1, 4.5], [0, 6], [2, 6]],
+  9: [[0, 0], [2, 0], [0, 2], [2, 2], [1, 3], [0, 4], [2, 4], [0, 6], [2, 6]],
+  10: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2], [0, 4], [2, 4], [1, 5], [0, 6], [2, 6]],
+}
+
+/** The face of a printed playing card: indices in two corners, pips by count, framed court cards. */
+export function ClassicFace({ card, trump }: { card: Card; trump: Suit }) {
+  const label = rankLabel(card.rank)
+  const pips = PIPS[card.rank]
+  const corner = (cls: string) => (
+    <span className={`corner ${cls}`}>
+      <b>{label}</b>
+      <SuitIcon suit={card.suit} />
+    </span>
+  )
+  return (
+    <span className={`side front classic ${isRed(card.suit) ? 'red' : ''} ${card.suit === trump ? 'trump' : ''}`}>
+      {corner('tl')}
+      {corner('br')}
+      {pips ? (
+        <span className="pips">
+          {pips.map(([x, y], i) => (
+            <span key={i} className={`cpip ${y > 3 ? 'flip' : ''}`} style={{ left: `${x * 50}%`, top: `${(y / 6) * 100}%` }}>
+              <SuitIcon suit={card.suit} size="100%" />
+            </span>
+          ))}
+        </span>
+      ) : card.rank === 14 ? (
+        <span className="ace">
+          <SuitIcon suit={card.suit} size="100%" />
+        </span>
+      ) : (
+        <span className="court">
+          <span className="court-suit">
+            <SuitIcon suit={card.suit} size="100%" />
+          </span>
+          <b>{label}</b>
+          <span className="court-suit flip">
+            <SuitIcon suit={card.suit} size="100%" />
+          </span>
+        </span>
+      )}
+    </span>
   )
 }

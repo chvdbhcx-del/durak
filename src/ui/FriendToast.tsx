@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 import type { Friends } from '../net/useFriends'
 
 interface Props {
@@ -15,11 +15,11 @@ export function FriendToast({ friends, busy, onJoin }: Props) {
     <div className="toasts">
       <AnimatePresence mode="popLayout">
         {inc && (
-          <motion.div key={inc.id} layout className="toast" role="alert" initial={{ opacity: 0, y: -30, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -20, scale: 0.97 }} transition={{ type: 'spring', stiffness: 420, damping: 30 }}>
+          <m.div key={inc.id} layout className="toast" role="alert" initial={{ opacity: 0, y: -30, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -20, scale: 0.97 }} transition={{ type: 'spring', stiffness: 420, damping: 30 }}>
             <span className="toast-dot" aria-hidden="true" />
             <span className="toast-text">{inc.kind === 'invite' ? `${inc.name} зовёт сыграть` : `${inc.name} хочет дружить`}</span>
             {inc.kind === 'invite' ? (
-              <motion.button
+              <m.button
                 type="button"
                 className="primary small"
                 disabled={busy}
@@ -30,9 +30,9 @@ export function FriendToast({ friends, busy, onJoin }: Props) {
                 }}
               >
                 {busy ? 'После партии' : 'Сыграть'}
-              </motion.button>
+              </m.button>
             ) : (
-              <motion.button
+              <m.button
                 type="button"
                 className="primary small"
                 whileTap={{ scale: 0.94 }}
@@ -42,17 +42,17 @@ export function FriendToast({ friends, busy, onJoin }: Props) {
                 }}
               >
                 Принять
-              </motion.button>
+              </m.button>
             )}
             <button type="button" className="toast-close" aria-label="Отклонить" onClick={friends.dismiss}>
               ×
             </button>
-          </motion.div>
+          </m.div>
         )}
         {friends.flash && (
-          <motion.div key={friends.flash} layout className="toast" role="status" initial={{ opacity: 0, y: -30, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -20 }} transition={{ type: 'spring', stiffness: 420, damping: 30 }}>
+          <m.div key={friends.flash} layout className="toast" role="status" initial={{ opacity: 0, y: -30, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -20 }} transition={{ type: 'spring', stiffness: 420, damping: 30 }}>
             <span className="toast-text">{friends.flash}</span>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

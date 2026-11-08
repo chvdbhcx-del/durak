@@ -6,6 +6,8 @@ export type Speed = 'calm' | 'normal' | 'fast'
 export type Difficulty = 'easy' | 'normal' | 'hard'
 export type CardBack = 'teal' | 'ember' | 'ink' | 'rose'
 export type TableStyle = 'forest' | 'night' | 'wine' | 'slate'
+/** classic: a light face with pips laid out as on printed cards; modern: one big suit on a dark face */
+export type CardFace = 'classic' | 'modern'
 
 export const AVATARS = ['🦊', '🐻', '🦉', '🦔', '🐺', '🐱', '🐸', '🦄']
 
@@ -21,6 +23,8 @@ export interface Settings {
   sound: boolean
   /** "cheater" mode: cover with any card */
   cheat: boolean
+  /** house rule: the first round takes at most 5 cards */
+  firstFive: boolean
   /** profile picture: index into AVATARS */
   avatar: number
   difficulty: Difficulty
@@ -28,6 +32,7 @@ export interface Settings {
   haptics: boolean
   cardBack: CardBack
   tableStyle: TableStyle
+  cardFace: CardFace
   /** address of a private room server; empty means the public one */
   server: string
   /** games in a bot tournament; 1 means a single game */
@@ -106,11 +111,13 @@ export const DEFAULT_SETTINGS: Settings = {
   name: `Игрок ${10 + Math.floor(Math.random() * 90)}`,
   sound: true,
   cheat: false,
+  firstFive: false,
   avatar: Math.floor(Math.random() * AVATARS.length),
   difficulty: 'normal',
   haptics: true,
   cardBack: 'teal',
   tableStyle: 'forest',
+  cardFace: 'classic',
   server: '',
   series: 1,
   stake: 100,
@@ -119,14 +126,38 @@ export const DEFAULT_SETTINGS: Settings = {
 export const BOT_DELAY: Record<Speed, number> = { calm: 2600, normal: 1800, fast: 1000 }
 
 // Storage can be missing or blocked (private windows, embedded previews), so every access is guarded.
-function read<T>(key: string, fallback: T): T {
+function read<T extends object>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key)
-    return raw ? { ...fallback, ...JSON.parse(raw) } : fallback
+    return raw ? sanitize(fallback, JSON.parse(raw)) : fallback
   } catch {
     return fallback
   }
 }
+
+/**
+ * Takes the saved fields whose type matches the defaults, so a value from an older or broken
+ * version can never reach the game as, say, a string where a number belongs.
+ */
+export function sanitize<T extends object>(fallback: T, saved: unknown): T {
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return fallback
+  const out: Record<string, unknown> = { ...(fallback as Record<string, unknown>) }
+  for (const [k, v] of Object.entries(saved as Record<string, unknown>)) {
+    if (!(k in fallback)) {
+      out[k] = v
+      continue
+    }
+    const want = (fallback as Record<string, unknown>)[k]
+    if (want === null || v === null) {
+      out[k] = v
+      continue
+    }
+    if (typeof v === typeof want && Array.isArray(v) === Array.isArray(want) && (typeof v !== 'number' || Number.isFinite(v))) out[k] = v
+  }
+  return out as T
+}
+
+const oneOf = <T,>(v: T, allowed: readonly T[], dflt: T) => (allowed.includes(v) ? v : dflt)
 
 function write(key: string, value: unknown) {
   try {
@@ -136,7 +167,25 @@ function write(key: string, value: unknown) {
   }
 }
 
-export const loadSettings = () => read<Settings>('durak.settings', DEFAULT_SETTINGS)
+export function loadSettings(): Settings {
+  const s = read<Settings>('durak.settings', DEFAULT_SETTINGS)
+  const d = DEFAULT_SETTINGS
+  return {
+    ...s,
+    deckSize: oneOf(s.deckSize, [24, 36, 52] as const, d.deckSize),
+    mode: oneOf(s.mode, ['podkidnoy', 'perevodnoy'] as const, d.mode),
+    theme: oneOf(s.theme, ['system', 'dark', 'light'] as const, d.theme),
+    speed: oneOf(s.speed, ['calm', 'normal', 'fast'] as const, d.speed),
+    difficulty: oneOf(s.difficulty, ['easy', 'normal', 'hard'] as const, d.difficulty),
+    opponents: Math.max(1, Math.min(5, Math.round(s.opponents))),
+    series: Math.max(1, Math.min(9, Math.round(s.series))),
+    avatar: Math.max(0, Math.min(AVATARS.length - 1, Math.round(s.avatar))),
+    cardBack: oneOf(s.cardBack, ['teal', 'ember', 'ink', 'rose'] as const, d.cardBack),
+    tableStyle: oneOf(s.tableStyle, ['forest', 'night', 'wine', 'slate'] as const, d.tableStyle),
+    cardFace: oneOf(s.cardFace, ['classic', 'modern'] as const, d.cardFace),
+    name: s.name.slice(0, 16),
+  }
+}
 export const saveSettings = (s: Settings) => write('durak.settings', s)
 export const loadStats = () => read<Stats>('durak.stats', EMPTY_STATS)
 export const saveStats = (s: Stats) => write('durak.stats', s)
@@ -147,10 +196,27 @@ export function applyTheme(theme: Theme) {
   else root.setAttribute('data-theme', theme)
 }
 
-export function applyLook(back: CardBack, table: TableStyle) {
+export function applyLook(back: CardBack, table: TableStyle, face: CardFace = 'classic') {
   const root = document.documentElement
   root.setAttribute('data-back', back)
   root.setAttribute('data-table', table)
+  setCardFace(face)
+}
+
+// Which face cards are drawn with; cards read it through useCardFace so they redraw when it changes.
+let cardFace: CardFace = 'classic'
+const faceWatchers = new Set<() => void>()
+export function setCardFace(face: CardFace) {
+  if (face === cardFace) return
+  cardFace = face
+  faceWatchers.forEach((w) => w())
+}
+export const getCardFace = () => cardFace
+export function watchCardFace(fn: () => void) {
+  faceWatchers.add(fn)
+  return () => {
+    faceWatchers.delete(fn)
+  }
 }
 
 /** Identifies this device to a room host, so a dropped player gets their seat back. */
@@ -158,7 +224,7 @@ export function deviceToken(): string {
   try {
     let t = localStorage.getItem('durak.token')
     if (!t) {
-      t = Math.random().toString(36).slice(2) + Date.now().toString(36)
+      t = Array.from(crypto.getRandomValues(new Uint8Array(18)), (b) => b.toString(16).padStart(2, '0')).join('')
       localStorage.setItem('durak.token', t)
     }
     return t

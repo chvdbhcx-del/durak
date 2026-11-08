@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 import { useState } from 'react'
 import { applyNow, RELEASES_URL, UpdateState } from './updates'
 
@@ -9,7 +9,7 @@ export function UpdateToast({ state }: { state: UpdateState }) {
   return (
     <AnimatePresence>
       {visible && (
-        <motion.div
+        <m.div
           className="toast"
           role="status"
           initial={{ opacity: 0, y: 40, scale: 0.95 }}
@@ -22,9 +22,9 @@ export function UpdateToast({ state }: { state: UpdateState }) {
             {state.kind === 'applying' ? `Обновляем до ${state.version}…` : state.kind === 'ready' ? `Версия ${state.version} скачана, включится после партии` : `Вышло приложение ${state.version}`}
           </span>
           {state.kind === 'applying' ? null : state.kind === 'ready' ? (
-            <motion.button type="button" className="primary small" whileTap={{ scale: 0.94 }} onClick={() => applyNow(state.bundle)}>
+            <m.button type="button" className="primary small" whileTap={{ scale: 0.94 }} onClick={() => applyNow(state.bundle)}>
               Сейчас
-            </motion.button>
+            </m.button>
           ) : (
             <a className="primary small" href={RELEASES_URL} target="_blank" rel="noreferrer">
               Скачать
@@ -33,7 +33,7 @@ export function UpdateToast({ state }: { state: UpdateState }) {
           <button type="button" className="toast-close" aria-label="Позже" onClick={() => setHidden(state.version)}>
             ×
           </button>
-        </motion.div>
+        </m.div>
       )}
     </AnimatePresence>
   )

@@ -24,11 +24,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      # 1.1.0 is commit 8856a81; every commit on main after it bumps the patch number, so the web version and the app agree.
+      # One formula for the site, the APK and the over-the-air bundle (scripts/version.mjs).
       - run: |
-          V="1.1.$(( $(git rev-list --count HEAD) - 19 ))"
+          V="$(node scripts/version.mjs)"
           echo "VERSION_NAME=$V" >> "$GITHUB_ENV"
           echo "WEB_VERSION=$V" >> "$GITHUB_ENV"
+      - name: Rust for the game engine (WebAssembly)
+        working-directory: engine-rs
+        run: rustup toolchain install || rustup show
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -41,26 +44,44 @@ jobs:
       - run: npm test
       - run: npm run build
 
+      # The release keystore (repository secrets) holds two keys: "durak" signs the APK, "ota" signs update.json.
+      - name: Signing keys
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          PW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set: debug-signed APK, unsigned update.json"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          if keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$PW" -alias ota >/dev/null 2>&1; then
+            keytool -importkeystore -noprompt -srckeystore "$RUNNER_TEMP/release.jks" -srcstorepass "$PW" -srcalias ota \
+              -destkeystore "$RUNNER_TEMP/ota.p12" -deststoretype PKCS12 -deststorepass "$PW" -destkeypass "$PW"
+            openssl pkcs12 -in "$RUNNER_TEMP/ota.p12" -nocerts -nodes -passin env:PW -out "$RUNNER_TEMP/ota.pem"
+            rm "$RUNNER_TEMP/ota.p12"
+            echo "OTA_KEY=$RUNNER_TEMP/ota.pem" >> "$GITHUB_ENV"
+          fi
+
       - name: Package the over-the-air bundle
         run: |
           (cd dist && zip -qr ../durak-web-$VERSION_NAME.zip .)
           gh release download --repo ${{ github.repository }} --pattern update.json --output previous-update.json 2>/dev/null || true
           node scripts/release-manifest.mjs "$VERSION_NAME" "$VERSION_CODE" \
-            "https://github.com/${{ github.repository }}/releases/download/v$VERSION_NAME/durak-web-$VERSION_NAME.zip" previous-update.json
+            "https://github.com/${{ github.repository }}/releases/download/v$VERSION_NAME/durak-web-$VERSION_NAME.zip" previous-update.json \
+            "durak-web-$VERSION_NAME.zip"
+          if [ -n "$OTA_KEY" ]; then node scripts/sign-update.mjs "$OTA_KEY"; rm -f "$OTA_KEY"; fi
 
       - name: Build the Android APK
         env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           npx cap sync android
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/release.jks"
+          if [ -n "$ANDROID_KEYSTORE_PATH" ]; then
             (cd android && ./gradlew assembleRelease --no-daemon)
             cp android/app/build/outputs/apk/release/app-release.apk "Durak-$VERSION_NAME.apk"
           else
-            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set, publishing a debug-signed APK"
             (cd android && ./gradlew assembleDebug --no-daemon)
             cp android/app/build/outputs/apk/debug/app-debug.apk "Durak-$VERSION_NAME-debug.apk"
           fi

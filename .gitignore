@@ -3,3 +3,7 @@ dist
 dist-single
 *.log
 *.tsbuildinfo
+src/engine/durak_engine.wasm
+engine-rs/target/
+test-results/
+playwright-report/

@@ -1,7 +1,7 @@
 import { presenceText } from './FriendsPanel'
 import { Coin, StakePicker } from './Money'
 import { affordableStake, formatCoins, type Wallet } from './wallet'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { maxPlayers } from '../engine/game'
 import { CODE_LENGTH, normalizeCode } from '../net/room'
@@ -19,6 +19,9 @@ interface Props {
   settings: Settings
   wallet: Wallet
   onChange: (s: Settings) => void
+  /** the room server in use now: the invite's own, or the one from the settings */
+  server: string
+  onInviteServer: (server: string) => void
   initialCode: string
   /** opened from an invite in a plain browser tab: offer the installed app first */
   offerApp?: boolean
@@ -46,9 +49,9 @@ function CodeInput({ value, onChange, onDone }: { value: string; onChange: (v: s
         onKeyDown={(e) => e.key === 'Enter' && value.length === CODE_LENGTH && onDone()}
       />
       {Array.from({ length: CODE_LENGTH }, (_, i) => (
-        <motion.span key={i} className={`code-box ${i === value.length ? 'caret' : ''} ${value[i] ? 'filled' : ''}`} animate={value[i] ? { scale: [1.15, 1] } : { scale: 1 }} transition={{ duration: 0.18 }}>
+        <m.span key={i} className={`code-box ${i === value.length ? 'caret' : ''} ${value[i] ? 'filled' : ''}`} animate={value[i] ? { scale: [1.15, 1] } : { scale: 1 }} transition={{ duration: 0.18 }}>
           {value[i] ?? ''}
-        </motion.span>
+        </m.span>
       ))}
     </label>
   )
@@ -72,26 +75,26 @@ function AppHandoff({ code, server }: { code: string; server: string }) {
     }
   }
   return (
-    <motion.section className="app-handoff" initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 320, damping: 26 }}>
+    <m.section className="app-handoff" initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 320, damping: 26 }}>
       <span className="handoff-title">Вас позвали в комнату {code}</span>
       {link && (
-        <motion.a className="primary big handoff-open" href={link} whileTap={{ scale: 0.96 }}>
+        <m.a className="primary big handoff-open" href={link} whileTap={{ scale: 0.96 }}>
           Открыть в приложении
-        </motion.a>
+        </m.a>
       )}
-      <motion.button type="button" className={`${link ? 'ghost' : 'primary'} big handoff-copy`} whileTap={{ scale: 0.95 }} onClick={copy}>
+      <m.button type="button" className={`${link ? 'ghost' : 'primary'} big handoff-copy`} whileTap={{ scale: 0.95 }} onClick={copy}>
         <AnimatePresence mode="wait" initial={false}>
-          <motion.span key={copied ? 'ok' : 'copy'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+          <m.span key={copied ? 'ok' : 'copy'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
             {copied ? 'Скопировано' : platform === 'ios' ? 'Скопировать приглашение' : `Скопировать код ${code}`}
-          </motion.span>
+          </m.span>
         </AnimatePresence>
-      </motion.button>
+      </m.button>
       {platform === 'ios' && (
         <p className="handoff-note">
           {copied ? 'Теперь откройте Дурак с экрана «Домой» и нажмите «Вставить приглашение».' : 'Дурак на экране «Домой»? iPhone не передаёт ему ссылки: скопируйте приглашение и вставьте его там.'}
         </p>
       )}
-    </motion.section>
+    </m.section>
   )
 }
 
@@ -112,9 +115,9 @@ function PasteButton({ onCode }: { onCode: (inv: Invite) => void }) {
     }
   }
   return (
-    <motion.button type="button" className="link paste-code" whileTap={{ scale: 0.95 }} onClick={paste}>
+    <m.button type="button" className="link paste-code" whileTap={{ scale: 0.95 }} onClick={paste}>
       {miss ? 'В буфере нет кода' : 'Вставить'}
-    </motion.button>
+    </m.button>
   )
 }
 
@@ -122,9 +125,9 @@ function NameBadge({ name, onChange }: { name: string; onChange: (n: string) => 
   const [editing, setEditing] = useState(false)
   return (
     <div className="name-badge">
-      <motion.span key={name[0]} className="name-avatar" initial={{ scale: 0.6 }} animate={{ scale: 1 }}>
+      <m.span key={name[0]} className="name-avatar" initial={{ scale: 0.6 }} animate={{ scale: 1 }}>
         {name.trim()[0]?.toUpperCase() ?? '?'}
-      </motion.span>
+      </m.span>
       {editing ? (
         <input
           id="player-name"
@@ -156,13 +159,13 @@ function CardSpinner() {
   return (
     <div className="card-spinner" aria-hidden="true">
       {[0, 1, 2].map((i) => (
-        <motion.span key={i} className="spin-card" animate={{ rotate: [0, 360] }} transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut', delay: i * 0.12 }} />
+        <m.span key={i} className="spin-card" animate={{ rotate: [0, 360] }} transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut', delay: i * 0.12 }} />
       ))}
     </div>
   )
 }
 
-export function OnlineScreen({ online, settings, wallet, onChange, initialCode, offerApp = false, friends, onInviteFriend, onBack }: Props) {
+export function OnlineScreen({ online, settings, wallet, onChange, server, onInviteServer, initialCode, offerApp = false, friends, onInviteFriend, onBack }: Props) {
   const [mode, setMode] = useState<'choose' | 'join'>(initialCode ? 'join' : 'choose')
   const [code, setCode] = useState(initialCode)
   const [copied, setCopied] = useState(false)
@@ -184,7 +187,7 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
 
   const invite = async () => {
     if (!lobby) return
-    const url = inviteUrl(lobby.code, settings.server)
+    const url = inviteUrl(lobby.code, server)
     const text = `Сыграем в дурака? Код комнаты: ${lobby.code}`
     try {
       if (navigator.share) {
@@ -209,7 +212,7 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
   const hostName = lobby?.members.find((m) => m.host)?.name ?? 'хозяин'
 
   return (
-    <motion.main className="screen" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}>
+    <m.main className="screen" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}>
       <header className="screen-head">
         <BackButton onClick={back} />
         <h1>{phase === 'lobby' ? 'Комната' : 'Онлайн'}</h1>
@@ -218,18 +221,18 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
       <div className="screen-body">
         <AnimatePresence>
           {online.reconnecting && (
-            <motion.p key="reconnecting" className="reconnecting inline" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
+            <m.p key="reconnecting" className="reconnecting inline" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
               Восстанавливаем связь…
-            </motion.p>
+            </m.p>
           )}
         </AnimatePresence>
         <AnimatePresence mode="wait">
           {phase === 'idle' && (
-            <motion.div key={`idle-${mode}`} className="online-block" variants={sheetList} initial="hidden" animate="shown" exit={{ opacity: 0, y: -10 }}>
+            <m.div key={`idle-${mode}`} className="online-block" variants={sheetList} initial="hidden" animate="shown" exit={{ opacity: 0, y: -10 }}>
               <NameBadge name={settings.name} onChange={(name) => onChange({ ...settings, name })} />
               {mode === 'choose' ? (
                 <div className="way-cards">
-                  <motion.button
+                  <m.button
                     type="button"
                     className="way"
                     whileHover={{ y: -4 }}
@@ -244,8 +247,8 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
                     </span>
                     <span className="way-title">Создать комнату</span>
                     <span className="way-note">Позовите друзей по ссылке</span>
-                  </motion.button>
-                  <motion.button type="button" className="way" whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} onClick={() => setMode('join')}>
+                  </m.button>
+                  <m.button type="button" className="way" whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} onClick={() => setMode('join')}>
                     <span className="way-art key" aria-hidden="true">
                       <svg viewBox="0 0 24 24" width="28" height="28">
                         <path fill="currentColor" d="M7 14a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm5.6-4A6 6 0 1 0 12.6 14H15v3h3v-3h2v-4h-7.4z" />
@@ -253,24 +256,24 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
                     </span>
                     <span className="way-title">Войти по коду</span>
                     <span className="way-note">Код из приглашения</span>
-                  </motion.button>
+                  </m.button>
                 </div>
               ) : (
-                <motion.div className="join-block" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
-                  {offerApp && code === initialCode && <AppHandoff code={initialCode} server={settings.server} />}
+                <m.div className="join-block" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+                  {offerApp && code === initialCode && <AppHandoff code={initialCode} server={server} />}
                   <div className="join-head">
                     <p className="join-label">{offerApp && code === initialCode ? 'Или играйте здесь, в браузере' : 'Код комнаты'}</p>
                     {!(offerApp && code === initialCode) && (
                       <PasteButton
                         onCode={(inv) => {
                           setCode(inv.code)
-                          if (inv.server && inv.server !== settings.server) onChange({ ...settings, server: inv.server })
+                          onInviteServer(inv.server)
                         }}
                       />
                     )}
                   </div>
                   <CodeInput value={code} onChange={setCode} onDone={() => online.join(code, settings.name.trim() || 'Игрок')} />
-                  <motion.button
+                  <m.button
                     type="button"
                     className="primary big"
                     disabled={code.length !== CODE_LENGTH}
@@ -278,92 +281,92 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
                     onClick={() => online.join(code, settings.name.trim() || 'Игрок')}
                   >
                     Войти
-                  </motion.button>
-                </motion.div>
+                  </m.button>
+                </m.div>
               )}
-            </motion.div>
+            </m.div>
           )}
 
           {phase === 'connecting' && (
-            <motion.div key="connecting" className="online-block center" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
+            <m.div key="connecting" className="online-block center" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
               <CardSpinner />
               <p className="big-note">{role === 'host' ? 'Создаём комнату…' : 'Подключаемся…'}</p>
-            </motion.div>
+            </m.div>
           )}
 
           {phase === 'error' && (
-            <motion.div key="error" className="online-block center" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-              <motion.span className="error-mark" initial={{ rotate: -20, scale: 0.5 }} animate={{ rotate: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 400, damping: 14 }} aria-hidden="true">
+            <m.div key="error" className="online-block center" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <m.span className="error-mark" initial={{ rotate: -20, scale: 0.5 }} animate={{ rotate: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 400, damping: 14 }} aria-hidden="true">
                 !
-              </motion.span>
+              </m.span>
               <p className="big-note">{error}</p>
               <p className="muted">Если вы в мобильной сети, попробуйте через Wi-Fi.</p>
-              <motion.button type="button" className="primary big narrow" whileTap={{ scale: 0.96 }} onClick={() => online.leave()}>
+              <m.button type="button" className="primary big narrow" whileTap={{ scale: 0.96 }} onClick={() => online.leave()}>
                 Понятно
-              </motion.button>
-            </motion.div>
+              </m.button>
+            </m.div>
           )}
 
           {phase === 'lobby' && lobby && (
-            <motion.div key="lobby" className="online-block" variants={sheetList} initial="hidden" animate="shown" exit={{ opacity: 0 }}>
-              <motion.section className="room-code" initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }}>
+            <m.div key="lobby" className="online-block" variants={sheetList} initial="hidden" animate="shown" exit={{ opacity: 0 }}>
+              <m.section className="room-code" initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }}>
                 <span className="group-title">Код комнаты</span>
                 <div className="code-display" aria-label={`Код ${lobby.code.split('').join(' ')}`}>
                   {lobby.code.split('').map((ch, i) => (
-                    <motion.span key={i} className="code-box filled" initial={{ rotateX: 90, opacity: 0 }} animate={{ rotateX: 0, opacity: 1 }} transition={{ delay: 0.1 + i * 0.06, type: 'spring', stiffness: 300, damping: 20 }}>
+                    <m.span key={i} className="code-box filled" initial={{ rotateX: 90, opacity: 0 }} animate={{ rotateX: 0, opacity: 1 }} transition={{ delay: 0.1 + i * 0.06, type: 'spring', stiffness: 300, damping: 20 }}>
                       {ch}
-                    </motion.span>
+                    </m.span>
                   ))}
                 </div>
                 {host && (
-                  <motion.button type="button" className="ghost invite" whileTap={{ scale: 0.95 }} onClick={invite}>
+                  <m.button type="button" className="ghost invite" whileTap={{ scale: 0.95 }} onClick={invite}>
                     <AnimatePresence mode="wait" initial={false}>
-                      <motion.span key={copied ? 'ok' : 'share'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+                      <m.span key={copied ? 'ok' : 'share'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
                         {copied ? 'Ссылка скопирована' : 'Пригласить друзей'}
-                      </motion.span>
+                      </m.span>
                     </AnimatePresence>
-                  </motion.button>
+                  </m.button>
                 )}
-              </motion.section>
+              </m.section>
 
               <Group title="Игроки" value={`${players} ${plural(players, 'игрок', 'игрока', 'игроков')}`}>
                 <div className="lobby-seats">
                   <AnimatePresence>
-                    {lobby.members.map((m) => (
-                      <motion.div key={m.token} layout className={`lobby-seat ${m.online ? '' : 'off'}`} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: m.online ? 1 : 0.4 }} exit={{ scale: 0, opacity: 0 }} transition={{ type: 'spring', stiffness: 500, damping: 24 }}>
-                        <span className="avatar-circle person">{m.name[0]?.toUpperCase()}</span>
-                        <span className="avatar-name">{m.name}</span>
-                        {m.host && <span className="seat-tag">хозяин</span>}
-                        {m.fid && m.fid !== friends.fid && (
-                          <button type="button" className={`seat-add ${friends.isFriend(m.fid) ? 'done' : ''}`} aria-label={friends.isFriend(m.fid) ? `${m.name} уже в друзьях` : `Добавить ${m.name} в друзья`} disabled={friends.isFriend(m.fid)} onClick={() => friends.add(m.fid!, m.name)}>
-                            {friends.isFriend(m.fid) ? '✓' : '+'}
+                    {lobby.members.map((mem) => (
+                      <m.div key={mem.id} layout className={`lobby-seat ${mem.online ? '' : 'off'}`} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: mem.online ? 1 : 0.4 }} exit={{ scale: 0, opacity: 0 }} transition={{ type: 'spring', stiffness: 500, damping: 24 }}>
+                        <span className="avatar-circle person">{mem.name[0]?.toUpperCase()}</span>
+                        <span className="avatar-name">{mem.name}</span>
+                        {mem.host && <span className="seat-tag">хозяин</span>}
+                        {mem.fid && mem.fid !== friends.fid && (
+                          <button type="button" className={`seat-add ${friends.isFriend(mem.fid) ? 'done' : ''}`} aria-label={friends.isFriend(mem.fid) ? `${mem.name} уже в друзьях` : `Добавить ${mem.name} в друзья`} disabled={friends.isFriend(mem.fid)} onClick={() => friends.add(mem.fid!, mem.name)}>
+                            {friends.isFriend(mem.fid) ? '✓' : '+'}
                           </button>
                         )}
-                        {host && !m.host && (
-                          <button type="button" className="seat-kick" aria-label={`Убрать ${m.name}`} onClick={() => online.kick(m.token)}>
+                        {host && !mem.host && (
+                          <button type="button" className="seat-kick" aria-label={`Убрать ${mem.name}`} onClick={() => online.kick(mem.id)}>
                             ×
                           </button>
                         )}
-                      </motion.div>
+                      </m.div>
                     ))}
                     {Array.from({ length: lobby.bots }, (_, i) => (
-                      <motion.div key={`bot-${i}`} layout className="lobby-seat" initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }} transition={{ type: 'spring', stiffness: 500, damping: 24 }}>
+                      <m.div key={`bot-${i}`} layout className="lobby-seat" initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }} transition={{ type: 'spring', stiffness: 500, damping: 24 }}>
                         <span className="avatar-circle">{BOT_NAMES[i][0]}</span>
                         <span className="avatar-name">{BOT_NAMES[i]}</span>
                         <span className="seat-tag">бот</span>
-                      </motion.div>
+                      </m.div>
                     ))}
                     {host && !roomFull && (
-                      <motion.button key="add-bot" layout type="button" className="lobby-seat add" whileTap={{ scale: 0.92 }} onClick={() => online.setLobby({ bots: lobby.bots + 1 })} initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                      <m.button key="add-bot" layout type="button" className="lobby-seat add" whileTap={{ scale: 0.92 }} onClick={() => online.setLobby({ bots: lobby.bots + 1 })} initial={{ scale: 0 }} animate={{ scale: 1 }}>
                         <span className="avatar-circle dashed">+</span>
                         <span className="avatar-name">Бот</span>
-                      </motion.button>
+                      </m.button>
                     )}
                     {host && lobby.bots > 0 && (
-                      <motion.button key="remove-bot" layout type="button" className="lobby-seat add" whileTap={{ scale: 0.92 }} onClick={() => online.setLobby({ bots: lobby.bots - 1 })} initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                      <m.button key="remove-bot" layout type="button" className="lobby-seat add" whileTap={{ scale: 0.92 }} onClick={() => online.setLobby({ bots: lobby.bots - 1 })} initial={{ scale: 0 }} animate={{ scale: 1 }}>
                         <span className="avatar-circle dashed">−</span>
                         <span className="avatar-name">Убрать</span>
-                      </motion.button>
+                      </m.button>
                     )}
                   </AnimatePresence>
                 </div>
@@ -383,9 +386,9 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
                               <small>{presenceText(friends, f.id)}</small>
                             </span>
                           </span>
-                          <motion.button type="button" className="primary small" whileTap={{ scale: 0.94 }} onClick={() => onInviteFriend(f.id)}>
+                          <m.button type="button" className="primary small" whileTap={{ scale: 0.94 }} onClick={() => onInviteFriend(f.id)}>
                             Позвать
-                          </motion.button>
+                          </m.button>
                         </div>
                       ))}
                   </div>
@@ -398,12 +401,12 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
                   <DeckPicker value={lobby.deckSize} onChange={(d) => online.setLobby({ deckSize: d })} />
                   <CheatPicker value={!!lobby.cheat} onChange={(c) => online.setLobby({ cheat: c })} />
                   <StakePicker title="Ставка в комнате" value={lobby.stake ?? 0} onChange={(stake) => online.setLobby({ stake })} wallet={wallet} players={Math.max(2, players)} mult={1} />
-                  <motion.button type="button" className="primary big" disabled={players < 2} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={() => online.start(settings.difficulty)}>
+                  <m.button type="button" className="primary big" disabled={players < 2} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={() => online.start(settings.difficulty)}>
                     {players < 2 ? 'Ждём хотя бы одного игрока' : 'Начать игру'}
-                  </motion.button>
+                  </m.button>
                 </>
               ) : (
-                <motion.div className="waiting" variants={sheetList}>
+                <m.div className="waiting" variants={sheetList}>
                   <span className="chip">
                     {lobby.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'} · {lobby.deckSize} карт
                   </span>
@@ -419,17 +422,17 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
                   <p className="big-note">
                     Ждём, пока {hostName} начнёт
                     {[0, 1, 2].map((i) => (
-                      <motion.span key={i} animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}>
+                      <m.span key={i} animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}>
                         .
-                      </motion.span>
+                      </m.span>
                     ))}
                   </p>
-                </motion.div>
+                </m.div>
               )}
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
       </div>
-    </motion.main>
+    </m.main>
   )
 }

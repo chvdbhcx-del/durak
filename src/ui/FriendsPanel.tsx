@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import type { Friends } from '../net/useFriends'
 import { Sheet, sheetItem } from './Sheet'
@@ -28,17 +28,17 @@ export function FriendsPanel({ friends, onInvite, onClose }: Props) {
   return (
     <Sheet title="Друзья" onClose={onClose}>
       {friends.list.length === 0 ? (
-        <motion.div className="friends-empty" variants={sheetItem}>
+        <m.div className="friends-empty" variants={sheetItem}>
           <span className="friends-empty-art" aria-hidden="true">
             🤝
           </span>
           <p>Пока никого. Сыграйте онлайн и нажмите «+» рядом с именем игрока за столом или в комнате, и он появится здесь.</p>
-        </motion.div>
+        </m.div>
       ) : (
-        <motion.ul className="friends" variants={sheetItem}>
+        <m.ul className="friends" variants={sheetItem}>
           <AnimatePresence initial={false}>
             {friends.list.map((f) => (
-              <motion.li key={f.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, x: -30 }} transition={{ type: 'spring', stiffness: 420, damping: 32 }}>
+              <m.li key={f.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, x: -30 }} transition={{ type: 'spring', stiffness: 420, damping: 32 }}>
                 <span className="friend-avatar">
                   {f.name[0]?.toUpperCase()}
                   <i className={`friend-dot ${friends.here[f.id] ? 'on' : ''}`} aria-hidden="true" />
@@ -65,22 +65,22 @@ export function FriendsPanel({ friends, onInvite, onClose }: Props) {
                   </span>
                 ) : (
                   <span className="friend-actions">
-                    <motion.button type="button" className="primary small" whileTap={{ scale: 0.94 }} onClick={() => onInvite(f.id)}>
+                    <m.button type="button" className="primary small" whileTap={{ scale: 0.94 }} onClick={() => onInvite(f.id)}>
                       Позвать
-                    </motion.button>
+                    </m.button>
                     <button type="button" className="toast-close" aria-label={`Убрать ${f.name} из друзей`} onClick={() => setRemoving(f.id)}>
                       ×
                     </button>
                   </span>
                 )}
-              </motion.li>
+              </m.li>
             ))}
           </AnimatePresence>
-        </motion.ul>
+        </m.ul>
       )}
-      <motion.p className="foot-note" variants={sheetItem}>
+      <m.p className="foot-note" variants={sheetItem}>
         Приглашение приходит, пока у друга открыто приложение. Если друг не в сети, отправьте ему код или ссылку комнаты.
-      </motion.p>
+      </m.p>
     </Sheet>
   )
 }

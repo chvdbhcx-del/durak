@@ -14,13 +14,36 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Rust for the game engine (WebAssembly)
+        working-directory: engine-rs
+        run: rustup toolchain install || rustup show
       - run: npm ci
+      - run: npm run lint
       - run: npm test
       - run: npm run build
+      - name: Browser smoke tests
+        run: |
+          npx playwright install --with-deps chromium
+          npm run e2e
       - uses: actions/upload-artifact@v4
         with:
           name: web
           path: dist
+
+  # Whole games between bots: slow, so they run beside the rest instead of holding it up.
+  simulations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Rust for the game engine (WebAssembly)
+        working-directory: engine-rs
+        run: rustup toolchain install || rustup show
+      - run: npm ci
+      - run: npm run test:sim
 
   android:
     needs: web
@@ -35,6 +58,9 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      - name: Rust for the game engine (WebAssembly)
+        working-directory: engine-rs
+        run: rustup toolchain install || rustup show
       - run: npm ci
       - run: npm run build
       - run: npx cap sync android
@@ -55,6 +81,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Rust for the game engine (WebAssembly)
+        working-directory: engine-rs
+        run: rustup toolchain install || rustup show
       - run: npm ci
       - run: npm run build
       - run: npx cap sync ios

@@ -1,8 +1,9 @@
-import { motion } from 'framer-motion'
+import { m } from 'framer-motion'
 import type { ReactNode } from 'react'
-import type { DeckSize } from '../engine/cards'
+import { type Card, type DeckSize, isRed, rankLabel, type Suit } from '../engine/cards'
 import type { Mode } from '../engine/game'
-import { AVATARS, type CardBack, type Difficulty, type Speed, type TableStyle, type Theme } from './settings'
+import { ClassicFace } from './CardView'
+import { AVATARS, type CardBack, type CardFace, type Difficulty, type Speed, type TableStyle, type Theme } from './settings'
 import { sheetItem } from './Sheet'
 import { SuitIcon } from './SuitIcon'
 
@@ -19,7 +20,7 @@ export function plural(n: number, one: string, few: string, many: string) {
 /** A selectable tile; the highlight ring slides between tiles of the same group. */
 export function Tile({ group, on, disabled, onClick, children, label, className = '' }: { group: string; on: boolean; disabled?: boolean; onClick: () => void; children: ReactNode; label: string; className?: string }) {
   return (
-    <motion.button
+    <m.button
       type="button"
       className={`tile ${on ? 'on' : ''} ${className}`}
       aria-pressed={on}
@@ -29,25 +30,25 @@ export function Tile({ group, on, disabled, onClick, children, label, className 
       whileTap={disabled ? undefined : { scale: 0.96 }}
       whileHover={disabled ? undefined : { y: -2 }}
     >
-      {on && <motion.span layoutId={`ring-${group}`} className="tile-ring" transition={{ type: 'spring', stiffness: 480, damping: 36 }} />}
+      {on && <m.span layoutId={`ring-${group}`} className="tile-ring" transition={{ type: 'spring', stiffness: 480, damping: 36 }} />}
       {children}
-    </motion.button>
+    </m.button>
   )
 }
 
 export function Group({ title, value, children }: { title: string; value?: string; children: ReactNode }) {
   return (
-    <motion.section className="group" variants={sheetItem}>
+    <m.section className="group" variants={sheetItem}>
       <header className="group-head">
         <span className="group-title">{title}</span>
         {value && (
-          <motion.span key={value} className="group-value" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}>
+          <m.span key={value} className="group-value" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}>
             {value}
-          </motion.span>
+          </m.span>
         )}
       </header>
       {children}
-    </motion.section>
+    </m.section>
   )
 }
 
@@ -102,7 +103,7 @@ export function OpponentsPicker({ value, max, onChange, title = 'Соперни�
           const on = n <= value
           const disabled = n > max
           return (
-            <motion.button
+            <m.button
               key={name + i}
               type="button"
               role="radio"
@@ -117,7 +118,7 @@ export function OpponentsPicker({ value, max, onChange, title = 'Соперни�
             >
               <span className="avatar-circle">{name[0]}</span>
               <span className="avatar-name">{name}</span>
-            </motion.button>
+            </m.button>
           )
         })}
       </div>
@@ -224,7 +225,7 @@ export function CheatPicker({ value, onChange }: { value: boolean; onChange: (on
 /** One on/off line: label on the left, a switch on the right. */
 export function Switch({ label, note, value, onChange, icon }: { label: string; note?: string; value: boolean; onChange: (on: boolean) => void; icon?: ReactNode }) {
   return (
-    <motion.button type="button" role="switch" aria-checked={value} className={`switch-row ${value ? 'on' : ''}`} variants={sheetItem} whileTap={{ scale: 0.98 }} onClick={() => onChange(!value)}>
+    <m.button type="button" role="switch" aria-checked={value} className={`switch-row ${value ? 'on' : ''}`} variants={sheetItem} whileTap={{ scale: 0.98 }} onClick={() => onChange(!value)}>
       {icon && (
         <span className="switch-icon" aria-hidden="true">
           {icon}
@@ -235,9 +236,9 @@ export function Switch({ label, note, value, onChange, icon }: { label: string; 
         {note && <small>{note}</small>}
       </span>
       <span className="switch" aria-hidden="true">
-        <motion.span className="switch-knob" layout transition={{ type: 'spring', stiffness: 600, damping: 34 }} />
+        <m.span className="switch-knob" layout transition={{ type: 'spring', stiffness: 600, damping: 34 }} />
       </span>
-    </motion.button>
+    </m.button>
   )
 }
 
@@ -294,9 +295,39 @@ export const TABLES: { value: TableStyle; title: string; color: string; glow: st
   { value: 'slate', title: 'Сланец', color: '#262b2e', glow: '#5d6a72' },
 ]
 
-export function LookPicker({ back, table, onBack, onTable }: { back: CardBack; table: TableStyle; onBack: (b: CardBack) => void; onTable: (t: TableStyle) => void }) {
+export function LookPicker({ back, table, face, onBack, onTable, onFace }: { back: CardBack; table: TableStyle; face: CardFace; onBack: (b: CardBack) => void; onTable: (t: TableStyle) => void; onFace: (f: CardFace) => void }) {
+  const sample = (suit: Suit, rank: number): Card => ({ id: `look-${suit}${rank}`, suit, rank })
   return (
     <>
+      <Group title="Карты" value={face === 'classic' ? 'Классические' : 'Современные'}>
+        <div className="tiles two">
+          {(['classic', 'modern'] as const).map((f) => (
+            <Tile key={f} group="face" on={face === f} onClick={() => onFace(f)} label={f === 'classic' ? 'Классические' : 'Современные'}>
+              <span className={`face-sample ${f}`} aria-hidden="true">
+                {[sample('H', 7), sample('S', 12)].map((c) =>
+                  f === 'classic' ? (
+                    <span key={c.id} className="card full sample">
+                      <ClassicFace card={c} trump="D" />
+                    </span>
+                  ) : (
+                    <span key={c.id} className="card full sample">
+                      <span className={`side front ${isRed(c.suit) ? 'red' : ''}`}>
+                        <span className="corner tl">
+                          <b>{rankLabel(c.rank)}</b>
+                          <SuitIcon suit={c.suit} />
+                        </span>
+                        <span className="pip">
+                          <SuitIcon suit={c.suit} size="100%" />
+                        </span>
+                      </span>
+                    </span>
+                  ),
+                )}
+              </span>
+            </Tile>
+          ))}
+        </div>
+      </Group>
       <Group title="Рубашка карт" value={CARD_BACKS.find((b) => b.value === back)?.title}>
         <div className="tiles four">
           {CARD_BACKS.map((b) => (
@@ -327,10 +358,10 @@ export function AvatarPicker({ value, onChange }: { value: number; onChange: (i:
   return (
     <div className="avatar-grid">
       {AVATARS.map((a, i) => (
-        <motion.button key={a} type="button" className={`avatar-opt ${i === value ? 'on' : ''}`} aria-label={`Аватар ${a}`} aria-pressed={i === value} whileTap={{ scale: 0.9 }} onClick={() => onChange(i)}>
-          {i === value && <motion.span layoutId="avatar-ring" className="tile-ring" transition={{ type: 'spring', stiffness: 480, damping: 36 }} />}
+        <m.button key={a} type="button" className={`avatar-opt ${i === value ? 'on' : ''}`} aria-label={`Аватар ${a}`} aria-pressed={i === value} whileTap={{ scale: 0.9 }} onClick={() => onChange(i)}>
+          {i === value && <m.span layoutId="avatar-ring" className="tile-ring" transition={{ type: 'spring', stiffness: 480, damping: 36 }} />}
           <span>{a}</span>
-        </motion.button>
+        </m.button>
       ))}
     </div>
   )
@@ -360,7 +391,7 @@ export function Segmented<T extends string | number>({ group, value, options, on
     <div className="tabs segmented" role="radiogroup" aria-label={label} style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
       {options.map((o) => (
         <button key={String(o.value)} type="button" role="radio" aria-checked={value === o.value} className={`tab ${value === o.value ? 'on' : ''}`} onClick={() => onChange(o.value)}>
-          {value === o.value && <motion.span layoutId={`seg-${group}`} className="tab-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
+          {value === o.value && <m.span layoutId={`seg-${group}`} className="tab-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
           <span>{o.label}</span>
         </button>
       ))}
@@ -371,9 +402,9 @@ export function Segmented<T extends string | number>({ group, value, options, on
 /** A titled block of related choices on a setup screen. */
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <motion.section className="setup-section" variants={sheetItem}>
+    <m.section className="setup-section" variants={sheetItem}>
       <h3 className="setup-title">{title}</h3>
       {children}
-    </motion.section>
+    </m.section>
   )
 }

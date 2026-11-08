@@ -23,6 +23,15 @@ export function makeDeck(size: DeckSize): Card[] {
   return deck
 }
 
+/** A 32-bit seed nobody can guess: not the clock, which a guest could work out from when the game began. */
+export function randomSeed(): number {
+  try {
+    return crypto.getRandomValues(new Uint32Array(1))[0]
+  } catch {
+    return Math.floor(Math.random() * 0xffffffff)
+  }
+}
+
 /** Small seedable PRNG so games and tests can be replayed. */
 export function mulberry32(seed: number) {
   let a = seed >>> 0

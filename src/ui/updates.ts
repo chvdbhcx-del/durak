@@ -2,6 +2,7 @@ import { App as NativeApp } from '@capacitor/app'
 import { CapacitorHttp } from '@capacitor/core'
 import { BundleInfo, CapacitorUpdater } from '@capgo/capacitor-updater'
 import { isNative } from './native'
+import { OTA_PUBLIC_KEY, verifyUpdate } from './otaKey'
 
 /**
  * Over-the-air updates for the native apps. Every merge to main publishes a GitHub release
@@ -14,7 +15,45 @@ import { isNative } from './native'
 export const WEB_VERSION: string = __WEB_VERSION__
 export const RELEASES_URL = 'https://github.com/chvdbhcx-del/durak/releases/latest'
 const API_URL = 'https://api.github.com/repos/chvdbhcx-del/durak/releases/latest'
-const CHECK_EVERY_MS = 2 * 60 * 1000
+/** The latest release's manifest, served as a plain file: no GitHub API, so no 60-requests-an-hour limit. */
+const MANIFEST_URL = 'https://github.com/chvdbhcx-del/durak/releases/latest/download/update.json'
+const CHECK_EVERY_MS = 30 * 60 * 1000
+
+interface Manifest {
+  version: string
+  url: string
+  minNativeBuild: number
+  sha256?: string
+  sig?: string
+}
+
+/** What to download, wherever it was read from. */
+interface Offer {
+  version: string
+  url: string
+  minNativeBuild: number
+  sha256: string
+  sig?: string
+}
+
+async function latestOffer(): Promise<Offer> {
+  try {
+    const m = await getJson<Manifest>(MANIFEST_URL)
+    if (m && typeof m.version === 'string' && typeof m.url === 'string' && m.sha256 && /^[0-9a-f]{64}$/i.test(m.sha256))
+      return { version: m.version.replace(/^v/, ''), url: m.url, minNativeBuild: Number(m.minNativeBuild) || 0, sha256: m.sha256.toLowerCase(), sig: m.sig }
+  } catch {
+    /* older releases have no sha256 in update.json: ask the API below */
+  }
+  const release = await getJson<Release>(API_URL)
+  const zip = release.assets.find((a) => a.name.endsWith('.zip'))
+  if (!zip) throw new Error('в релизе нет веб-сборки')
+  const sha256 = /sha256:\s*([0-9a-f]{64})/i.exec(release.body ?? '')?.[1]?.toLowerCase()
+  if (!sha256) throw new Error('в релизе нет контрольной суммы')
+  return { version: release.tag_name.replace(/^v/, ''), url: zip.browser_download_url, minNativeBuild: Number(/minNativeBuild:\s*(\d+)/.exec(release.body ?? '')?.[1] ?? 0), sha256 }
+}
+
+/** With a public key built in, only bundles signed by the release key are installed. */
+const signedByUs = (o: Offer) => (OTA_PUBLIC_KEY ? verifyUpdate(OTA_PUBLIC_KEY, o.version, o.sha256, o.sig) : Promise.resolve(true))
 
 interface Release {
   tag_name: string
@@ -87,30 +126,24 @@ async function check() {
   busy = true
   lastCheck = Date.now()
   try {
-    const release = await getJson<Release>(API_URL)
-    const version = release.tag_name.replace(/^v/, '')
+    const offer = await latestOffer()
+    const version = offer.version
     const running = await runningVersion()
     if (!newer(version, running)) {
       note(`Проверено, у вас последняя версия`)
       return
     }
     if (ready?.version === version) return applyIfIdle()
-
-    // The release notes carry the oldest APK this bundle still runs on.
-    const minNativeBuild = Number(/minNativeBuild:\s*(\d+)/.exec(release.body ?? '')?.[1] ?? 0)
+    // The manifest carries the oldest APK this bundle still runs on.
     const build = parseInt((await NativeApp.getInfo()).build, 10) || 0
-    if (build < minNativeBuild) {
+    if (build < offer.minNativeBuild) {
       note(`Версия ${version} требует новое приложение`)
       return emit({ kind: 'needs-app', version })
     }
-
-    const zip = release.assets.find((a) => a.name.endsWith('.zip'))
-    if (!zip) throw new Error('в релизе нет веб-сборки')
+    if (!(await signedByUs(offer))) throw new Error('подпись обновления не совпала')
     emit({ kind: 'downloading', version })
     note(`Скачиваем версию ${version}…`)
-    const checksum = /sha256:\s*([0-9a-f]{64})/i.exec(release.body ?? '')?.[1]?.toLowerCase()
-    if (!checksum) throw new Error('в релизе нет контрольной суммы')
-    const bundle = await CapacitorUpdater.download({ url: zip.browser_download_url, version, checksum })
+    const bundle = await CapacitorUpdater.download({ url: offer.url, version, checksum: offer.sha256 })
     await CapacitorUpdater.next({ id: bundle.id })
     // Otherwise the updater would swap bundles the moment the app goes to the background, mid-game included.
     await CapacitorUpdater.setMultiDelay({ delayConditions: [{ kind: 'kill' }] })

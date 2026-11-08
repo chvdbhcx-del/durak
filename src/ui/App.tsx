@@ -1,12 +1,13 @@
 import { AnimatePresence } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { chooseAction, eagerThrow } from '../engine/bot'
+import { eagerThrow } from '../engine/bot'
+import { think } from '../engine/think'
 import { botReaction, botReply, type Emote, fingerprint } from '../engine/emotes'
-import { Action, applyAction, currentActor, GameState, maxPlayers, newGame } from '../engine/game'
+import { Action, applyAction, currentActor, gameIdOf, GameState, isValidGame, maxPlayers, newGame } from '../engine/game'
 import { setRoomServer } from '../net/room'
 import { inBrowserTab, inviteFromText, type Invite, iosHomeScreen, parseInvite, watchInvites } from './deeplink'
 import { useFriends } from '../net/useFriends'
-import { hasSavedRoom, useOnline } from '../net/useOnline'
+import { hasSavedRoom, TURN_MS, useOnline } from '../net/useOnline'
 import { GameScreen, Result, Series } from './GameScreen'
 import { FriendToast } from './FriendToast'
 import { FriendsPanel } from './FriendsPanel'
@@ -32,8 +33,8 @@ const GAME_KEY = 'durak.game'
 function loadGame(): GameState | null {
   try {
     const raw = localStorage.getItem(GAME_KEY)
-    const g = raw ? (JSON.parse(raw) as GameState) : null
-    return g && !g.over ? g : null
+    const g: unknown = raw ? JSON.parse(raw) : null
+    return isValidGame(g) && !g.over ? g : null
   } catch {
     return null
   }
@@ -50,7 +51,7 @@ function saveGame(g: GameState | null) {
 const playersFor = (s: Settings) => Math.min(s.opponents + 1, maxPlayers(s.deckSize))
 
 function startGame(s: Settings, stake: number): GameState {
-  return newGame({ players: playersFor(s), deckSize: s.deckSize, mode: s.mode, cheat: s.cheat, names: ['Вы', ...BOT_NAMES], human: ME, level: s.difficulty, seed: Date.now(), stake })
+  return newGame({ players: playersFor(s), deckSize: s.deckSize, mode: s.mode, cheat: s.cheat, firstBeatFive: s.firstFive, names: ['Вы', ...BOT_NAMES], human: ME, level: s.difficulty, stake })
 }
 
 
@@ -61,11 +62,11 @@ function inviteFromUrl(): Invite {
 
 export function App() {
   const [invite, setInvite] = useState(inviteFromUrl)
-  const [settings, setSettings] = useState<Settings>(() => {
-    const s = loadSettings()
-    return invite.server ? { ...s, server: invite.server } : s
-  })
-  setRoomServer(settings.server)
+  const [settings, setSettings] = useState<Settings>(loadSettings)
+  // A server named by an invite is used for that room only: a link must never re-point the app for good.
+  const [joinServer, setJoinServer] = useState(invite.server)
+  const roomServer = joinServer || settings.server
+  setRoomServer(roomServer)
   const [stats, setStats] = useState<Stats>(loadStats)
   const [wallet, setWallet] = useState<Wallet>(loadWallet)
   const [payout, setPayout] = useState<PayoutInfo | null>(null)
@@ -87,7 +88,7 @@ export function App() {
     syncStatusBar()
   }, [settings.theme])
   useEffect(() => saveSettings(settings), [settings])
-  useEffect(() => applyLook(settings.cardBack, settings.tableStyle), [settings.cardBack, settings.tableStyle])
+  useEffect(() => applyLook(settings.cardBack, settings.tableStyle, settings.cardFace), [settings.cardBack, settings.tableStyle, settings.cardFace])
   useEffect(() => setHaptics(settings.haptics), [settings.haptics])
   useEffect(() => setSoundEnabled(settings.sound), [settings.sound])
   useEffect(() => unlockSound(), [])
@@ -100,6 +101,10 @@ export function App() {
     if (!busyRef.current) applyIfIdle()
   }, [inRound])
   useEffect(() => saveGame(game), [game])
+  // Out of the online screen, an invite's own server is forgotten.
+  useEffect(() => {
+    if (screen !== 'online' && online.phase === 'idle' && joinServer) setJoinServer('')
+  }, [screen, online.phase, joinServer])
   useEffect(() => {
     if (resumeRoom) online.restore()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -115,7 +120,7 @@ export function App() {
       friends.say(`Приглашение в комнату ${inv.code}: доиграйте партию и войдите по коду`)
       return
     }
-    if (inv.server && inv.server !== settings.server) setSettings((s) => ({ ...s, server: inv.server }))
+    setJoinServer(inv.server)
     online.leave()
     setPanel(null)
     setInvite(inv)
@@ -136,13 +141,29 @@ export function App() {
       }),
     [],
   )
-  const stepLocalBot = useCallback((actor: number) => setGame((g) => (g && currentActor(g) === actor ? applyAction(g, actor, chooseAction(g, actor)) : g)), [])
+  const gameNow = useRef(game)
+  gameNow.current = game
+  const stepLocalBot = useCallback((actor: number) => {
+    const g = gameNow.current
+    if (!g || currentActor(g) !== actor) return
+    // The move is worked out off the main thread; if the table changed meanwhile it is dropped and asked for again.
+    think(g, actor).then((action) =>
+      setGame((cur) => {
+        if (cur !== g) return cur
+        try {
+          return applyAction(cur, actor, action)
+        } catch {
+          return cur
+        }
+      }),
+    )
+  }, [])
   // The finished game's setup goes into the history, so keep the live game in a ref.
   const liveRef = useRef<{ game: GameState | null; online: boolean }>({ game: null, online: false })
   const liveOnline = screen === 'online' && online.phase === 'playing' && online.game
   liveRef.current = { game: liveOnline || (screen === 'game' ? game : null), online: !!liveOnline }
   // A room game takes this device's own stake when it starts; each player keeps their own wallet.
-  const roomSeed = liveOnline && !liveOnline.over ? liveOnline.options.seed : undefined
+  const roomSeed = liveOnline && !liveOnline.over ? gameIdOf(liveOnline) : undefined
   useEffect(() => {
     const g = liveRef.current.game
     if (roomSeed === undefined || !g || !liveRef.current.online) return
@@ -156,7 +177,7 @@ export function App() {
     const g = liveRef.current.game
     if (!liveRef.current.online)
       setSeries((cur) => (cur && cur.played < cur.total ? { ...cur, played: cur.played + 1, fools: cur.fools.map((n, i) => (i === loser ? n + 1 : n)) } : cur))
-    const seed = g?.options.seed
+    const seed = g ? gameIdOf(g) : undefined
     if (seed !== undefined) {
       const slot = liveRef.current.online ? 'roomWager' : 'wager'
       setWallet((w) => {
@@ -183,7 +204,7 @@ export function App() {
   useEffect(() => {
     const prev = emoteRef.current.prev
     emoteRef.current.prev = botGame
-    if (!botGame || !prev || prev.options.seed !== botGame.options.seed || fingerprint(prev) === fingerprint(botGame)) return
+    if (!botGame || !prev || gameIdOf(prev) !== gameIdOf(botGame) || fingerprint(prev) === fingerprint(botGame)) return
     if (Date.now() - emoteRef.current.at < 3500) return
     const r = botReaction(prev, botGame, Math.random)
     if (!r) return
@@ -223,7 +244,7 @@ export function App() {
   const [pendingJoin, setPendingJoin] = useState<string | null>(null)
   const [pendingInvite, setPendingInvite] = useState<string | null>(null)
   const joinFromInvite = (code: string, server?: string) => {
-    if (server && server !== settings.server) setSettings((s) => ({ ...s, server }))
+    setJoinServer(server ?? '')
     online.leave()
     setPanel(null)
     setScreen('online')
@@ -254,7 +275,7 @@ export function App() {
   const inviteFriend = (id: string) => {
     const hosting = online.role === 'host' && online.lobby
     if (hosting) {
-      friends.invite(id, online.lobby!.code, settings.server).then((ok) => friends.say(ok ? 'Приглашение отправлено' : 'Друг сейчас не в сети. Отправьте ему код комнаты'))
+      friends.invite(id, online.lobby!.code, roomServer).then((ok) => friends.say(ok ? 'Приглашение отправлено' : 'Друг сейчас не в сети. Отправьте ему код комнаты'))
       return
     }
     if (online.phase !== 'idle' || screen === 'game') return friends.say('Сначала выйдите из текущей игры')
@@ -267,7 +288,7 @@ export function App() {
     if (!pendingInvite || online.role !== 'host' || !online.lobby) return
     const id = pendingInvite
     setPendingInvite(null)
-    friends.invite(id, online.lobby.code, settings.server).then((ok) => friends.say(ok ? 'Приглашение отправлено' : 'Друг сейчас не в сети. Отправьте ему код комнаты'))
+    friends.invite(id, online.lobby.code, roomServer).then((ok) => friends.say(ok ? 'Приглашение отправлено' : 'Друг сейчас не в сети. Отправьте ему код комнаты'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingInvite, online.lobby])
 
@@ -276,8 +297,8 @@ export function App() {
     const stake = affordableStake(wallet, s.stake, playersFor(s))
     if (stake !== s.stake) setSettings((cur) => ({ ...cur, stake }))
     const g = startGame(s, stake)
-    const untouched = game && !game.over && !canContinue ? game.options.seed : undefined
-    setWallet((w) => placeWager(untouched !== undefined ? cancelWager(w, untouched) : w, g.options.seed!, stake, g.players.length, LEVEL_BONUS[s.difficulty]))
+    const untouched = game && !game.over && !canContinue ? gameIdOf(game) : undefined
+    setWallet((w) => placeWager(untouched !== undefined ? cancelWager(w, untouched) : w, gameIdOf(g), stake, g.players.length, LEVEL_BONUS[s.difficulty]))
     setGame(g)
     setSeries((cur) => (s.series > 1 ? (fresh || !cur || cur.played >= cur.total ? { total: s.series, played: 0, fools: g.players.map(() => 0) } : cur) : null))
     setScreen('game')
@@ -337,12 +358,12 @@ export function App() {
         onEmote={online.sendEmote}
         friends={friends}
         onFinished={recordResult}
-        wager={wallet.roomWager?.seed === onlineGame.options.seed ? wallet.roomWager : null}
-        payout={payout?.seed === onlineGame.options.seed ? payout : null}
+        wager={wallet.roomWager?.seed === gameIdOf(onlineGame) ? wallet.roomWager : null}
+        payout={payout?.seed === gameIdOf(onlineGame) ? payout : null}
         onExit={() => online.leave()}
         onOpenSettings={() => setPanel('game')}
         onPlayAgain={host ? () => online.start(settings.difficulty) : undefined}
-        room={{ code: online.lobby?.code ?? '', notice: online.notice, reconnecting: online.reconnecting, roster: online.lobby?.roster }}
+        room={{ code: online.lobby?.code ?? '', notice: online.notice, reconnecting: online.reconnecting, roster: online.lobby?.roster, turnMs: TURN_MS }}
       />
     )
   } else if (screen === 'game' && game) {
@@ -357,8 +378,8 @@ export function App() {
         onBotTurn={stepLocalBot}
         onBotThrow={throwLocalBot}
         onFinished={recordResult}
-        wager={wallet.wager?.seed === game.options.seed ? wallet.wager : null}
-        payout={payout?.seed === game.options.seed ? payout : null}
+        wager={wallet.wager?.seed === gameIdOf(game) ? wallet.wager : null}
+        payout={payout?.seed === gameIdOf(game) ? payout : null}
         onExit={() => setScreen('menu')}
         onOpenSettings={() => setPanel('game')}
         series={series}
@@ -375,6 +396,8 @@ export function App() {
         settings={settings}
         wallet={wallet}
         onChange={setSettings}
+        server={roomServer}
+        onInviteServer={setJoinServer}
         initialCode={inviteCode}
         offerApp={!!inviteCode && !invite.noApp && inBrowserTab()}
         friends={friends}
@@ -387,7 +410,7 @@ export function App() {
       />
     )
   } else if (screen === 'play') {
-    view = <PlayScreen key="play" settings={settings} wallet={wallet} pendingStake={canContinue ? (wallet.wager?.seed === game?.options.seed ? (wallet.wager?.held ?? 0) : 0) : 0} onChange={setSettings} onBots={() => newRound()} onOnline={() => setScreen('online')} onBack={() => setScreen('menu')} />
+    view = <PlayScreen key="play" settings={settings} wallet={wallet} pendingStake={canContinue ? (wallet.wager?.seed === (game ? gameIdOf(game) : undefined) ? (wallet.wager?.held ?? 0) : 0) : 0} onChange={setSettings} onBots={() => newRound()} onOnline={() => setScreen('online')} onBack={() => setScreen('menu')} />
   } else {
     view = <MainMenu
         key="menu"
@@ -397,7 +420,7 @@ export function App() {
         bonus={bonusReady(wallet)}
         broke={isBroke(wallet)}
         onBonus={() => setWallet(takeBonus)}
-        onRefill={() => setWallet(refill)} canContinue={canContinue} onContinue={() => setScreen('game')} onPlay={() => setScreen('play')} onOpen={setPanel} friendCount={friends.list.length} />
+        onRefill={() => setWallet(refill)} canContinue={canContinue} onContinue={() => setScreen('game')} onPlay={() => setScreen('play')} onQuick={() => newRound()} onOpen={setPanel} friendCount={friends.list.length} />
   }
 
   return (
