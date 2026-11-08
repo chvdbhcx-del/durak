@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DeckSize } from '../engine/cards'
 import { chooseAction, eagerThrow, type Level } from '../engine/bot'
 import { EMOTES, type Emote } from '../engine/emotes'
-import { Action, applyAction, currentActor, GameState, maxPlayers, Mode, newGame, viewFor } from '../engine/game'
+import { Action, applyAction, currentActor, GameState, isValidGame, maxPlayers, Mode, newGame, timeoutAction, viewFor } from '../engine/game'
 import { BOT_NAMES } from '../ui/pickers'
 import { GuestRoom, HostRoom, LobbyInfo, Member, memberId, publicLobby, ToGuest } from './room'
 
@@ -50,6 +50,11 @@ interface Saved {
   seats?: [string, number][]
 }
 
+/** How long a person in a room has for a move before the host plays it for them. */
+export const TURN_MS = 30_000
+/** Missed turns in a row after which a bot takes the seat until its player moves again. */
+const STRIKES_TO_BOT = 2
+
 const SAVE_KEY = 'durak.online'
 const SAVE_TTL_MS = 20 * 60 * 1000
 
@@ -57,7 +62,12 @@ function loadSaved(): Saved | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     const saved = raw ? (JSON.parse(raw) as Saved) : null
-    return saved && Date.now() - saved.savedAt < SAVE_TTL_MS ? saved : null
+    if (!saved || typeof saved !== 'object' || (saved.role !== 'host' && saved.role !== 'guest') || typeof saved.code !== 'string' || typeof saved.name !== 'string') return null
+    if (!(Date.now() - saved.savedAt < SAVE_TTL_MS)) return null
+    // a damaged or outdated table is dropped; the room itself can still be reopened
+    if (saved.game && !isValidGame(saved.game)) saved.game = null
+    if (saved.lobby && !Array.isArray(saved.lobby.members)) return null
+    return saved
   } catch {
     return null
   }
@@ -122,6 +132,46 @@ export function useOnline(token: string, fid: string): Online {
     if (role !== 'host' || !game || !host.current) return
     for (const [t, s] of seats.current) if (t !== token) host.current.send(t, { t: 'state', view: viewFor(game, s), seat: s })
   }, [game, role, token])
+
+  // Nobody holds the table up: a person who lets the clock run out gets the safe move played for them,
+  // and after a couple of those a bot keeps the seat warm until they come back.
+  const strikes = useRef(new Map<number, number>())
+  useEffect(() => {
+    if (role !== 'host' || !game || game.over) return
+    const actor = currentActor(game)
+    if (actor === null || !game.players[actor].human) return
+    const t = setTimeout(() => {
+      const g = gameRef.current
+      if (g !== game) return
+      const action = timeoutAction(g, actor)
+      if (!action) return
+      let next: GameState
+      try {
+        next = applyAction(g, actor, action)
+      } catch {
+        return
+      }
+      const missed = (strikes.current.get(actor) ?? 0) + 1
+      strikes.current.set(actor, missed)
+      if (missed >= STRIKES_TO_BOT && !next.over) {
+        next = structuredClone(next)
+        next.players[actor].human = false
+        say(`${next.players[actor].name} не отвечает, за него играет бот`)
+      }
+      gameRef.current = next
+      setGame(next)
+    }, TURN_MS)
+    return () => clearTimeout(t)
+  }, [game, role])
+
+  /** A person's own move: they are here, so the seat is theirs again. */
+  const own = (g: GameState, s: number): GameState => {
+    strikes.current.delete(s)
+    if (g.players[s].human) return g
+    const next = structuredClone(g)
+    next.players[s].human = true
+    return next
+  }
 
   // Remember the room on every change, so it can be reopened after a reload.
   useEffect(() => {
@@ -221,7 +271,7 @@ export function useOnline(token: string, fid: string): Online {
         setGame((g) => {
           if (!g) return g
           try {
-            return applyAction(g, s, action)
+            return applyAction(own(g, s), s, action)
           } catch {
             // Out of turn or no longer legal: say so, and resend the table in case the guest's view is behind.
             setTimeout(() => {
@@ -325,6 +375,7 @@ export function useOnline(token: string, fid: string): Online {
       human: 0,
       humans: online.map((_, i) => i),
     })
+    strikes.current = new Map()
     setSeat(0)
     setGame(g)
     setPhase('playing')
@@ -337,7 +388,7 @@ export function useOnline(token: string, fid: string): Online {
       setGame((g) => {
         if (!g) return g
         try {
-          return applyAction(g, 0, action)
+          return applyAction(role === 'host' ? own(g, 0) : g, 0, action)
         } catch {
           return g
         }

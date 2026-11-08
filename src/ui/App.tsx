@@ -2,11 +2,11 @@ import { AnimatePresence } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { chooseAction, eagerThrow } from '../engine/bot'
 import { botReaction, botReply, type Emote, fingerprint } from '../engine/emotes'
-import { Action, applyAction, currentActor, gameIdOf, GameState, maxPlayers, newGame } from '../engine/game'
+import { Action, applyAction, currentActor, gameIdOf, GameState, isValidGame, maxPlayers, newGame } from '../engine/game'
 import { setRoomServer } from '../net/room'
 import { inBrowserTab, inviteFromText, type Invite, iosHomeScreen, parseInvite, watchInvites } from './deeplink'
 import { useFriends } from '../net/useFriends'
-import { hasSavedRoom, useOnline } from '../net/useOnline'
+import { hasSavedRoom, TURN_MS, useOnline } from '../net/useOnline'
 import { GameScreen, Result, Series } from './GameScreen'
 import { FriendToast } from './FriendToast'
 import { FriendsPanel } from './FriendsPanel'
@@ -32,8 +32,8 @@ const GAME_KEY = 'durak.game'
 function loadGame(): GameState | null {
   try {
     const raw = localStorage.getItem(GAME_KEY)
-    const g = raw ? (JSON.parse(raw) as GameState) : null
-    return g && !g.over ? g : null
+    const g: unknown = raw ? JSON.parse(raw) : null
+    return isValidGame(g) && !g.over ? g : null
   } catch {
     return null
   }
@@ -346,7 +346,7 @@ export function App() {
         onExit={() => online.leave()}
         onOpenSettings={() => setPanel('game')}
         onPlayAgain={host ? () => online.start(settings.difficulty) : undefined}
-        room={{ code: online.lobby?.code ?? '', notice: online.notice, reconnecting: online.reconnecting, roster: online.lobby?.roster }}
+        room={{ code: online.lobby?.code ?? '', notice: online.notice, reconnecting: online.reconnecting, roster: online.lobby?.roster, turnMs: TURN_MS }}
       />
     )
   } else if (screen === 'game' && game) {
@@ -380,7 +380,6 @@ export function App() {
         wallet={wallet}
         onChange={setSettings}
         server={roomServer}
-        inviteServer={joinServer}
         onInviteServer={setJoinServer}
         initialCode={inviteCode}
         offerApp={!!inviteCode && !invite.noApp && inBrowserTab()}

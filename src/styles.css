@@ -3010,9 +3010,53 @@ small,
   color: var(--muted);
 }
 
-.join-note {
-  margin: 0;
-  font-size: 13px;
-  color: var(--muted);
+
+.crash {
+  min-height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  padding: 24px;
   text-align: center;
+  background: var(--bg);
+  color: var(--fg);
+}
+.crash h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+}
+.crash-mark {
+  font-size: 64px;
+  line-height: 1;
+  color: var(--accent);
+}
+.crash .primary {
+  min-width: 220px;
+  min-height: 48px;
+}
+
+/* Move clock in rooms: a thin line that runs out; red for the last few seconds. */
+.controls { position: relative; }
+.turn-clock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -5px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform-origin: left center;
+  animation: turn-clock var(--turn) linear forwards;
+  pointer-events: none;
+}
+.controls > .turn-clock { top: -6px; bottom: auto; }
+@keyframes turn-clock {
+  from { transform: scaleX(1); }
+  80% { background: var(--accent); }
+  to { transform: scaleX(0); background: var(--danger); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .turn-clock { animation-timing-function: steps(10); }
 }

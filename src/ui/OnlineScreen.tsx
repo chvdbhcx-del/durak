@@ -21,8 +21,6 @@ interface Props {
   onChange: (s: Settings) => void
   /** the room server in use now: the invite's own, or the one from the settings */
   server: string
-  /** a server that came with an invite; used for this room only */
-  inviteServer: string
   onInviteServer: (server: string) => void
   initialCode: string
   /** opened from an invite in a plain browser tab: offer the installed app first */
@@ -157,14 +155,6 @@ function NameBadge({ name, onChange }: { name: string; onChange: (n: string) => 
   )
 }
 
-function serverName(raw: string) {
-  try {
-    return new URL(/^[a-z]+:\/\//i.test(raw) ? raw : `https://${raw}`).host
-  } catch {
-    return raw.slice(0, 40)
-  }
-}
-
 function CardSpinner() {
   return (
     <div className="card-spinner" aria-hidden="true">
@@ -175,7 +165,7 @@ function CardSpinner() {
   )
 }
 
-export function OnlineScreen({ online, settings, wallet, onChange, server, inviteServer, onInviteServer, initialCode, offerApp = false, friends, onInviteFriend, onBack }: Props) {
+export function OnlineScreen({ online, settings, wallet, onChange, server, onInviteServer, initialCode, offerApp = false, friends, onInviteFriend, onBack }: Props) {
   const [mode, setMode] = useState<'choose' | 'join'>(initialCode ? 'join' : 'choose')
   const [code, setCode] = useState(initialCode)
   const [copied, setCopied] = useState(false)
@@ -282,7 +272,6 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, invit
                       />
                     )}
                   </div>
-                  {inviteServer && <p className="join-note">Комната на частном сервере {serverName(inviteServer)}</p>}
                   <CodeInput value={code} onChange={setCode} onDone={() => online.join(code, settings.name.trim() || 'Игрок')} />
                   <motion.button
                     type="button"

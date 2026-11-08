@@ -526,3 +526,20 @@ describe('online views', () => {
     expect(a.options.id).not.toBe(a.options.seed)
   })
 })
+
+describe('a person with no cards left', () => {
+  it('is not asked to confirm a pass', () => {
+    const g = newGame({ players: 3, deckSize: 36, mode: 'podkidnoy', names: [], human: 0, humans: [0, 1, 2], seed: 7 })
+    g.deck = []
+    g.attacker = 0
+    g.defender = 1
+    const [a] = g.players[0].hand
+    g.players[2].hand = []
+    g.players[0].hand = [a, ...g.players[0].hand.slice(1)]
+    let s = applyAction(g, 0, { type: 'attack', cardId: a.id })
+    s = applyAction(s, 1, { type: 'take' })
+    s = applyAction(s, 0, { type: 'pass' })
+    // seat 2 holds nothing, so the round closes without waiting for it
+    expect(s.table).toHaveLength(0)
+  })
+})

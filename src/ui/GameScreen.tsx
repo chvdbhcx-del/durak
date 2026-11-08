@@ -62,7 +62,7 @@ interface Props {
   onOpenSettings: () => void
   /** left out when this player can't start the next game (an online guest) */
   onPlayAgain?: () => void
-  room?: { code: string; notice: string | null; reconnecting?: boolean; roster?: { seat: number; name: string; fid?: string }[] }
+  room?: { code: string; notice: string | null; reconnecting?: boolean; roster?: { seat: number; name: string; fid?: string }[]; turnMs?: number }
 }
 
 /** The current width of an element, kept up to date as it resizes. */
@@ -311,6 +311,12 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
 
   // Bots "think" before each move, longer when there is more on the table, so their plays can be followed.
   const botThinking = actor !== null && !game.players[actor].human && !game.over
+  // A room's move clock restarts with every change at the table, as it does on the host.
+  const turnTick = useRef({ game, n: 0 })
+  if (turnTick.current.game !== game) turnTick.current = { game, n: turnTick.current.n + 1 }
+  const timed = room?.turnMs && actor !== null && game.players[actor].human && !game.over ? room.turnMs : 0
+  const clock = (seat: number) =>
+    timed && actor === seat ? <span key={turnTick.current.n} className="turn-clock" aria-hidden="true" style={{ ['--turn' as string]: `${timed}ms` }} /> : null
   useEffect(() => {
     if (actor === null || !onBotTurn || paused || game.players[actor].human) return
     const weight = 0.75 + Math.random() * 0.5 + Math.min(game.table.length, 4) * 0.08
@@ -621,7 +627,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
             {opponents.map((p, idx) => {
               const cards = p.hand.filter((c) => !hiddenIds.has(c.id))
               const step = cards.length > 1 ? Math.min(seatMini * 0.42, (Math.min(seatMini * 2.6, fanMax) - seatMini) / (cards.length - 1)) : 0
-              const role = p.out ? 'Вышел' : dealing ? null : p.id === game.defender ? (game.taking ? 'Берёт' : 'Отбивается') : p.id === game.attacker ? 'Ходит' : null
+              const role = p.out ? 'Вышел' : dealing ? null : p.id === game.defender ? (game.taking ? 'Берёт' : 'Отбивается') : p.id === game.attacker ? 'Атакует' : null
               const isTransferTarget = dragging !== null && focusTransfers && transferSeat === p.id
               return (
                 <motion.div
@@ -635,6 +641,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                   transition={{ delay: idx * 0.06, type: 'spring', stiffness: 400, damping: 30 }}
                 >
                   <div className="seat-head">
+                    {clock(p.id)}
                     <motion.span className={`avatar ${p.human && room ? 'person' : ''} ${!p.human && BOT_NAMES.includes(p.name) ? 'emoji' : ''}`} animate={actor === p.id ? { scale: [1, 1.12, 1] } : { scale: 1 }} transition={actor === p.id ? { duration: 1.4, repeat: Infinity } : undefined}>
                       {!p.human && BOT_NAMES.includes(p.name) ? AVATARS[BOT_NAMES.indexOf(p.name)] : p.name[0]}
                     </motion.span>
@@ -809,6 +816,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
 
         <section ref={meRef} className="me" aria-label="Ваши карты">
           <div ref={controlsRef} className="controls">
+            {clock(me)}
             <AnimatePresence mode="wait" initial={false}>
               <motion.p key={status} className={`status ${actor === me ? 'yours' : ''}`} {...fade}>
                 {status}

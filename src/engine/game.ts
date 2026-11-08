@@ -417,8 +417,8 @@ function settle(s: GameState): GameState {
   if (s.table.length === 0 || (!s.taking && unbeaten(s) > 0)) return s
   for (const id of attackOrder(s)) {
     if (s.passed.includes(id)) continue
-    // People always confirm with a button, even when they have nothing to add.
-    if (s.players[id].human || throwInCards(s, id).length > 0) return s
+    // People always confirm with a button, even when they have nothing to add; with no cards left there is nothing to confirm.
+    if ((s.players[id].human && s.players[id].hand.length > 0) || throwInCards(s, id).length > 0) return s
     s.passed.push(id)
   }
   return endRound(s)
@@ -473,4 +473,41 @@ export function viewFor(s: GameState, seat: number): GameState {
     deck: s.deck.map((c, i) => (i === 0 ? c : hide(c))),
     discard: s.discard.map(hide),
   }
+}
+
+/**
+ * Whether a saved game can be picked up again: the right shape, and every card of its deck accounted
+ * for. A save from an older version, or a damaged one, is dropped instead of breaking the table.
+ */
+export function isValidGame(raw: unknown): raw is GameState {
+  try {
+    const g = raw as GameState
+    if (!g || typeof g !== 'object' || !g.options || !Array.isArray(g.players) || !Array.isArray(g.deck) || !Array.isArray(g.table) || !Array.isArray(g.discard)) return false
+    if (![24, 36, 52].includes(g.options.deckSize) || g.players.length !== g.options.players || g.players.length < 2) return false
+    if (!g.trumpCard || !['S', 'H', 'D', 'C'].includes(g.trump) || !Array.isArray(g.passed)) return false
+    if (!g.players.every((p, i) => p && p.id === i && Array.isArray(p.hand) && typeof p.name === 'string')) return false
+    if (g.attacker < 0 || g.attacker >= g.players.length || g.defender < 0 || g.defender >= g.players.length) return false
+    const ids = new Set<string>()
+    const all = [...g.deck, ...g.discard, ...g.table.flatMap((p) => (p.defense ? [p.attack, p.defense] : [p.attack])), ...g.players.flatMap((p) => p.hand)]
+    for (const c of all) {
+      if (!c || typeof c.id !== 'string' || ids.has(c.id)) return false
+      ids.add(c.id)
+    }
+    return all.length === g.options.deckSize && cardCount(g) === g.options.deckSize
+  } catch {
+    return false
+  }
+}
+
+/** What happens for a person whose time ran out: the defender takes, an attacker passes, a lead goes with the lowest card. */
+export function timeoutAction(s: GameState, player: number): Action | null {
+  if (currentActor(s) !== player) return null
+  const legal = legalActions(s, player)
+  const fallback = legal.find((a) => a.type === 'take') ?? legal.find((a) => a.type === 'pass')
+  if (fallback) return fallback
+  const hand = s.players[player].hand
+  const lowest = hand
+    .filter((c) => legal.some((a) => a.type === 'attack' && a.cardId === c.id))
+    .sort((a, b) => Number(a.suit === s.trump) - Number(b.suit === s.trump) || a.rank - b.rank)[0]
+  return lowest ? { type: 'attack', cardId: lowest.id } : null
 }

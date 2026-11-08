@@ -119,14 +119,38 @@ export const DEFAULT_SETTINGS: Settings = {
 export const BOT_DELAY: Record<Speed, number> = { calm: 2600, normal: 1800, fast: 1000 }
 
 // Storage can be missing or blocked (private windows, embedded previews), so every access is guarded.
-function read<T>(key: string, fallback: T): T {
+function read<T extends object>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key)
-    return raw ? { ...fallback, ...JSON.parse(raw) } : fallback
+    return raw ? sanitize(fallback, JSON.parse(raw)) : fallback
   } catch {
     return fallback
   }
 }
+
+/**
+ * Takes the saved fields whose type matches the defaults, so a value from an older or broken
+ * version can never reach the game as, say, a string where a number belongs.
+ */
+export function sanitize<T extends object>(fallback: T, saved: unknown): T {
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return fallback
+  const out: Record<string, unknown> = { ...(fallback as Record<string, unknown>) }
+  for (const [k, v] of Object.entries(saved as Record<string, unknown>)) {
+    if (!(k in fallback)) {
+      out[k] = v
+      continue
+    }
+    const want = (fallback as Record<string, unknown>)[k]
+    if (want === null || v === null) {
+      out[k] = v
+      continue
+    }
+    if (typeof v === typeof want && Array.isArray(v) === Array.isArray(want) && (typeof v !== 'number' || Number.isFinite(v))) out[k] = v
+  }
+  return out as T
+}
+
+const oneOf = <T,>(v: T, allowed: readonly T[], dflt: T) => (allowed.includes(v) ? v : dflt)
 
 function write(key: string, value: unknown) {
   try {
@@ -136,7 +160,24 @@ function write(key: string, value: unknown) {
   }
 }
 
-export const loadSettings = () => read<Settings>('durak.settings', DEFAULT_SETTINGS)
+export function loadSettings(): Settings {
+  const s = read<Settings>('durak.settings', DEFAULT_SETTINGS)
+  const d = DEFAULT_SETTINGS
+  return {
+    ...s,
+    deckSize: oneOf(s.deckSize, [24, 36, 52] as const, d.deckSize),
+    mode: oneOf(s.mode, ['podkidnoy', 'perevodnoy'] as const, d.mode),
+    theme: oneOf(s.theme, ['system', 'dark', 'light'] as const, d.theme),
+    speed: oneOf(s.speed, ['calm', 'normal', 'fast'] as const, d.speed),
+    difficulty: oneOf(s.difficulty, ['easy', 'normal', 'hard'] as const, d.difficulty),
+    opponents: Math.max(1, Math.min(5, Math.round(s.opponents))),
+    series: Math.max(1, Math.min(9, Math.round(s.series))),
+    avatar: Math.max(0, Math.min(AVATARS.length - 1, Math.round(s.avatar))),
+    cardBack: oneOf(s.cardBack, ['teal', 'ember', 'ink', 'rose'] as const, d.cardBack),
+    tableStyle: oneOf(s.tableStyle, ['forest', 'night', 'wine', 'slate'] as const, d.tableStyle),
+    name: s.name.slice(0, 16),
+  }
+}
 export const saveSettings = (s: Settings) => write('durak.settings', s)
 export const loadStats = () => read<Stats>('durak.stats', EMPTY_STATS)
 export const saveStats = (s: Stats) => write('durak.stats', s)
