@@ -228,11 +228,22 @@ function lookAhead(s: GameState, player: number, legal: Action[]): Action | null
   if (pool.length !== inHands + inDeck) return null
   const fallback = chooseAction(s, player, 'normal', true)
   const rnd = mulberry32(((s.options.seed ?? 1) + s.deck.length * 131 + s.discard.length * 17 + s.table.length * 29 + s.players[player].hand.length * 43 + 7) >>> 0)
+  // Cards everyone watched an opponent pick up are dealt back to that opponent in every guess, as a person would remember them.
+  const taken = new Map<number, Card[]>()
+  const free = pool.slice()
+  for (const p of foes) {
+    const mine: Card[] = []
+    for (const f of s.seen?.[p.id] ?? []) {
+      const i = free.findIndex((c) => face(c) === f)
+      if (i >= 0 && mine.length < p.hand.length) mine.push(free.splice(i, 1)[0])
+    }
+    taken.set(p.id, mine)
+  }
   const score = moves.map(() => 0)
   const start = clock()
   let done = 0
   for (let k = 0; k < LOOKAHEAD.samples; k++) {
-    const cards = pool.slice()
+    const cards = free.slice()
     for (let i = cards.length - 1; i > 0; i--) {
       const j = Math.floor(rnd() * (i + 1))
       ;[cards[i], cards[j]] = [cards[j], cards[i]]
@@ -240,8 +251,10 @@ function lookAhead(s: GameState, player: number, legal: Action[]): Action | null
     const world: GameState = structuredClone({ ...s, options: { ...s.options, cheat: false } })
     let at = 0
     for (const p of foes) {
-      world.players[p.id].hand = cards.slice(at, at + p.hand.length)
-      at += p.hand.length
+      const known = taken.get(p.id)!
+      const n = p.hand.length - known.length
+      world.players[p.id].hand = [...known, ...cards.slice(at, at + n)]
+      at += n
     }
     if (world.deck.length > 0) world.deck = [world.deck[0], ...cards.slice(at)]
     moves.forEach((m, i) => {

@@ -51,7 +51,7 @@ function saveGame(g: GameState | null) {
 const playersFor = (s: Settings) => Math.min(s.opponents + 1, maxPlayers(s.deckSize))
 
 function startGame(s: Settings, stake: number): GameState {
-  return newGame({ players: playersFor(s), deckSize: s.deckSize, mode: s.mode, cheat: s.cheat, names: ['Вы', ...BOT_NAMES], human: ME, level: s.difficulty, stake })
+  return newGame({ players: playersFor(s), deckSize: s.deckSize, mode: s.mode, cheat: s.cheat, firstBeatFive: s.firstFive, names: ['Вы', ...BOT_NAMES], human: ME, level: s.difficulty, stake })
 }
 
 

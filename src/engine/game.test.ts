@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { beats, Card } from './cards'
 import { chooseAction, eagerThrow, LOOKAHEAD } from './bot'
 import { botReaction, botReply } from './emotes'
-import { applyAction, canCheat, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options, viewFor } from './game'
+import { applyAction, canCheat, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options, roundLimit, viewFor } from './game'
 
 const opts = (o: Partial<Options> = {}): Options => ({
   players: 2,
@@ -397,5 +397,31 @@ describe('a person with no cards left', () => {
     s = applyAction(s, 0, { type: 'pass' })
     // seat 2 holds nothing, so the round closes without waiting for it
     expect(s.table).toHaveLength(0)
+  })
+})
+
+describe('house rules and memory', () => {
+  it('caps the first round at five cards when asked', () => {
+    expect(newGame(opts({ firstBeatFive: true })).limit).toBe(5)
+    expect(newGame(opts()).limit).toBe(6)
+    const s = newGame(opts({ firstBeatFive: true }))
+    expect(roundLimit(s, 6)).toBe(5)
+    s.discard = [card('H', 6)]
+    expect(roundLimit(s, 6)).toBe(6)
+    expect(roundLimit(s, 3)).toBe(3)
+  })
+
+  it('remembers cards the defender picked up and forgets them once played', () => {
+    let s = position([[card('H', 7), card('D', 9)], [card('S', 6), card('S', 8), card('H', 6)]])
+    s = applyAction(s, 0, { type: 'attack', cardId: 'H7' })
+    s = applyAction(s, 1, { type: 'take' })
+    while (s.table.length) {
+      const who = currentActor(s)!
+      s = applyAction(s, who, legalActions(s, who).find((a) => a.type !== 'throw' && a.type !== 'attack')!)
+    }
+    expect(s.seen?.[1]).toContain('H7')
+    expect(viewFor(s, 0).seen?.[1]).toContain('H7')
+    s = applyAction(s, 0, { type: 'attack', cardId: 'D9' })
+    expect(s.seen?.[1] ?? []).toContain('H7')
   })
 })

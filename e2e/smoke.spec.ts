@@ -8,8 +8,9 @@ test.beforeEach(async ({ page }) => {
 
 test('a bot game starts, deals and takes a move', async ({ page }) => {
   await page.goto('./')
-  await page.getByRole('button', { name: 'Играть', exact: true }).click()
+  await page.getByRole('button', { name: 'Настроить партию' }).click()
   await page.getByRole('button', { name: /С ботами/ }).click()
+  await page.getByRole('switch', { name: /Первый отбой/ }).click()
   await page.getByRole('button', { name: /Начать партию/ }).click()
   const hand = page.getByRole('region', { name: 'Ваши карты' })
   // six cards dealt into the hand

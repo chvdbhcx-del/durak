@@ -299,12 +299,28 @@ fn look_ahead(s: &GameState, player: usize, legal: &[Action], budget: &Budget) -
     let fallback = choose_action(s, player, Some(Level::Normal), true, budget).ok()?;
     let x = seed_of(s) + s.deck.len() as f64 * 131.0 + s.discard.len() as f64 * 17.0 + s.table.len() as f64 * 29.0 + s.players[player].hand.len() as f64 * 43.0 + 7.0;
     let mut rnd = Mulberry32::new(to_u32(x));
+    // Cards everyone watched an opponent pick up go back to that opponent in every guess.
+    let mut free = pool;
+    let mut taken: Vec<Vec<Card>> = Vec::with_capacity(foes.len());
+    for &f in &foes {
+        let mut mine = Vec::new();
+        if let Some(faces) = s.seen.as_ref().and_then(|m| m.get(&f.to_string())) {
+            for fc in faces {
+                if let Some(i) = free.iter().position(|c| format!("{}{}", c.suit, c.rank) == *fc) {
+                    if mine.len() < s.players[f].hand.len() {
+                        mine.push(free.remove(i));
+                    }
+                }
+            }
+        }
+        taken.push(mine);
+    }
     let mut score = vec![0i32; moves.len()];
     let start = (budget.now)();
     let mut done = 0usize;
     let base = without_cheats(s);
     for _ in 0..SAMPLES {
-        let mut cards = pool.clone();
+        let mut cards = free.clone();
         let mut i = cards.len();
         while i > 1 {
             i -= 1;
@@ -313,9 +329,11 @@ fn look_ahead(s: &GameState, player: usize, legal: &[Action], budget: &Budget) -
         }
         let mut world = base.clone();
         let mut at = 0;
-        for &f in &foes {
-            let n = s.players[f].hand.len();
-            world.players[f].hand = cards[at..at + n].to_vec();
+        for (k, &f) in foes.iter().enumerate() {
+            let n = s.players[f].hand.len() - taken[k].len();
+            let mut hand = taken[k].clone();
+            hand.extend_from_slice(&cards[at..at + n]);
+            world.players[f].hand = hand;
             at += n;
         }
         if !world.deck.is_empty() {

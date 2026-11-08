@@ -23,6 +23,8 @@ export interface Settings {
   sound: boolean
   /** "cheater" mode: cover with any card */
   cheat: boolean
+  /** house rule: the first round takes at most 5 cards */
+  firstFive: boolean
   /** profile picture: index into AVATARS */
   avatar: number
   difficulty: Difficulty
@@ -109,6 +111,7 @@ export const DEFAULT_SETTINGS: Settings = {
   name: `Игрок ${10 + Math.floor(Math.random() * 90)}`,
   sound: true,
   cheat: false,
+  firstFive: false,
   avatar: Math.floor(Math.random() * AVATARS.length),
   difficulty: 'normal',
   haptics: true,

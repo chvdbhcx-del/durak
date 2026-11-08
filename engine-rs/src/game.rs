@@ -3,6 +3,7 @@
 //! play thousands of moves ahead quickly. `tests/parity` checks the two agree move for move.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 pub const HAND_SIZE: usize = 6;
 pub const SUITS: [char; 4] = ['S', 'H', 'D', 'C'];
@@ -53,6 +54,8 @@ pub struct Options {
     pub level: Option<Level>,
     #[serde(default)]
     pub seed: Option<f64>,
+    #[serde(default)]
+    pub first_beat_five: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -89,6 +92,16 @@ pub struct GameState {
     pub loser: Option<usize>,
     #[serde(default)]
     pub caught: Option<Vec<usize>>,
+    /// Cards everyone saw go into each hand ("S10"), keyed by seat. Read by the look-ahead at the
+    /// root position only, so the playouts don't keep it up to date.
+    #[serde(default)]
+    pub seen: Option<HashMap<String, Vec<String>>>,
+}
+
+/// Most attacks a round may hold: six, or five in the first round under the house rule.
+pub fn round_limit(s: &GameState, defender_hand: usize) -> usize {
+    let cap = if s.options.first_beat_five.unwrap_or(false) && s.discard.is_empty() { 5 } else { HAND_SIZE };
+    cap.min(defender_hand)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -319,7 +332,7 @@ pub fn preview_action(prev: &GameState, player: usize, action: &Action) -> Resul
             s.table.push(Pair { attack: c, defense: None });
             s.attacker = s.defender;
             s.defender = transfer_target(&s);
-            s.limit = HAND_SIZE.min(s.players[s.defender].hand.len());
+            s.limit = round_limit(&s, s.players[s.defender].hand.len());
             s.passed.clear();
         }
         Action::Take => {
@@ -391,7 +404,7 @@ fn end_round(mut s: GameState) -> GameState {
     let old_defender = s.defender;
     s.attacker = if took || s.players[old_defender].out { next_active(&s, old_defender) } else { old_defender };
     s.defender = next_active(&s, s.attacker);
-    s.limit = HAND_SIZE.min(s.players[s.defender].hand.len());
+    s.limit = round_limit(&s, s.players[s.defender].hand.len());
     s.taking = false;
     s.passed.clear();
     s

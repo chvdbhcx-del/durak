@@ -89,6 +89,7 @@ export function PlayScreen({ settings, wallet, pendingStake, onChange, onBots, o
                   <DeckPicker value={settings.deckSize} onChange={(deckSize) => set({ deckSize })} />
                   <div className="switches">
                     <Switch label="Шулер" note="Можно мухлевать, но могут поймать" value={settings.cheat} onChange={(cheat) => set({ cheat })} />
+                    <Switch label="Первый отбой — 5 карт" value={settings.firstFive} onChange={(firstFive) => set({ firstFive })} />
                   </div>
                 </Section>
                 <Section title="Соперники">
