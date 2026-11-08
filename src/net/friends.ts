@@ -1,5 +1,6 @@
-import Peer, { type DataConnection } from 'peerjs'
-import { peerOptions } from './room'
+import type Peer from 'peerjs'
+import type { DataConnection } from 'peerjs'
+import { createPeer, loadPeer, peerLoaded } from './room'
 
 /**
  * Friends without a server. Each device keeps a public friend id and, while the app is open,
@@ -82,7 +83,14 @@ export class Inbox {
 
   private open(attempt: number) {
     if (this.closed) return
-    const peer = new Peer(INBOX_PREFIX + this.fid, peerOptions())
+    if (!peerLoaded()) {
+      loadPeer().then(
+        () => this.open(attempt),
+        () => this.later(() => this.open(attempt + 1), 10000),
+      )
+      return
+    }
+    const peer = createPeer(INBOX_PREFIX + this.fid)
     this.peer = peer
     peer.on('connection', (conn) => {
       conn.on('data', (raw) => {

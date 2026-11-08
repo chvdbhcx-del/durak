@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DeckSize } from '../engine/cards'
-import { chooseAction, eagerThrow, type Level } from '../engine/bot'
+import { eagerThrow, type Level } from '../engine/bot'
+import { think } from '../engine/think'
 import { EMOTES, type Emote } from '../engine/emotes'
 import { Action, applyAction, currentActor, GameState, isValidGame, maxPlayers, Mode, newGame, timeoutAction, viewFor } from '../engine/game'
 import { BOT_NAMES } from '../ui/pickers'
@@ -413,8 +414,20 @@ export function useOnline(token: string, fid: string): Online {
     updateLobby((l) => ({ ...l, members: l.members.filter((m) => m.token !== t) }))
   }
 
-  const stepBot = (actor: number, level?: Level) =>
-    setGame((g) => (g && currentActor(g) === actor && !g.players[actor].human ? applyAction(g, actor, chooseAction(g, actor, level)) : g))
+  const stepBot = (actor: number, level?: Level) => {
+    const g = gameRef.current
+    if (!g || currentActor(g) !== actor || g.players[actor].human) return
+    think(g, actor, level).then((action) =>
+      setGame((cur) => {
+        if (cur !== g) return cur
+        try {
+          return applyAction(cur, actor, action)
+        } catch {
+          return cur
+        }
+      }),
+    )
+  }
 
   const botThrow = () =>
     setGame((g) => {

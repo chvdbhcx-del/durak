@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { maxPlayers } from '../engine/game'
 import { Group, HAPTICS_ICON, LookPicker, SOUND_ICON, SpeedPicker, Switch, ThemePicker } from './pickers'
@@ -20,14 +20,14 @@ let lastTab: Tab = 'game'
 
 function Tabs({ value, onChange }: { value: Tab; onChange: (t: Tab) => void }) {
   return (
-    <motion.div className="tabs" role="tablist" variants={sheetItem}>
+    <m.div className="tabs" role="tablist" variants={sheetItem}>
       {TABS.map((t) => (
         <button key={t.id} type="button" role="tab" aria-selected={value === t.id} className={`tab ${value === t.id ? 'on' : ''}`} onClick={() => onChange(t.id)}>
-          {value === t.id && <motion.span layoutId="tab-pill" className="tab-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
+          {value === t.id && <m.span layoutId="tab-pill" className="tab-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
           <span>{t.label}</span>
         </button>
       ))}
-    </motion.div>
+    </m.div>
   )
 }
 
@@ -67,7 +67,7 @@ export function SettingsPanel({ settings, onChange, onClose }: { settings: Setti
       <Tabs value={tab} onChange={setTab} />
       <AutoHeight>
       <AnimatePresence mode="popLayout" initial={false}>
-        <motion.div key={tab} className="tab-page" {...page}>
+        <m.div key={tab} className="tab-page" {...page}>
           {tab === 'game' && (
             <>
               <SpeedPicker value={settings.speed} onChange={(speed) => set({ speed })} />
@@ -86,7 +86,7 @@ export function SettingsPanel({ settings, onChange, onClose }: { settings: Setti
               <Switch label="Вибрация" icon={HAPTICS_ICON} value={settings.haptics} onChange={(haptics) => set({ haptics })} />
             </div>
           )}
-        </motion.div>
+        </m.div>
       </AnimatePresence>
       </AutoHeight>
     </Sheet>
@@ -127,23 +127,23 @@ export function GameMenu({ settings, onChange, onClose, onRules, onExit, online,
 
   return (
     <Sheet title={online ? 'Меню' : 'Пауза'} onClose={onClose}>
-      <motion.div className="game-menu-actions" variants={sheetItem}>
-        <motion.button type="button" className="primary big" whileTap={{ scale: 0.96 }} autoFocus onClick={onClose}>
+      <m.div className="game-menu-actions" variants={sheetItem}>
+        <m.button type="button" className="primary big" whileTap={{ scale: 0.96 }} autoFocus onClick={onClose}>
           Вернуться в игру
-        </motion.button>
+        </m.button>
         <div className="game-menu-row">
-          <motion.button type="button" className="ghost big" whileTap={{ scale: 0.96 }} onClick={onRules}>
+          <m.button type="button" className="ghost big" whileTap={{ scale: 0.96 }} onClick={onRules}>
             Правила
-          </motion.button>
-          <motion.button type="button" className={`${online ? 'danger' : 'ghost'} big`} whileTap={{ scale: 0.96 }} onClick={exit}>
+          </m.button>
+          <m.button type="button" className={`${online ? 'danger' : 'ghost'} big`} whileTap={{ scale: 0.96 }} onClick={exit}>
             <AnimatePresence mode="wait" initial={false}>
-              <motion.span key={sure ? 'sure' : 'exit'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+              <m.span key={sure ? 'sure' : 'exit'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
                 {online ? (sure ? 'Точно выйти?' : 'Выйти из комнаты') : 'В главное меню'}
-              </motion.span>
+              </m.span>
             </AnimatePresence>
-          </motion.button>
+          </m.button>
         </div>
-      </motion.div>
+      </m.div>
 
       <div className="switches">
         <Switch label="Звук карт" icon={SOUND_ICON} value={settings.sound} onChange={(sound) => set({ sound })} />
@@ -151,19 +151,19 @@ export function GameMenu({ settings, onChange, onClose, onRules, onExit, online,
       </div>
       {botSpeed && <SpeedPicker value={settings.speed} onChange={(speed) => set({ speed })} />}
 
-      <motion.button type="button" className="disclose" aria-expanded={look} variants={sheetItem} onClick={() => setLook((v) => !v)}>
+      <m.button type="button" className="disclose" aria-expanded={look} variants={sheetItem} onClick={() => setLook((v) => !v)}>
         <span>Оформление</span>
-        <motion.svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" animate={{ rotate: look ? 180 : 0 }}>
+        <m.svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" animate={{ rotate: look ? 180 : 0 }}>
           <path fill="currentColor" d="M5.3 8.3a1 1 0 0 1 1.4 0L12 13.6l5.3-5.3a1 1 0 1 1 1.4 1.4l-6 6a1 1 0 0 1-1.4 0l-6-6a1 1 0 0 1 0-1.4z" />
-        </motion.svg>
-      </motion.button>
+        </m.svg>
+      </m.button>
       <AutoHeight>
       <AnimatePresence initial={false}>
         {look && (
-          <motion.div key="look" className="tab-page" {...fold}>
+          <m.div key="look" className="tab-page" {...fold}>
             <ThemePicker value={settings.theme} onChange={(theme) => set({ theme })} />
             <LookPicker back={settings.cardBack} table={settings.tableStyle} onBack={(cardBack) => set({ cardBack })} onTable={(tableStyle) => set({ tableStyle })} />
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
       </AutoHeight>

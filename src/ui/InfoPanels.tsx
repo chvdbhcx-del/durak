@@ -1,4 +1,4 @@
-import { animate, motion, useMotionValue, useTransform } from 'framer-motion'
+import { animate, m, useMotionValue, useTransform } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import type { Suit } from '../engine/cards'
 import { AVATARS, type HistoryEntry, type Settings, type Stats } from './settings'
@@ -24,14 +24,14 @@ export function RulesPanel({ onClose }: { onClose: () => void }) {
     <Sheet title="Правила" onClose={onClose} wide>
       <div className="rules">
         {RULES.map((r, i) => (
-          <motion.article key={r.title} className="rule" variants={sheetItem} whileHover={{ y: -3 }}>
+          <m.article key={r.title} className="rule" variants={sheetItem} whileHover={{ y: -3 }}>
             <span className={`rule-suit ${r.suit === 'H' || r.suit === 'D' ? 'red' : ''}`} aria-hidden="true">
               <SuitIcon suit={r.suit} size="100%" />
             </span>
             <span className="rule-step">{i + 1}</span>
             <h3>{r.title}</h3>
             <p>{r.text}</p>
-          </motion.article>
+          </m.article>
         ))}
       </div>
     </Sheet>
@@ -75,20 +75,20 @@ function Breakdown({ by }: { by?: Stats['by'] }) {
   })
   if (rows.length === 0) return null
   return (
-    <motion.div className="breakdown" variants={sheetItem}>
+    <m.div className="breakdown" variants={sheetItem}>
       <h3>По режимам</h3>
       {rows.map(({ key, name, t, total }) => (
         <div key={key} className="bd-row">
           <span className="bd-name">{name}</span>
           <span className="bd-bar" aria-hidden="true">
-            <motion.i initial={{ width: 0 }} animate={{ width: `${(t[0] / total) * 100}%` }} transition={{ duration: 0.8, ease: [0.2, 0.8, 0.2, 1] }} />
+            <m.i initial={{ width: 0 }} animate={{ width: `${(t[0] / total) * 100}%` }} transition={{ duration: 0.8, ease: [0.2, 0.8, 0.2, 1] }} />
           </span>
           <span className="bd-num">
             {Math.round((t[0] / total) * 100)}% · {total}
           </span>
         </div>
       ))}
-    </motion.div>
+    </m.div>
   )
 }
 
@@ -114,17 +114,17 @@ export function StatsPanel({ stats, wallet, settings, onSettings, onClose, onRes
 
   return (
     <Sheet title="Профиль" onClose={onClose}>
-      <motion.div className="profile-head" variants={sheetItem}>
-        <motion.span key={settings.avatar} className="profile-avatar" initial={{ scale: 0.6, rotate: -12 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 420, damping: 18 }}>
+      <m.div className="profile-head" variants={sheetItem}>
+        <m.span key={settings.avatar} className="profile-avatar" initial={{ scale: 0.6, rotate: -12 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 420, damping: 18 }}>
           {AVATARS[settings.avatar] ?? AVATARS[0]}
-        </motion.span>
+        </m.span>
         <input className="profile-name" value={settings.name} maxLength={16} aria-label="Имя" placeholder="Ваше имя" onChange={(e) => onSettings({ ...settings, name: e.target.value })} />
-      </motion.div>
-      <motion.div variants={sheetItem}>
+      </m.div>
+      <m.div variants={sheetItem}>
         <AvatarPicker value={settings.avatar} onChange={(avatar) => onSettings({ ...settings, avatar })} />
-      </motion.div>
+      </m.div>
 
-      <motion.div className="wallet-card" variants={sheetItem}>
+      <m.div className="wallet-card" variants={sheetItem}>
         <span className="wallet-card-main">
           <Coin size={34} />
           <span>
@@ -145,12 +145,12 @@ export function StatsPanel({ stats, wallet, settings, onSettings, onClose, onRes
             Проиграно <b className="bad">−{formatCoins(wallet.lost)}</b>
           </span>
         </span>
-      </motion.div>
+      </m.div>
 
-      <motion.div className="ring-wrap" variants={sheetItem}>
+      <m.div className="ring-wrap" variants={sheetItem}>
         <svg viewBox="0 0 120 120" className="ring" aria-hidden="true">
           <circle cx="60" cy="60" r={R} className="ring-track" />
-          <motion.circle
+          <m.circle
             cx="60"
             cy="60"
             r={R}
@@ -167,9 +167,9 @@ export function StatsPanel({ stats, wallet, settings, onSettings, onClose, onRes
           </span>
           <span className="ring-sub">побед</span>
         </div>
-      </motion.div>
+      </m.div>
 
-      <motion.div className="stat-tiles" variants={sheetItem}>
+      <m.div className="stat-tiles" variants={sheetItem}>
         <div className="stat good">
           <span className="stat-num">
             <CountUp value={stats.wins} />
@@ -188,9 +188,9 @@ export function StatsPanel({ stats, wallet, settings, onSettings, onClose, onRes
           </span>
           <span className="stat-label">Ничьи</span>
         </div>
-      </motion.div>
+      </m.div>
 
-      <motion.div className="stat-tiles two" variants={sheetItem}>
+      <m.div className="stat-tiles two" variants={sheetItem}>
         <div className="stat">
           <span className="stat-num">
             <CountUp value={stats.streak} />
@@ -203,12 +203,12 @@ export function StatsPanel({ stats, wallet, settings, onSettings, onClose, onRes
           </span>
           <span className="stat-label">Лучшая серия</span>
         </div>
-      </motion.div>
+      </m.div>
 
       <Breakdown by={stats.by} />
 
       {stats.history.length > 0 && (
-        <motion.ul className="history" variants={sheetItem} aria-label="Последние партии">
+        <m.ul className="history" variants={sheetItem} aria-label="Последние партии">
           {stats.history.slice(0, 10).map((h) => (
             <li key={h.at} className={h.result}>
               <span className="dot" />
@@ -220,14 +220,14 @@ export function StatsPanel({ stats, wallet, settings, onSettings, onClose, onRes
               <time>{when(h.at)}</time>
             </li>
           ))}
-        </motion.ul>
+        </m.ul>
       )}
 
-      <motion.div className="stat-foot" variants={sheetItem}>
+      <m.div className="stat-foot" variants={sheetItem}>
         <span className="muted">{games ? `Сыграно партий: ${games}` : 'Сыграйте первую партию, и здесь появится счёт.'}</span>
         {games > 0 &&
           (confirm ? (
-            <motion.span className="confirm" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}>
+            <m.span className="confirm" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}>
               <button type="button" className="link" onClick={() => setConfirm(false)}>
                 Отмена
               </button>
@@ -241,13 +241,13 @@ export function StatsPanel({ stats, wallet, settings, onSettings, onClose, onRes
               >
                 Обнулить
               </button>
-            </motion.span>
+            </m.span>
           ) : (
             <button type="button" className="link" onClick={() => setConfirm(true)}>
               Сбросить счёт
             </button>
           ))}
-      </motion.div>
+      </m.div>
     </Sheet>
   )
 }

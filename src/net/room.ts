@@ -1,4 +1,5 @@
-import Peer, { type DataConnection } from 'peerjs'
+import type Peer from 'peerjs'
+import type { DataConnection } from 'peerjs'
 import type { Action, GameState } from '../engine/game'
 
 /**
@@ -169,6 +170,16 @@ export function setRoomServer(raw: string) {
 
 export const peerOptions = () => ({ debug: 0 as const, ...(ownServer ?? {}) })
 
+/** PeerJS is loaded on its own, after the game has started, so it never slows the first screen. */
+let PeerCtor: typeof Peer | null = null
+let peerLoad: Promise<unknown> | null = null
+export const loadPeer = () => (peerLoad ??= import('peerjs').then((m) => (PeerCtor = m.default)))
+export const peerLoaded = () => PeerCtor !== null
+export function createPeer(id?: string): Peer {
+  return id ? new PeerCtor!(id, peerOptions()) : new PeerCtor!(peerOptions())
+}
+const LOAD_FAILED = 'Не удалось загрузить онлайн-игру. Проверьте интернет.'
+
 /** How long the first link to the room broker may take before we say so instead of spinning forever. */
 const BROKER_TIMEOUT_MS = 15000
 const BROKER_SLOW = 'Сервер комнат не отвечает. Проверьте интернет или попробуйте через минуту. Если не помогает, возможно, ваша сеть его блокирует (попробуйте другой Wi-Fi или мобильный интернет).'
@@ -229,7 +240,14 @@ export class HostRoom {
 
   private open(attempt: number, keepCode: boolean) {
     if (this.closed) return
-    const peer = new Peer(PREFIX + this.code, peerOptions())
+    if (!PeerCtor) {
+      loadPeer().then(
+        () => this.open(attempt, keepCode),
+        () => this.events.onError(LOAD_FAILED),
+      )
+      return
+    }
+    const peer = createPeer(PREFIX + this.code)
     this.peer = peer
     const slow = this.ready || keepCode ? null : setTimeout(() => {
       if (this.closed || this.peer !== peer || this.ready) return
@@ -369,7 +387,7 @@ export interface GuestEvents {
 const GUEST_PATIENCE_MS = 90_000
 
 export class GuestRoom {
-  private peer: Peer
+  private peer!: Peer
   private conn: DataConnection | null = null
   private done = false
   private everConnected = false
@@ -383,11 +401,21 @@ export class GuestRoom {
     private fid: string,
     private events: GuestEvents,
   ) {
-    this.peer = this.makePeer()
+    if (PeerCtor) this.peer = this.makePeer()
+    else
+      loadPeer().then(
+        () => {
+          if (!this.done) this.peer = this.makePeer()
+        },
+        () => {
+          this.done = true
+          this.events.onLost(LOAD_FAILED)
+        },
+      )
   }
 
   private makePeer() {
-    const peer = new Peer(peerOptions())
+    const peer = createPeer()
     const slow = this.everConnected ? null : setTimeout(() => {
       if (this.done || this.peer !== peer || peer.open) return
       this.done = true
@@ -480,6 +508,6 @@ export class GuestRoom {
     this.done = true
     if (this.retry) clearTimeout(this.retry)
     this.conn?.close()
-    setTimeout(() => this.peer.destroy(), 200)
+    setTimeout(() => this.peer?.destroy(), 200)
   }
 }

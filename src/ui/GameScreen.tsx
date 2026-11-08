@@ -1,4 +1,4 @@
-import { AnimatePresence, LayoutGroup, motion, useDragControls, type DragControls, type PanInfo } from 'framer-motion'
+import { AnimatePresence, LayoutGroup, m, useDragControls, type DragControls, type PanInfo } from 'framer-motion'
 import { Coin, Payout } from './Money'
 import { formatCoins, type PayoutInfo, type Wager } from './wallet'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
@@ -556,7 +556,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
   const resultTitle = game.loser === null ? 'Ничья' : game.loser === me ? 'Вы дурак' : 'Вы не дурак'
 
   return (
-    <motion.div
+    <m.div
       className={`app ${dragging ? 'is-dragging' : ''}`}
       style={{ ['--cw' as string]: `${cw}px`, ['--hw' as string]: `${hw}px`, ['--mini' as string]: `${miniW}px`, ['--zone-cw' as string]: `${Math.round(cw * 0.74)}px` }}
       initial={{ opacity: 0, y: 12 }}
@@ -564,23 +564,23 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
       exit={{ opacity: 0, y: 12 }}
       transition={{ duration: 0.3 }}
     >
-      <motion.header className="bar" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+      <m.header className="bar" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
         <span className="chips" title={`${game.options.deckSize} карт`}>
           <AnimatePresence mode="popLayout" initial={false}>
-            <motion.span key={game.options.mode} className="chip" {...fade}>
+            <m.span key={game.options.mode} className="chip" {...fade}>
               {game.options.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'}
-            </motion.span>
+            </m.span>
           </AnimatePresence>
           {game.options.cheat && (
-            <motion.span className="chip warn" {...fade}>
+            <m.span className="chip warn" {...fade}>
               Шулер
-            </motion.span>
+            </m.span>
           )}
           {wager && (
-            <motion.span className="chip stake-chip" {...fade} title="Ставка на партию">
+            <m.span className="chip stake-chip" {...fade} title="Ставка на партию">
               <Coin size={13} />
               {formatCoins(wager.stake)}
-            </motion.span>
+            </m.span>
           )}
           {room?.code && (
             <span className="chip" title="Код комнаты">
@@ -588,14 +588,14 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
             </span>
           )}
         </span>
-        <motion.button type="button" className="icon" aria-label="Меню" whileTap={{ scale: 0.9 }} onClick={onOpenSettings}>
+        <m.button type="button" className="icon" aria-label="Меню" whileTap={{ scale: 0.9 }} onClick={onOpenSettings}>
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
             <path fill="currentColor" d="M4 6.5h16a1 1 0 1 1 0 2H4a1 1 0 0 1 0-2zm0 4.5h16a1 1 0 1 1 0 2H4a1 1 0 0 1 0-2zm0 4.5h16a1 1 0 1 1 0 2H4a1 1 0 0 1 0-2z" />
           </svg>
-        </motion.button>
-      </motion.header>
+        </m.button>
+      </m.header>
       {series && !game.over && (
-        <motion.div className="series-strip" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} aria-label="Счёт турнира">
+        <m.div className="series-strip" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} aria-label="Счёт турнира">
           <span>
             Турнир · {Math.min(series.played + 1, series.total)} из {series.total}
           </span>
@@ -604,15 +604,15 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
               {i === me ? 'Вы' : p.name} <b>{series.fools[i]}</b>
             </span>
           ))}
-        </motion.div>
+        </m.div>
       )}
 
       <AnimatePresence>
         {room?.reconnecting && (
-          <motion.div key="reconnecting" className="reconnecting" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-            <motion.span className="toast-dot" animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1.2, repeat: Infinity }} />
+          <m.div key="reconnecting" className="reconnecting" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <m.span className="toast-dot" animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1.2, repeat: Infinity }} />
             Восстанавливаем связь…
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 
@@ -630,7 +630,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
               const role = p.out ? 'Вышел' : dealing ? null : p.id === game.defender ? (game.taking ? 'Берёт' : 'Отбивается') : p.id === game.attacker ? 'Атакует' : null
               const isTransferTarget = dragging !== null && focusTransfers && transferSeat === p.id
               return (
-                <motion.div
+                <m.div
                   key={`${gameIdOf(game)}-${p.id}`}
                   layout="position"
                   data-drop={`seat-${p.id}`}
@@ -642,9 +642,9 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                 >
                   <div className="seat-head">
                     {clock(p.id)}
-                    <motion.span className={`avatar ${p.human && room ? 'person' : ''} ${!p.human && BOT_NAMES.includes(p.name) ? 'emoji' : ''}`} animate={actor === p.id ? { scale: [1, 1.12, 1] } : { scale: 1 }} transition={actor === p.id ? { duration: 1.4, repeat: Infinity } : undefined}>
+                    <m.span className={`avatar ${p.human && room ? 'person' : ''} ${!p.human && BOT_NAMES.includes(p.name) ? 'emoji' : ''}`} animate={actor === p.id ? { scale: [1, 1.12, 1] } : { scale: 1 }} transition={actor === p.id ? { duration: 1.4, repeat: Infinity } : undefined}>
                       {!p.human && BOT_NAMES.includes(p.name) ? AVATARS[BOT_NAMES.indexOf(p.name)] : p.name[0]}
-                    </motion.span>
+                    </m.span>
                     <span className="seat-name">{p.name}</span>
                     {friends && room && p.human && (() => {
                       const fid = room.roster?.find((r) => r.seat === p.id)?.fid
@@ -658,48 +658,48 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                     })()}
                     <AnimatePresence>
                       {bubble?.seat === p.id && (
-                        <motion.span key={bubble.key} className="bubble" initial={{ opacity: 0, y: 6, scale: 0.7 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.9 }} transition={{ type: 'spring', stiffness: 500, damping: 26 }}>
+                        <m.span key={bubble.key} className="bubble" initial={{ opacity: 0, y: 6, scale: 0.7 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.9 }} transition={{ type: 'spring', stiffness: 500, damping: 26 }}>
                           {bubble.text}
-                        </motion.span>
+                        </m.span>
                       )}
                     </AnimatePresence>
                     <AnimatePresence>
                       {liveEmote?.seat === p.id && (
-                        <motion.span key={liveEmote.key} className="bubble emote" initial={{ opacity: 0, y: 8, scale: 0.4 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.7 }} transition={{ type: 'spring', stiffness: 460, damping: 18 }}>
+                        <m.span key={liveEmote.key} className="bubble emote" initial={{ opacity: 0, y: 8, scale: 0.4 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.7 }} transition={{ type: 'spring', stiffness: 460, damping: 18 }}>
                           {liveEmote.emoji}
-                        </motion.span>
+                        </m.span>
                       )}
                     </AnimatePresence>
                     <AnimatePresence>
                       {botThinking && actor === p.id && (
-                        <motion.span key="think" className="thinking" aria-label="думает" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }}>
+                        <m.span key="think" className="thinking" aria-label="думает" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }}>
                           {[0, 1, 2].map((i) => (
-                            <motion.i key={i} animate={{ y: [0, -3, 0], opacity: [0.35, 1, 0.35] }} transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }} />
+                            <m.i key={i} animate={{ y: [0, -3, 0], opacity: [0.35, 1, 0.35] }} transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }} />
                           ))}
-                        </motion.span>
+                        </m.span>
                       )}
                     </AnimatePresence>
-                    <motion.span key={cards.length} className="count" initial={{ scale: 1.35 }} animate={{ scale: 1 }}>
+                    <m.span key={cards.length} className="count" initial={{ scale: 1.35 }} animate={{ scale: 1 }}>
                       {cards.length}
-                    </motion.span>
+                    </m.span>
                   </div>
-                  <motion.div className="mini-hand" animate={{ width: seatMini + step * Math.max(0, cards.length - 1) }} transition={{ type: 'spring', stiffness: 400, damping: 34 }}>
+                  <m.div className="mini-hand" animate={{ width: seatMini + step * Math.max(0, cards.length - 1) }} transition={{ type: 'spring', stiffness: 400, damping: 34 }}>
                     {cards.map((c, i) => (
                       <CardView key={c.id} card={c} faceUp={false} trump={game.trump} size="mini" style={{ left: i * step }} flight={flightOf(c.id)} />
                     ))}
-                  </motion.div>
+                  </m.div>
                   <AnimatePresence mode="wait" initial={false}>
-                    <motion.span key={isTransferTarget ? 'transfer' : role ?? 'wait'} className={`role ${role || isTransferTarget ? '' : 'empty'}`} {...fade}>
+                    <m.span key={isTransferTarget ? 'transfer' : role ?? 'wait'} className={`role ${role || isTransferTarget ? '' : 'empty'}`} {...fade}>
                       {isTransferTarget ? (compactSeats ? 'Сюда' : 'Перевести сюда') : role ?? 'Ждёт'}
-                    </motion.span>
+                    </m.span>
                   </AnimatePresence>
-                </motion.div>
+                </m.div>
               )
             })}
           </AnimatePresence>
         </section>
 
-        <motion.section
+        <m.section
           className={`felt ${tableTarget ? 'drop-ok' : ''} ${tableTarget && hot === 'table' ? 'drop-hot' : ''}`}
           data-drop="table"
           aria-label="Стол"
@@ -717,9 +717,9 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
               })}
               <AnimatePresence>
                 {game.deck.length === 0 && !dealing && (
-                  <motion.span className="trump-ghost" aria-label={`Козырь: ${SUIT_NAME[game.trump]}`} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 0.35, scale: 1 }} exit={{ opacity: 0 }}>
+                  <m.span className="trump-ghost" aria-label={`Козырь: ${SUIT_NAME[game.trump]}`} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 0.35, scale: 1 }} exit={{ opacity: 0 }}>
                     <SuitIcon suit={game.trump} size="100%" />
-                  </motion.span>
+                  </m.span>
                 )}
               </AnimatePresence>
             </div>
@@ -741,7 +741,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
               return (
                 // No layout animation on the pair box itself: its cards carry their own, and a moving
                 // pair under moving cards made them measure each other wrong and jump.
-                <motion.div
+                <m.div
                   key={pair.attack.id}
                   data-drop={`pair-${i}`}
                   className={`pair ${target ? 'target' : ''} ${target && hot === `pair-${i}` ? 'drop-hot' : ''} ${onPair ? 'tappable' : ''}`}
@@ -755,13 +755,13 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                 >
                   <CardView card={pair.attack} faceUp trump={game.trump} className={attackPending ? 'pending' : ''} flight={flightOf(pair.attack.id)} />
                   {pair.defense && <CardView card={pair.defense} faceUp trump={game.trump} className={`cover ${coverPending ? 'pending' : ''}`} style={{ rotate: 7 }} flight={flightOf(pair.defense.id)} />}
-                </motion.div>
+                </m.div>
               )
             })}
             {/* popLayout takes the leaving slot out of the row at once, so the pairs glide over instead of jumping once it is gone */}
             <AnimatePresence mode="popLayout">
               {transferCards.length > 0 && (
-                <motion.button
+                <m.button
                   key="transfer-slot"
                   type="button"
                   layout
@@ -779,7 +779,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                     <path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M12 5v14M5 12h14" />
                   </svg>
                   <span>Перевести</span>
-                </motion.button>
+                </m.button>
               )}
             </AnimatePresence>
           </div>
@@ -800,7 +800,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
 
           <AnimatePresence>
             {banner && (
-              <motion.div
+              <m.div
                 key={banner.key}
                 className={`banner ${banner.tone}`}
                 initial={{ opacity: 0, y: 10, scale: 0.9 }}
@@ -809,39 +809,39 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                 transition={{ type: 'spring', stiffness: 500, damping: 28 }}
               >
                 {banner.text}
-              </motion.div>
+              </m.div>
             )}
           </AnimatePresence>
-        </motion.section>
+        </m.section>
 
         <section ref={meRef} className="me" aria-label="Ваши карты">
           <div ref={controlsRef} className="controls">
             {clock(me)}
             <AnimatePresence mode="wait" initial={false}>
-              <motion.p key={status} className={`status ${actor === me ? 'yours' : ''}`} {...fade}>
+              <m.p key={status} className={`status ${actor === me ? 'yours' : ''}`} {...fade}>
                 {status}
-              </motion.p>
+              </m.p>
             </AnimatePresence>
             <div className="buttons">
               {onEmote && (
-                <motion.button type="button" className="icon" aria-label="Смайлики" aria-expanded={emoteOpen} whileTap={{ scale: 0.9 }} onClick={() => setEmoteOpen((o) => !o)}>
+                <m.button type="button" className="icon" aria-label="Смайлики" aria-expanded={emoteOpen} whileTap={{ scale: 0.9 }} onClick={() => setEmoteOpen((o) => !o)}>
                   <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>
                     🙂
                   </span>
-                </motion.button>
+                </m.button>
               )}
               <AnimatePresence>
                 {staged.length > 0 && (
-                  <motion.button key="cancel" type="button" className="icon cancel" aria-label="Вернуть карты в руку" whileTap={{ scale: 0.9 }} onClick={() => setPlan([])} {...pop}>
+                  <m.button key="cancel" type="button" className="icon cancel" aria-label="Вернуть карты в руку" whileTap={{ scale: 0.9 }} onClick={() => setPlan([])} {...pop}>
                     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
                       <path fill="currentColor" d="M6.3 6.3a1 1 0 0 1 1.4 0L12 10.6l4.3-4.3a1 1 0 1 1 1.4 1.4L13.4 12l4.3 4.3a1 1 0 0 1-1.4 1.4L12 13.4l-4.3 4.3a1 1 0 0 1-1.4-1.4l4.3-4.3-4.3-4.3a1 1 0 0 1 0-1.4z" />
                     </svg>
-                  </motion.button>
+                  </m.button>
                 )}
               </AnimatePresence>
               <AnimatePresence initial={false}>
                 {main.onClick && (
-                <motion.button
+                <m.button
                   key="main"
                   {...pop}
                 type="button"
@@ -850,11 +850,11 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                 onClick={main.onClick}
               >
                 <AnimatePresence mode="popLayout" initial={false}>
-                  <motion.span key={main.label} initial={{ y: 14, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -14, opacity: 0 }} transition={{ type: 'spring', stiffness: 520, damping: 34 }}>
+                  <m.span key={main.label} initial={{ y: 14, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -14, opacity: 0 }} transition={{ type: 'spring', stiffness: 520, damping: 34 }}>
                     {main.label}
-                  </motion.span>
+                  </m.span>
                 </AnimatePresence>
-              </motion.button>
+              </m.button>
                 )}
               </AnimatePresence>
             </div>
@@ -965,14 +965,14 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
 
       <AnimatePresence>
         {liveEmote?.seat === me && (
-          <motion.div key={liveEmote.key} className="my-emote" aria-hidden="true" initial={{ opacity: 0, y: 14, scale: 0.4 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -14, scale: 0.7 }} transition={{ type: 'spring', stiffness: 460, damping: 18 }}>
+          <m.div key={liveEmote.key} className="my-emote" aria-hidden="true" initial={{ opacity: 0, y: 14, scale: 0.4 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -14, scale: 0.7 }} transition={{ type: 'spring', stiffness: 460, damping: 18 }}>
             {liveEmote.emoji}
-          </motion.div>
+          </m.div>
         )}
         {emoteOpen && onEmote && (
-          <motion.div key="emote-picker" className="emote-picker" role="menu" initial={{ opacity: 0, y: 8, scale: 0.92 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.92 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
+          <m.div key="emote-picker" className="emote-picker" role="menu" initial={{ opacity: 0, y: 8, scale: 0.92 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.92 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
             {EMOTES.map((e) => (
-              <motion.button
+              <m.button
                 key={e}
                 type="button"
                 role="menuitem"
@@ -985,16 +985,16 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                 }}
               >
                 {e}
-              </motion.button>
+              </m.button>
             ))}
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 
       <AnimatePresence>
         {game.over && (
-          <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ delay: 0.5 }}>
-            <motion.div
+          <m.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ delay: 0.5 }}>
+            <m.div
               className="result"
               role="dialog"
               aria-modal="true"
@@ -1006,9 +1006,9 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
             >
               {game.loser !== me && <Confetti />}
               <Stagger delay={0.7}>
-                <motion.div className="result-emblem" aria-hidden="true" initial={{ scale: 0, rotate: -40 }} animate={game.loser === me ? { scale: 1, rotate: [0, -14, 12, -8, 0] } : { scale: [0, 1.25, 1], rotate: 0 }} transition={game.loser === me ? { delay: 0.9, duration: 0.9 } : { delay: 0.8, duration: 0.7, ease: [0.2, 0.8, 0.2, 1] }}>
+                <m.div className="result-emblem" aria-hidden="true" initial={{ scale: 0, rotate: -40 }} animate={game.loser === me ? { scale: 1, rotate: [0, -14, 12, -8, 0] } : { scale: [0, 1.25, 1], rotate: 0 }} transition={game.loser === me ? { delay: 0.9, duration: 0.9 } : { delay: 0.8, duration: 0.7, ease: [0.2, 0.8, 0.2, 1] }}>
                   {game.loser === null ? '🤝' : game.loser === me ? '🃏' : '🏆'}
-                </motion.div>
+                </m.div>
                 <p className="eyebrow">{series ? (seriesDone ? 'Турнир окончен' : `Партия ${series.played} из ${series.total}`) : 'Партия окончена'}</p>
                 <h2 id="result-title">{seriesDone ? seriesTitle : resultTitle}</h2>
                 <p className="result-sub">
@@ -1026,23 +1026,23 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                   </ul>
                 )}
                 <div className="result-actions">
-                  <motion.button type="button" className="ghost" whileTap={{ scale: 0.95 }} onClick={onExit}>
+                  <m.button type="button" className="ghost" whileTap={{ scale: 0.95 }} onClick={onExit}>
                     В меню
-                  </motion.button>
+                  </m.button>
                   {onPlayAgain ? (
-                    <motion.button type="button" className="primary" whileTap={{ scale: 0.95 }} autoFocus onClick={onPlayAgain}>
+                    <m.button type="button" className="primary" whileTap={{ scale: 0.95 }} autoFocus onClick={onPlayAgain}>
                       {series ? (seriesDone ? 'Новый турнир' : 'Следующая партия') : 'Ещё партию'}
-                    </motion.button>
+                    </m.button>
                   ) : (
                     <span className="muted">Ждём, когда хозяин начнёт новую партию</span>
                   )}
                 </div>
               </Stagger>
-            </motion.div>
-          </motion.div>
+            </m.div>
+          </m.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </m.div>
   )
 }
 
@@ -1056,7 +1056,7 @@ function Confetti() {
         const x = ((i * 37) % 100) - 50
         const drift = ((i * 53) % 60) - 30
         return (
-          <motion.i
+          <m.i
             key={i}
             style={{ left: `${50 + x}%`, background: CONFETTI[i % CONFETTI.length], width: 6 + (i % 3) * 2, height: 9 + (i % 4) * 2 }}
             initial={{ y: -20, opacity: 0, rotate: 0 }}
@@ -1074,9 +1074,9 @@ export function Stagger({ children, delay = 0, step = 0.05 }: { children: ReactN
   return (
     <>
       {(Array.isArray(children) ? children : [children]).map((child, i) => (
-        <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: delay + i * step, type: 'spring', stiffness: 420, damping: 30 }}>
+        <m.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: delay + i * step, type: 'spring', stiffness: 420, damping: 30 }}>
           {child}
-        </motion.div>
+        </m.div>
       ))}
     </>
   )
@@ -1127,14 +1127,14 @@ function FanPose({ store, index, still, hw, left, maxLeft, children }: { store: 
   // neighbours part inside the fan; the edge cards don't get shoved past its ends
   const push = Math.max(0, Math.min(maxLeft, left + part)) - left
   return (
-    <motion.span className="pose" style={{ originY: 1 }} initial={false} animate={{ x: push, y: -hw * 0.3 * k, scale: 1 + 0.2 * k }} transition={FAN_SPRING}>
+    <m.span className="pose" style={{ originY: 1 }} initial={false} animate={{ x: push, y: -hw * 0.3 * k, scale: 1 + 0.2 * k }} transition={FAN_SPRING}>
       {children}
-    </motion.span>
+    </m.span>
   )
 }
 
 /** A hand card's drag box. The drag starts from the fan's own pointer logic, so a sideways slide can scrub the fan instead. */
-function HandSlot({ id, registry, children, ...props }: { id: string; registry: { current: Map<string, DragControls> } } & React.ComponentProps<typeof motion.div>) {
+function HandSlot({ id, registry, children, ...props }: { id: string; registry: { current: Map<string, DragControls> } } & React.ComponentProps<typeof m.div>) {
   const controls = useDragControls()
   useEffect(() => {
     registry.current.set(id, controls)
@@ -1143,9 +1143,9 @@ function HandSlot({ id, registry, children, ...props }: { id: string; registry: 
     }
   }, [id, controls, registry])
   return (
-    <motion.div data-card={id} dragControls={controls} dragListener={false} {...props}>
+    <m.div data-card={id} dragControls={controls} dragListener={false} {...props}>
       {children}
-    </motion.div>
+    </m.div>
   )
 }
 

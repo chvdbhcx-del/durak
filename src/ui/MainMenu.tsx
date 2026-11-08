@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { m } from 'framer-motion'
 import type { Card } from '../engine/cards'
 import { CardView } from './CardView'
 import type { Stats } from './settings'
@@ -74,14 +74,14 @@ export function MainMenu({ stats, wallet, bonus, broke, onBonus, onRefill, canCo
   const updateLog = useUpdateLog()
   const apkVersion = useApkVersion()
   return (
-    <motion.main className="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.25 }}>
+    <m.main className="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.25 }}>
       <WalletPill wallet={wallet} bonus={bonus} broke={broke} onBonus={onBonus} onRefill={onRefill} />
       <div className="menu-hero">
         <div className="fan" aria-hidden="true">
           {FAN.map((c, i) => {
             const off = i - (FAN.length - 1) / 2
             return (
-              <motion.div
+              <m.div
                 key={c.id}
                 className="fan-card"
                 initial={{ rotate: 0, x: 0, y: 30, opacity: 0 }}
@@ -90,52 +90,52 @@ export function MainMenu({ stats, wallet, bonus, broke, onBonus, onRefill, canCo
                 whileHover={{ y: Math.abs(off) * 9 - 14 }}
               >
                 <CardView card={c} faceUp trump="S" />
-              </motion.div>
+              </m.div>
             )
           })}
         </div>
-        <motion.h1 className="menu-logo" {...enter(0.35)}>
+        <m.h1 className="menu-logo" {...enter(0.35)}>
           Дурак
-        </motion.h1>
+        </m.h1>
       </div>
 
       <div className="menu-actions">
         {canContinue && (
-          <motion.button type="button" className="primary big" {...enter(0.5)} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={onContinue}>
+          <m.button type="button" className="primary big" {...enter(0.5)} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={onContinue}>
             Продолжить партию
-          </motion.button>
+          </m.button>
         )}
-        <motion.button type="button" className={canContinue ? 'ghost big' : 'primary big'} {...enter(canContinue ? 0.56 : 0.5)} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={onPlay}>
+        <m.button type="button" className={canContinue ? 'ghost big' : 'primary big'} {...enter(canContinue ? 0.56 : 0.5)} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={onPlay}>
           {canContinue ? 'Новая партия' : 'Играть'}
-        </motion.button>
+        </m.button>
         {onPasteInvite && (
-          <motion.button type="button" className="setup-chip paste-invite" {...enter(0.62)} whileTap={{ scale: 0.97 }} onClick={onPasteInvite}>
+          <m.button type="button" className="setup-chip paste-invite" {...enter(0.62)} whileTap={{ scale: 0.97 }} onClick={onPasteInvite}>
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
               <path fill="currentColor" d="M9 3h6a1 1 0 0 1 1 1v1h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2V4a1 1 0 0 1 1-1zm1 2v2h4V5h-4zm-2 7v2h8v-2H8zm0 4v2h5v-2H8z" />
             </svg>
             Вставить приглашение
-          </motion.button>
+          </m.button>
         )}
       </div>
 
       <div className="menu-tiles four">
         {TILES.map((t, i) => (
-          <motion.button key={t.id} type="button" className="menu-tile" {...enter(0.68 + i * 0.06)} whileTap={{ scale: 0.94 }} whileHover={{ y: -4 }} onClick={() => onOpen(t.id)}>
+          <m.button key={t.id} type="button" className="menu-tile" {...enter(0.68 + i * 0.06)} whileTap={{ scale: 0.94 }} whileHover={{ y: -4 }} onClick={() => onOpen(t.id)}>
             <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
               <path fill="currentColor" d={ICONS[t.id]} />
             </svg>
             <span>{t.label}</span>
             {t.id === 'stats' && stats.wins + stats.losses + stats.draws > 0 && <span className="tile-badge">{stats.wins}</span>}
             {t.id === 'friends' && friendCount > 0 && <span className="tile-badge">{friendCount}</span>}
-          </motion.button>
+          </m.button>
         ))}
       </div>
 
-      <motion.p className="menu-version" {...enter(0.9)}>
+      <m.p className="menu-version" {...enter(0.9)}>
         Версия {WEB_VERSION}
         {apkVersion && apkVersion !== WEB_VERSION && ` · APK ${apkVersion}`}
         {updateLog && <span className="update-log">{updateLog.text}</span>}
-      </motion.p>
-    </motion.main>
+      </m.p>
+    </m.main>
   )
 }

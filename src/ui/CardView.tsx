@@ -1,4 +1,4 @@
-import { motion, type MotionStyle, type TargetAndTransition } from 'framer-motion'
+import { m, type MotionStyle, type TargetAndTransition } from 'framer-motion'
 import { useEffect, useState, type MouseEventHandler, type ReactNode } from 'react'
 import { Card, isRed, rankLabel, Suit, SUIT_NAME } from '../engine/cards'
 import { SuitIcon } from './SuitIcon'
@@ -88,7 +88,7 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
   )
   const classes = ['card', size, flight ? 'flying' : '', turning ? 'turning' : '', faceUp && isRed(card.suit) ? 'red' : '', faceUp && card.suit === trump ? 'trump' : '', className].filter(Boolean).join(' ')
   const face = turning ? (
-    <motion.span
+    <m.span
       key="turning"
       className="flipper"
       initial={{ rotateY: from ? 0 : 180 }}
@@ -98,7 +98,7 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
     >
       {front}
       {back}
-    </motion.span>
+    </m.span>
   ) : (
     <span key="flat" className="flipper">
       {faceUp ? front : back}
@@ -108,7 +108,7 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
 
   if (onClick)
     return (
-      <motion.button
+      <m.button
         type="button"
         layoutId={card.id}
         transition={transition}
@@ -121,11 +121,11 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
         aria-label={label ?? name}
       >
         {inner}
-      </motion.button>
+      </m.button>
     )
   return (
-    <motion.div layoutId={card.id} transition={transition} className={classes} style={style} animate={animate} aria-label={faceUp ? name : undefined} role={faceUp ? 'img' : undefined}>
+    <m.div layoutId={card.id} transition={transition} className={classes} style={style} animate={animate} aria-label={faceUp ? name : undefined} role={faceUp ? 'img' : undefined}>
       {inner}
-    </motion.div>
+    </m.div>
   )
 }

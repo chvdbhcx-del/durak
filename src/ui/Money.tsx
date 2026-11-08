@@ -1,4 +1,4 @@
-import { animate, AnimatePresence, motion, useMotionValue } from 'framer-motion'
+import { animate, AnimatePresence, m, useMotionValue } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { Group, plural, Tile } from './pickers'
 import { canAfford, formatCoins, STAKES, wagerTerms } from './wallet'
@@ -39,16 +39,16 @@ export function WalletPill({ wallet, bonus, broke, onBonus, onRefill }: { wallet
     prev.current = wallet.balance
   }, [wallet.balance])
   return (
-    <motion.div className="wallet-row" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, type: 'spring', stiffness: 380, damping: 30 }}>
+    <m.div className="wallet-row" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, type: 'spring', stiffness: 380, damping: 30 }}>
       <span className="wallet-pill" aria-label={`Баланс ${formatCoins(wallet.balance)} ${plural(wallet.balance, 'монета', 'монеты', 'монет')}`}>
-        <motion.span key={burst} initial={burst ? { rotateY: 0, scale: 1.3 } : false} animate={{ rotateY: 360, scale: 1 }} transition={{ duration: 0.7 }} style={{ display: 'inline-grid' }}>
+        <m.span key={burst} initial={burst ? { rotateY: 0, scale: 1.3 } : false} animate={{ rotateY: 360, scale: 1 }} transition={{ duration: 0.7 }} style={{ display: 'inline-grid' }}>
           <Coin size={20} />
-        </motion.span>
+        </m.span>
         <Coins value={wallet.balance} />
       </span>
       <AnimatePresence>
         {(bonus || broke) && (
-          <motion.button
+          <m.button
             key={bonus ? 'bonus' : 'refill'}
             type="button"
             className="wallet-gift"
@@ -58,14 +58,14 @@ export function WalletPill({ wallet, bonus, broke, onBonus, onRefill }: { wallet
             whileTap={{ scale: 0.92 }}
             onClick={bonus ? onBonus : onRefill}
           >
-            <motion.span animate={{ rotate: [0, -12, 12, -6, 0] }} transition={{ duration: 0.9, repeat: Infinity, repeatDelay: 2.4 }} aria-hidden="true">
+            <m.span animate={{ rotate: [0, -12, 12, -6, 0] }} transition={{ duration: 0.9, repeat: Infinity, repeatDelay: 2.4 }} aria-hidden="true">
               🎁
-            </motion.span>
+            </m.span>
             {bonus ? 'Бонус дня' : 'Пополнить'}
-          </motion.button>
+          </m.button>
         )}
       </AnimatePresence>
-    </motion.div>
+    </m.div>
   )
 }
 
@@ -93,9 +93,9 @@ export function StakePicker({ value, onChange, wallet, players, mult, title = '�
                   <span className="stake-none">♡</span>
                 ) : (
                   Array.from({ length: name.coins }, (_, i) => (
-                    <motion.span key={i} className="stake-coin" style={{ bottom: i * 6, left: `calc(50% - 11px + ${(i - (name.coins - 1) / 2) * 8}px)` }} initial={false} animate={value === s ? { y: [0, -5, 0] } : { y: 0 }} transition={{ delay: i * 0.06, duration: 0.4 }}>
+                    <m.span key={i} className="stake-coin" style={{ bottom: i * 6, left: `calc(50% - 11px + ${(i - (name.coins - 1) / 2) * 8}px)` }} initial={false} animate={value === s ? { y: [0, -5, 0] } : { y: 0 }} transition={{ delay: i * 0.06, duration: 0.4 }}>
                       <Coin size={22} />
-                    </motion.span>
+                    </m.span>
                   ))
                 )}
               </span>
@@ -106,7 +106,7 @@ export function StakePicker({ value, onChange, wallet, players, mult, title = '�
         })}
       </div>
       <AnimatePresence mode="wait" initial={false}>
-        <motion.p key={`${value}-${players}-${mult}`} className="stake-terms" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }} transition={{ duration: 0.18 }}>
+        <m.p key={`${value}-${players}-${mult}`} className="stake-terms" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }} transition={{ duration: 0.18 }}>
           {value === 0 ? (
             'Играем на интерес: баланс не меняется.'
           ) : (
@@ -116,7 +116,7 @@ export function StakePicker({ value, onChange, wallet, players, mult, title = '�
               {others > 1 && <span className="muted"> ({formatCoins(value)} каждому)</span>}.
             </>
           )}
-        </motion.p>
+        </m.p>
       </AnimatePresence>
     </Group>
   )
@@ -126,7 +126,7 @@ export function StakePicker({ value, onChange, wallet, players, mult, title = '�
 export function Payout({ delta, balance }: { delta: number; balance: number }) {
   const tone = delta > 0 ? 'good' : delta < 0 ? 'bad' : ''
   return (
-    <motion.div className={`payout ${tone}`} initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 1, type: 'spring', stiffness: 380, damping: 18 }}>
+    <m.div className={`payout ${tone}`} initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 1, type: 'spring', stiffness: 380, damping: 18 }}>
       <span className="payout-delta">
         <Coin size={26} />
         {delta > 0 ? '+' : delta < 0 ? '−' : '±'}
@@ -135,6 +135,6 @@ export function Payout({ delta, balance }: { delta: number; balance: number }) {
       <span className="payout-balance">
         Баланс <Coins value={balance} from={balance - delta} />
       </span>
-    </motion.div>
+    </m.div>
   )
 }

@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { MotionConfig } from 'framer-motion'
+import { domMax, LazyMotion, MotionConfig } from 'framer-motion'
 // Fonts ship with the app so the native builds look right offline.
 import '@fontsource/onest/cyrillic-400.css'
 import '@fontsource/onest/latin-400.css'
@@ -25,9 +25,12 @@ setupPlatform()
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Crash>
-      <MotionConfig reducedMotion="user">
-        <App />
-      </MotionConfig>
+      {/* Only the animation features the game uses; `strict` catches any full `motion` component sneaking back in. */}
+      <LazyMotion features={domMax} strict>
+        <MotionConfig reducedMotion="user">
+          <App />
+        </MotionConfig>
+      </LazyMotion>
     </Crash>
   </StrictMode>,
 )

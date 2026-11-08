@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 import { useState } from 'react'
 import { maxPlayers } from '../engine/game'
 import { DeckPicker, DifficultyPicker, ModePicker, OpponentsPicker, Section, SeriesPicker, Switch } from './pickers'
@@ -27,11 +27,11 @@ const enter = (delay: number) => ({
 
 export function BackButton({ onClick }: { onClick: () => void }) {
   return (
-    <motion.button type="button" className="icon" aria-label="Назад" whileTap={{ scale: 0.9 }} whileHover={{ x: -2 }} onClick={onClick}>
+    <m.button type="button" className="icon" aria-label="Назад" whileTap={{ scale: 0.9 }} whileHover={{ x: -2 }} onClick={onClick}>
       <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
         <path fill="currentColor" d="M14.7 5.3a1 1 0 0 1 0 1.4L9.4 12l5.3 5.3a1 1 0 1 1-1.4 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0z" />
       </svg>
-    </motion.button>
+    </m.button>
   )
 }
 
@@ -44,7 +44,7 @@ export function PlayScreen({ settings, wallet, pendingStake, onChange, onBots, o
   const stake = affordableStake(wallet, settings.stake, players)
 
   return (
-    <motion.main className="screen" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}>
+    <m.main className="screen" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}>
       <header className="screen-head">
         <BackButton onClick={onBack} />
         <h1>Как играем?</h1>
@@ -52,22 +52,22 @@ export function PlayScreen({ settings, wallet, pendingStake, onChange, onBots, o
 
       <div className="screen-body">
         <div className="way-cards">
-          <motion.button type="button" className={`way ${choice === 'bots' ? 'on' : ''}`} {...enter(0.05)} whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} onClick={() => setChoice((c) => (c === 'bots' ? null : 'bots'))}>
-            {choice === 'bots' && <motion.span layoutId="way-ring" className="tile-ring" />}
+          <m.button type="button" className={`way ${choice === 'bots' ? 'on' : ''}`} {...enter(0.05)} whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} onClick={() => setChoice((c) => (c === 'bots' ? null : 'bots'))}>
+            {choice === 'bots' && <m.span layoutId="way-ring" className="tile-ring" />}
             <span className="way-art bots" aria-hidden="true">
               {['Л', 'М', 'С'].map((l, i) => (
-                <motion.span key={l} className="way-avatar" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2 + i * 0.08, type: 'spring', stiffness: 500, damping: 20 }}>
+                <m.span key={l} className="way-avatar" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2 + i * 0.08, type: 'spring', stiffness: 500, damping: 20 }}>
                   {l}
-                </motion.span>
+                </m.span>
               ))}
             </span>
             <span className="way-title">С ботами</span>
             <span className="way-note">Даже без интернета</span>
-          </motion.button>
+          </m.button>
 
-          <motion.button type="button" className="way" {...enter(0.12)} whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} onClick={onOnline}>
+          <m.button type="button" className="way" {...enter(0.12)} whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} onClick={onOnline}>
             <span className="way-art online" aria-hidden="true">
-              <motion.span className="way-pulse" animate={{ scale: [1, 1.5], opacity: [0.5, 0] }} transition={{ duration: 1.6, repeat: Infinity }} />
+              <m.span className="way-pulse" animate={{ scale: [1, 1.5], opacity: [0.5, 0] }} transition={{ duration: 1.6, repeat: Infinity }} />
               <svg viewBox="0 0 24 24" width="30" height="30">
                 <path
                   fill="currentColor"
@@ -77,13 +77,13 @@ export function PlayScreen({ settings, wallet, pendingStake, onChange, onBots, o
             </span>
             <span className="way-title">С друзьями</span>
             <span className="way-note">Комната по ссылке или коду</span>
-          </motion.button>
+          </m.button>
         </div>
 
         <AnimatePresence>
           {choice === 'bots' && (
-            <motion.div key="bots" className="setup" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 34 }}>
-              <motion.div className="setup-inner" variants={sheetList} initial="hidden" animate="shown">
+            <m.div key="bots" className="setup" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 34 }}>
+              <m.div className="setup-inner" variants={sheetList} initial="hidden" animate="shown">
                 <Section title="Партия">
                   <ModePicker value={settings.mode} onChange={(mode) => set({ mode })} />
                   <DeckPicker value={settings.deckSize} onChange={(deckSize) => set({ deckSize })} />
@@ -100,14 +100,14 @@ export function PlayScreen({ settings, wallet, pendingStake, onChange, onBots, o
                   <SeriesPicker value={settings.series} onChange={(series) => set({ series })} />
                 </Section>
                 {pendingStake > 0 && <p className="stake-warn">Незаконченная партия ещё идёт: если начать новую, её ставка {formatCoins(pendingStake)} сгорит.</p>}
-                <motion.button type="button" className="primary big setup-start" whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={onBots}>
+                <m.button type="button" className="primary big setup-start" whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={onBots}>
                   {stake ? `Начать партию · ставка ${formatCoins(stake)}` : 'Начать партию'}
-                </motion.button>
-              </motion.div>
-            </motion.div>
+                </m.button>
+              </m.div>
+            </m.div>
           )}
         </AnimatePresence>
       </div>
-    </motion.main>
+    </m.main>
   )
 }

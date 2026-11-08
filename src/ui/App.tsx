@@ -1,6 +1,7 @@
 import { AnimatePresence } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { chooseAction, eagerThrow } from '../engine/bot'
+import { eagerThrow } from '../engine/bot'
+import { think } from '../engine/think'
 import { botReaction, botReply, type Emote, fingerprint } from '../engine/emotes'
 import { Action, applyAction, currentActor, gameIdOf, GameState, isValidGame, maxPlayers, newGame } from '../engine/game'
 import { setRoomServer } from '../net/room'
@@ -140,7 +141,23 @@ export function App() {
       }),
     [],
   )
-  const stepLocalBot = useCallback((actor: number) => setGame((g) => (g && currentActor(g) === actor ? applyAction(g, actor, chooseAction(g, actor)) : g)), [])
+  const gameNow = useRef(game)
+  gameNow.current = game
+  const stepLocalBot = useCallback((actor: number) => {
+    const g = gameNow.current
+    if (!g || currentActor(g) !== actor) return
+    // The move is worked out off the main thread; if the table changed meanwhile it is dropped and asked for again.
+    think(g, actor).then((action) =>
+      setGame((cur) => {
+        if (cur !== g) return cur
+        try {
+          return applyAction(cur, actor, action)
+        } catch {
+          return cur
+        }
+      }),
+    )
+  }, [])
   // The finished game's setup goes into the history, so keep the live game in a ref.
   const liveRef = useRef<{ game: GameState | null; online: boolean }>({ game: null, online: false })
   const liveOnline = screen === 'online' && online.phase === 'playing' && online.game

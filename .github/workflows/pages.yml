@@ -25,9 +25,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Rust for the game engine (WebAssembly)
+        working-directory: engine-rs
+        run: rustup toolchain install || rustup show
       - run: npm ci
-      # Same numbering as the release workflow (1.1.0 is commit 8856a81), so the web version matches the app's.
-      - run: echo "WEB_VERSION=1.1.$(( $(git rev-list --count HEAD) - 19 ))" >> "$GITHUB_ENV"
+      # Same numbering as the release workflow, so the web version matches the app's.
+      - run: echo "WEB_VERSION=$(node scripts/version.mjs)" >> "$GITHUB_ENV"
       - run: npm run build
       # Keep the script and sound files of the last few deploys. A phone or tab that still has the
       # previous index.html (GitHub Pages lets browsers cache it for 10 minutes) asks for those old
