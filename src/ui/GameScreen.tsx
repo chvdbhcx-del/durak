@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactN
 import { beats, Card, rankLabel, sortHand, SUIT_NAME } from '../engine/cards'
 import { EMOTES, type Emote } from '../engine/emotes'
 import type { Friends } from '../net/useFriends'
-import { Action, canThrow, currentActor, GameState, HAND_SIZE, legalActions, previewAction } from '../engine/game'
+import { Action, canThrow, currentActor, gameIdOf, GameState, HAND_SIZE, legalActions, previewAction } from '../engine/game'
 import { CardView, flightEnd, type Flight } from './CardView'
 import { notify, tap } from './native'
 import { playCard, playDeal, playSweep } from './sfx'
@@ -118,7 +118,7 @@ const FAN_SPRING = { type: 'spring', stiffness: 320, damping: 30 } as const
 
 /** Deals the opening hands one card at a time, round-robin, whenever a new game starts. */
 function useDealing(game: GameState) {
-  const seed = game.options.seed
+  const seed = gameIdOf(game)
   const total = game.players.length * HAND_SIZE
   // One step past the last card: the deal lasts until the last card has landed, so it flies like the others.
   const done = total + 1
@@ -176,7 +176,8 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
   const { dealt, dealing } = useDealing(game)
   const zones = useMemo(() => zoneMap(game), [game])
   const prevZones = useRef(zones)
-  const prevSeed = useRef(game.options.seed)
+  const gameId = gameIdOf(game)
+  const prevSeed = useRef(gameId)
   /** a card waiting for the player to pick which attack it covers */
   const [selected, setSelected] = useState<string | null>(null)
   /** moves lined up on the table, made only when the player confirms */
@@ -225,7 +226,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
   const flights = useMemo(() => {
     const out = new Map<string, Flight>()
     const before = prevZones.current
-    if (dealing || prevSeed.current !== game.options.seed) return out
+    if (dealing || prevSeed.current !== gameIdOf(game)) return out
     const swept: string[] = []
     const taken: string[] = []
     const drawn: string[] = []
@@ -253,11 +254,11 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
     const playStep = step(played.length, 0.14, 0.5)
     played.forEach((id, i) => out.set(id, { kind: 'play', delay: 0.02 + i * playStep }))
     return out
-  }, [zones, dealing, game.options.seed, me])
+  }, [zones, dealing, gameId, me])
   useEffect(() => {
     prevZones.current = zones
-    prevSeed.current = game.options.seed
-  }, [zones, game.options.seed])
+    prevSeed.current = gameIdOf(game)
+  }, [zones, gameId])
 
   // Sounds follow the flights: one shuffle for a sweep, one flick per card dealt.
   useEffect(() => {
@@ -330,7 +331,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
   useEffect(() => {
     const before = prev.current
     prev.current = game
-    if (before === game || before.options.seed !== game.options.seed) return
+    if (before === game || gameIdOf(before) !== gameIdOf(game)) return
     const show = (text: string, tone: Banner['tone']) => setBanner({ key: Date.now(), text, tone })
     const c = game.lastCaught
     if (c && JSON.stringify(c) !== JSON.stringify(before.lastCaught)) {
@@ -384,8 +385,8 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
 
   // Report the result once per finished game.
   useEffect(() => {
-    if (!game.over || counted.current === game.options.seed) return
-    counted.current = game.options.seed ?? 0
+    if (!game.over || counted.current === gameIdOf(game)) return
+    counted.current = gameIdOf(game)
     const result: Result = game.loser === null ? 'draw' : game.loser === me ? 'loss' : 'win'
     notify(result === 'loss' ? 'warning' : 'success')
     onFinished(result, game.loser)
@@ -624,7 +625,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
               const isTransferTarget = dragging !== null && focusTransfers && transferSeat === p.id
               return (
                 <motion.div
-                  key={`${game.options.seed}-${p.id}`}
+                  key={`${gameIdOf(game)}-${p.id}`}
                   layout="position"
                   data-drop={`seat-${p.id}`}
                   className={`seat ${actor === p.id ? 'active' : ''} ${p.out ? 'out' : ''} ${isTransferTarget ? 'drop-ok' : ''} ${isTransferTarget && hot === `seat-${p.id}` ? 'drop-hot' : ''}`}

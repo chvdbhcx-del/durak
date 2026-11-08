@@ -4,7 +4,7 @@ import { chooseAction, eagerThrow, type Level } from '../engine/bot'
 import { EMOTES, type Emote } from '../engine/emotes'
 import { Action, applyAction, currentActor, GameState, maxPlayers, Mode, newGame, viewFor } from '../engine/game'
 import { BOT_NAMES } from '../ui/pickers'
-import { GuestRoom, HostRoom, LobbyInfo, Member, ToGuest } from './room'
+import { GuestRoom, HostRoom, LobbyInfo, Member, memberId, publicLobby, ToGuest } from './room'
 
 export type OnlinePhase = 'idle' | 'connecting' | 'lobby' | 'playing' | 'error'
 
@@ -24,7 +24,8 @@ export interface Online {
   start: (level?: Level) => void
   act: (action: Action) => void
   setLobby: (patch: Partial<Pick<LobbyInfo, 'bots' | 'mode' | 'deckSize' | 'cheat' | 'stake'>>) => void
-  kick: (token: string) => void
+  /** host only: removes the member with this lobby id */
+  kick: (id: string) => void
   /** host only: let the bot in `actor`'s seat make its move */
   stepBot: (actor: number, level?: Level) => void
   /** host only: a bot throws in while the defender is still covering, if one wants to */
@@ -108,10 +109,10 @@ export function useOnline(token: string, fid: string): Online {
     setLobbyState((prev) => {
       if (!prev) return prev
       const base = fitBots(fn(prev))
-      const roster = base.members.filter((m) => seats.current.has(m.token)).map((m) => ({ seat: seats.current.get(m.token)!, name: m.name, fid: m.fid }))
+      const roster = base.members.filter((m) => m.token && seats.current.has(m.token)).map((m) => ({ seat: seats.current.get(m.token!)!, name: m.name, fid: m.fid }))
       const next = roster.length ? { ...base, roster } : { ...base, roster: undefined }
       lobbyRef.current = next
-      host.current?.broadcast({ t: 'lobby', lobby: next })
+      host.current?.broadcast({ t: 'lobby', lobby: publicLobby(next) })
       return next
     })
   }, [])
@@ -166,8 +167,8 @@ export function useOnline(token: string, fid: string): Online {
     host.current = new HostRoom({
       onReady: (code) => {
         const l: LobbyInfo = restore?.lobby
-          ? { ...restore.lobby, members: restore.lobby.members.map((m) => ({ ...m, online: m.token === token, fid: m.token === token ? fid : m.fid })) }
-          : { code, members: [{ token, name, host: true, online: true, fid }], bots: 0, mode: fresh!.mode, deckSize: fresh!.deckSize, cheat: fresh!.cheat }
+          ? { ...restore.lobby, members: restore.lobby.members.map((m) => ({ ...m, id: m.id ?? memberId(), online: m.token === token, fid: m.token === token ? fid : m.fid })) }
+          : { code, members: [{ id: memberId(), token, name, host: true, online: true, fid }], bots: 0, mode: fresh!.mode, deckSize: fresh!.deckSize, cheat: fresh!.cheat }
         lobbyRef.current = l
         setLobbyState(l)
         setPhase(restore?.game && !restore.game.over ? 'playing' : 'lobby')
@@ -200,7 +201,7 @@ export function useOnline(token: string, fid: string): Online {
             host.current?.send(t, { t: 'closed', reason: 'Комната заполнена.' })
             return l
           }
-          return { ...l, members: [...l.members, { token: t, name: guestName, host: false, online: true, fid: guestFid }] }
+          return { ...l, members: [...l.members, { id: memberId(), token: t, name: guestName, host: false, online: true, fid: guestFid }] }
         })
       },
       onLeave: (t) => {
@@ -222,6 +223,11 @@ export function useOnline(token: string, fid: string): Online {
           try {
             return applyAction(g, s, action)
           } catch {
+            // Out of turn or no longer legal: say so, and resend the table in case the guest's view is behind.
+            setTimeout(() => {
+              host.current?.send(t, { t: 'reject', reason: 'Этот ход уже нельзя сделать' })
+              host.current?.send(t, { t: 'state', view: viewFor(g, s), seat: s })
+            }, 0)
             return g
           }
         })
@@ -258,6 +264,8 @@ export function useOnline(token: string, fid: string): Online {
           setPhase('playing')
         } else if (msg.t === 'emote') {
           setEmote({ seat: msg.seat, emoji: msg.emoji, key: Date.now() })
+        } else if (msg.t === 'reject') {
+          say(msg.reason)
         } else if (msg.t === 'closed') {
           setError(msg.reason)
           setPhase('error')
@@ -304,7 +312,7 @@ export function useOnline(token: string, fid: string): Online {
     const online: Member[] = l.members.filter((m) => m.online)
     const players = Math.min(online.length + l.bots, maxPlayers(l.deckSize))
     if (players < 2) return
-    seats.current = new Map(online.map((m, i) => [m.token, i]))
+    seats.current = new Map(online.map((m, i) => [m.token ?? '', i]))
     const names = [...online.map((m) => m.name), ...BOT_NAMES]
     const g = newGame({
       players,
@@ -316,7 +324,6 @@ export function useOnline(token: string, fid: string): Online {
       names,
       human: 0,
       humans: online.map((_, i) => i),
-      seed: Date.now(),
     })
     setSeat(0)
     setGame(g)
@@ -348,7 +355,9 @@ export function useOnline(token: string, fid: string): Online {
   }
 
   const setLobby: Online['setLobby'] = (patch) => updateLobby((l) => ({ ...l, ...patch }))
-  const kick = (t: string) => {
+  const kick = (id: string) => {
+    const t = lobbyRef.current?.members.find((m) => m.id === id)?.token
+    if (!t || t === token) return
     host.current?.kick(t)
     updateLobby((l) => ({ ...l, members: l.members.filter((m) => m.token !== t) }))
   }

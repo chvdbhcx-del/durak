@@ -158,7 +158,7 @@ export function deviceToken(): string {
   try {
     let t = localStorage.getItem('durak.token')
     if (!t) {
-      t = Math.random().toString(36).slice(2) + Date.now().toString(36)
+      t = Array.from(crypto.getRandomValues(new Uint8Array(18)), (b) => b.toString(16).padStart(2, '0')).join('')
       localStorage.setItem('durak.token', t)
     }
     return t

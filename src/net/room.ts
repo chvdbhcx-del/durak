@@ -12,7 +12,10 @@ const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 export const CODE_LENGTH = 5
 
 export interface Member {
-  token: string
+  /** public seat name in the lobby, shared with everyone; kicks and lists use it */
+  id: string
+  /** the device's secret token: only the host keeps it, guests never see anyone's */
+  token?: string
   name: string
   host: boolean
   online: boolean
@@ -44,8 +47,83 @@ export type ToGuest =
   | { t: 'state'; view: GameState; seat: number }
   | { t: 'emote'; seat: number; emoji: string }
   | { t: 'closed'; reason: string }
+  /** the host turned a move down (out of turn, or no longer legal) */
+  | { t: 'reject'; reason: string }
 
 export type ToHost = { t: 'hello'; name: string; token: string; fid?: string } | { t: 'act'; action: Action } | { t: 'emote'; emoji: string }
+
+/** The lobby as guests see it: without anyone's device token, which would let a guest take over another seat. */
+export function publicLobby(l: LobbyInfo): LobbyInfo {
+  return { ...l, members: l.members.map(({ token: _secret, ...m }) => m) }
+}
+
+/** A short random id for a lobby seat. */
+export function memberId(): string {
+  try {
+    return Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => (b % 36).toString(36)).join('')
+  } catch {
+    return Math.random().toString(36).slice(2, 10)
+  }
+}
+
+const str = (v: unknown, max: number) => (typeof v === 'string' && v.length <= max ? v : null)
+const int = (v: unknown, max: number) => (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= max ? v : null)
+
+function parseAction(raw: unknown): Action | null {
+  if (!raw || typeof raw !== 'object') return null
+  const a = raw as Record<string, unknown>
+  switch (a.type) {
+    case 'take':
+    case 'pass':
+      return { type: a.type }
+    case 'attack':
+    case 'transfer': {
+      const cardId = str(a.cardId, 24)
+      return cardId ? { type: a.type, cardId } : null
+    }
+    case 'defend': {
+      const cardId = str(a.cardId, 24)
+      const pair = int(a.pair, 12)
+      return cardId && pair !== null ? { type: 'defend', cardId, pair } : null
+    }
+    case 'accuse': {
+      const pair = int(a.pair, 12)
+      return pair !== null ? { type: 'accuse', pair } : null
+    }
+    case 'throw': {
+      if (!Array.isArray(a.cardIds) || a.cardIds.length === 0 || a.cardIds.length > 6) return null
+      const ids = a.cardIds.map((id) => str(id, 24))
+      return ids.every((id): id is string => !!id) ? { type: 'throw', cardIds: ids } : null
+    }
+    default:
+      // bluffs are for bots only and never come over the wire
+      return null
+  }
+}
+
+/** Messages come from other devices, so nothing is trusted until its shape is checked. */
+export function parseToHost(raw: unknown): ToHost | null {
+  if (!raw || typeof raw !== 'object') return null
+  const m = raw as Record<string, unknown>
+  if (m.t === 'hello') {
+    const token = str(m.token, 64)
+    if (!token || typeof m.name !== 'string') return null
+    const fid = str(m.fid, 32)
+    return { t: 'hello', name: m.name.slice(0, 16), token, ...(fid ? { fid } : {}) }
+  }
+  if (m.t === 'act') {
+    const action = parseAction(m.action)
+    return action ? { t: 'act', action } : null
+  }
+  if (m.t === 'emote') {
+    const emoji = str(m.emoji, 8)
+    return emoji ? { t: 'emote', emoji } : null
+  }
+  return null
+}
+
+/** Messages a guest may send per second before the rest are dropped. */
+const RATE_PER_SEC = 20
 
 export function randomCode() {
   let code = ''
@@ -188,8 +266,17 @@ export class HostRoom {
     peer.on('disconnected', () => this.recover())
     peer.on('connection', (conn) => {
       let token = ''
+      let windowStart = 0
+      let count = 0
       conn.on('data', (raw) => {
-        const msg = raw as ToHost
+        const now = Date.now()
+        if (now - windowStart > 1000) {
+          windowStart = now
+          count = 0
+        }
+        if (++count > RATE_PER_SEC) return
+        const msg = parseToHost(raw)
+        if (!msg) return
         if (msg.t === 'hello') {
           if (this.ownToken && msg.token === this.ownToken) {
             conn.send({ t: 'closed', reason: SAME_DEVICE } satisfies ToGuest)
@@ -200,9 +287,9 @@ export class HostRoom {
           const old = this.conns.get(token)
           this.conns.set(token, conn)
           if (old && old !== conn) old.close()
-          this.events.onJoin(token, msg.name.slice(0, 16) || 'Гость', typeof msg.fid === 'string' ? msg.fid.slice(0, 32) : undefined)
+          this.events.onJoin(token, msg.name.trim() || 'Гость', msg.fid)
         } else if (msg.t === 'act' && token) this.events.onAction(token, msg.action)
-        else if (msg.t === 'emote' && token) this.events.onEmote(token, String(msg.emoji).slice(0, 8))
+        else if (msg.t === 'emote' && token) this.events.onEmote(token, msg.emoji)
       })
       conn.on('close', () => {
         if (token && this.conns.get(token) === conn) {

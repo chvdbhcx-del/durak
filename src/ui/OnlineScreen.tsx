@@ -19,6 +19,11 @@ interface Props {
   settings: Settings
   wallet: Wallet
   onChange: (s: Settings) => void
+  /** the room server in use now: the invite's own, or the one from the settings */
+  server: string
+  /** a server that came with an invite; used for this room only */
+  inviteServer: string
+  onInviteServer: (server: string) => void
   initialCode: string
   /** opened from an invite in a plain browser tab: offer the installed app first */
   offerApp?: boolean
@@ -152,6 +157,14 @@ function NameBadge({ name, onChange }: { name: string; onChange: (n: string) => 
   )
 }
 
+function serverName(raw: string) {
+  try {
+    return new URL(/^[a-z]+:\/\//i.test(raw) ? raw : `https://${raw}`).host
+  } catch {
+    return raw.slice(0, 40)
+  }
+}
+
 function CardSpinner() {
   return (
     <div className="card-spinner" aria-hidden="true">
@@ -162,7 +175,7 @@ function CardSpinner() {
   )
 }
 
-export function OnlineScreen({ online, settings, wallet, onChange, initialCode, offerApp = false, friends, onInviteFriend, onBack }: Props) {
+export function OnlineScreen({ online, settings, wallet, onChange, server, inviteServer, onInviteServer, initialCode, offerApp = false, friends, onInviteFriend, onBack }: Props) {
   const [mode, setMode] = useState<'choose' | 'join'>(initialCode ? 'join' : 'choose')
   const [code, setCode] = useState(initialCode)
   const [copied, setCopied] = useState(false)
@@ -184,7 +197,7 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
 
   const invite = async () => {
     if (!lobby) return
-    const url = inviteUrl(lobby.code, settings.server)
+    const url = inviteUrl(lobby.code, server)
     const text = `Сыграем в дурака? Код комнаты: ${lobby.code}`
     try {
       if (navigator.share) {
@@ -257,18 +270,19 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
                 </div>
               ) : (
                 <motion.div className="join-block" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
-                  {offerApp && code === initialCode && <AppHandoff code={initialCode} server={settings.server} />}
+                  {offerApp && code === initialCode && <AppHandoff code={initialCode} server={server} />}
                   <div className="join-head">
                     <p className="join-label">{offerApp && code === initialCode ? 'Или играйте здесь, в браузере' : 'Код комнаты'}</p>
                     {!(offerApp && code === initialCode) && (
                       <PasteButton
                         onCode={(inv) => {
                           setCode(inv.code)
-                          if (inv.server && inv.server !== settings.server) onChange({ ...settings, server: inv.server })
+                          onInviteServer(inv.server)
                         }}
                       />
                     )}
                   </div>
+                  {inviteServer && <p className="join-note">Комната на частном сервере {serverName(inviteServer)}</p>}
                   <CodeInput value={code} onChange={setCode} onDone={() => online.join(code, settings.name.trim() || 'Игрок')} />
                   <motion.button
                     type="button"
@@ -330,7 +344,7 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
                 <div className="lobby-seats">
                   <AnimatePresence>
                     {lobby.members.map((m) => (
-                      <motion.div key={m.token} layout className={`lobby-seat ${m.online ? '' : 'off'}`} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: m.online ? 1 : 0.4 }} exit={{ scale: 0, opacity: 0 }} transition={{ type: 'spring', stiffness: 500, damping: 24 }}>
+                      <motion.div key={m.id} layout className={`lobby-seat ${m.online ? '' : 'off'}`} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: m.online ? 1 : 0.4 }} exit={{ scale: 0, opacity: 0 }} transition={{ type: 'spring', stiffness: 500, damping: 24 }}>
                         <span className="avatar-circle person">{m.name[0]?.toUpperCase()}</span>
                         <span className="avatar-name">{m.name}</span>
                         {m.host && <span className="seat-tag">хозяин</span>}
@@ -340,7 +354,7 @@ export function OnlineScreen({ online, settings, wallet, onChange, initialCode, 
                           </button>
                         )}
                         {host && !m.host && (
-                          <button type="button" className="seat-kick" aria-label={`Убрать ${m.name}`} onClick={() => online.kick(m.token)}>
+                          <button type="button" className="seat-kick" aria-label={`Убрать ${m.name}`} onClick={() => online.kick(m.id)}>
                             ×
                           </button>
                         )}

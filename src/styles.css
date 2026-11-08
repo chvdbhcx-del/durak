@@ -3009,3 +3009,10 @@ small,
   font-weight: 400;
   color: var(--muted);
 }
+
+.join-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}

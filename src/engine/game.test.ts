@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { beats, Card } from './cards'
 import { chooseAction, eagerThrow, LOOKAHEAD } from './bot'
 import { botReaction, botReply } from './emotes'
-import { applyAction, canCheat, catchChance, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options } from './game'
+import { applyAction, canCheat, catchChance, canThrow, cardCount, currentActor, GameState, legalActions, newGame, Options, viewFor } from './game'
 
 const opts = (o: Partial<Options> = {}): Options => ({
   players: 2,
@@ -508,5 +508,21 @@ describe('bot judgement', () => {
       if (g.loser === 0) easyLost++
     }
     expect(easyLost).toBeGreaterThan(50)
+  })
+})
+
+describe('online views', () => {
+  it('never carry the shuffle seed, so a guest cannot rebuild the deal', () => {
+    const g = newGame({ players: 3, deckSize: 36, mode: 'podkidnoy', names: [], human: 0, humans: [0, 1, 2], seed: 12345 })
+    const v = viewFor(g, 1)
+    expect(v.options.seed).toBeUndefined()
+    expect(JSON.stringify(v)).not.toContain('12345')
+    expect(v.options.id).toBe(g.options.id)
+  })
+  it('picks an unguessable seed and an id when none is given', () => {
+    const a = newGame({ players: 2, deckSize: 36, mode: 'podkidnoy', names: [], human: 0 })
+    const b = newGame({ players: 2, deckSize: 36, mode: 'podkidnoy', names: [], human: 0 })
+    expect(a.options.seed).not.toBe(b.options.seed)
+    expect(a.options.id).not.toBe(a.options.seed)
   })
 })

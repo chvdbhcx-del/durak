@@ -1,4 +1,4 @@
-import { beats, Card, DeckSize, makeDeck, mulberry32, shuffle, Suit } from './cards'
+import { beats, Card, DeckSize, makeDeck, mulberry32, randomSeed, shuffle, Suit } from './cards'
 
 export type Mode = 'podkidnoy' | 'perevodnoy'
 
@@ -18,7 +18,10 @@ export interface Options {
   human: number
   /** bot strength, normal when missing */
   level?: Level
+  /** shuffles the deck: whoever knows it can rebuild every hand, so it never leaves the device running the game */
   seed?: number
+  /** names this game for the wallet, stats and animations; safe to share, unlike `seed` */
+  id?: number
   /** coins each player puts on this game; only the app's wallet reads it, the rules ignore it */
   stake?: number
 }
@@ -103,8 +106,12 @@ export function maxPlayers(deckSize: DeckSize) {
   return Math.min(6, Math.floor(deckSize / HAND_SIZE))
 }
 
-export function newGame(options: Options): GameState {
-  const rng = mulberry32(options.seed ?? Date.now())
+/** The game's public name: `id`, or the seed for games saved before ids existed. */
+export const gameIdOf = (g: GameState): number => g.options.id ?? g.options.seed ?? 0
+
+export function newGame(opts: Options): GameState {
+  const options: Options = { ...opts, seed: opts.seed ?? randomSeed(), id: opts.id ?? randomSeed() }
+  const rng = mulberry32(options.seed!)
   // Ids are opaque per game so an online view can hide a card's face without hiding which card moved.
   const deck = shuffle(makeDeck(options.deckSize), rng).map((c, i) => ({ ...c, id: `${Math.floor(rng() * 1e9).toString(36)}${i}` }))
   const trumpCard = deck[0]
@@ -457,8 +464,11 @@ export function cardCount(s: GameState) {
 /** What one seat may see: other hands and the closed deck lose their faces, ids stay. */
 export function viewFor(s: GameState, seat: number): GameState {
   const hide = (c: Card): Card => ({ id: c.id, suit: 'S', rank: 0 })
+  // The seed would let a guest replay the shuffle and see every hand, so it stays on the host.
+  const { seed: _secret, ...options } = s.options
   return {
     ...s,
+    options: { ...options, id: gameIdOf(s) },
     players: s.players.map((p) => (p.id === seat ? p : { ...p, hand: p.hand.map(hide) })),
     deck: s.deck.map((c, i) => (i === 0 ? c : hide(c))),
     discard: s.discard.map(hide),

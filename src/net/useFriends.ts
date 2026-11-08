@@ -36,6 +36,7 @@ export function useFriends(name: string, server: string): Friends {
   const nameRef = useRef(name)
   nameRef.current = name
   const seq = useRef(0)
+  const lastFrom = useRef(new Map<string, number>())
 
   const say = useCallback((text: string) => {
     setFlash(text)
@@ -56,13 +57,18 @@ export function useFriends(name: string, server: string): Friends {
         return
       }
       if (msg.fid === fid) return
+      // Anyone who learned an id could knock over and over: one message per sender every few seconds.
+      const now = Date.now()
+      if (now - (lastFrom.current.get(msg.fid) ?? 0) < 4000) return
+      lastFrom.current.set(msg.fid, now)
       const known = listRef.current.find((f) => f.id === msg.fid)
       if (msg.t === 'friend') {
         if (known) {
           if (known.name !== msg.name) update(listRef.current.map((f) => (f.id === msg.fid ? { ...f, name: msg.name } : f)))
           return
         }
-        setQueue((q) => (q.some((i) => i.fid === msg.fid && i.kind === 'friend') ? q : [...q, { id: ++seq.current, kind: 'friend', fid: msg.fid, name: msg.name }]))
+        // At most a few strangers' requests wait at once, so nobody can flood the screen.
+        setQueue((q) => (q.some((i) => i.fid === msg.fid && i.kind === 'friend') || q.filter((i) => i.kind === 'friend').length >= 3 ? q : [...q, { id: ++seq.current, kind: 'friend', fid: msg.fid, name: msg.name }]))
       } else if (known) {
         // Only friends can invite: a stranger who learned the id gets nowhere.
         setQueue((q) => [...q.filter((i) => !(i.kind === 'invite' && i.fid === msg.fid)), { id: ++seq.current, kind: 'invite', fid: msg.fid, name: known.name, code: msg.code, server: msg.server }])
