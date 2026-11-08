@@ -3066,10 +3066,11 @@ small,
   gap: 10px;
   width: 100%;
 }
-.play-row > .primary { flex: 1; }
+.play-row > .primary { flex: 1 1 auto; width: auto; min-width: 0; }
 .play-row > .square {
-  flex: 0 0 auto;
-  aspect-ratio: 1;
+  flex: 0 0 58px;
+  width: 58px;
+  min-width: 0;
   padding: 0;
   display: grid;
   place-items: center;
@@ -3093,3 +3094,85 @@ small,
   border: 0;
 }
 .sheet:focus { outline: none; }
+
+/* Classic faces: a light card as printed decks have, indices in two corners, pips by count. */
+.side.front.classic {
+  --ink: #1b2226;
+  background: #fbfaf6;
+  color: var(--ink);
+  border-color: #d6d2c6;
+}
+.side.front.classic.red { --ink: #c8352a; }
+.side.front.classic.trump {
+  border-color: color-mix(in srgb, var(--accent) 75%, #d6d2c6);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent 40%),
+    #fbfaf6;
+}
+.side.front.classic .corner {
+  font-size: calc(var(--cw) * 0.18);
+  gap: 1px;
+}
+.side.front.classic .corner svg {
+  width: calc(var(--cw) * 0.12);
+  height: calc(var(--cw) * 0.12);
+}
+.side.front.classic .corner.tl { left: 5%; top: 4%; }
+.side.front.classic .corner.br { right: 5%; bottom: 4%; rotate: 180deg; }
+.pips {
+  position: absolute;
+  inset: 17% 31% 17%;
+}
+.cpip {
+  position: absolute;
+  width: calc(var(--cw) * 0.15);
+  height: calc(var(--cw) * 0.15);
+  translate: -50% -50%;
+  display: block;
+}
+.cpip.flip { rotate: 180deg; }
+.ace {
+  position: absolute;
+  inset: 30% 24%;
+  display: grid;
+  place-items: center;
+}
+.court {
+  position: absolute;
+  inset: 15% 21%;
+  display: grid;
+  grid-template-rows: 1fr auto 1fr;
+  justify-items: center;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
+  border-radius: 6%;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.court b {
+  font-family: var(--font-display);
+  font-size: calc(var(--cw) * 0.3);
+  line-height: 1;
+}
+.court-suit {
+  width: calc(var(--cw) * 0.15);
+  height: calc(var(--cw) * 0.15);
+}
+.court-suit.flip { rotate: 180deg; }
+.card.mini .side.front.classic .pips,
+.card.mini .side.front.classic .court,
+.card.mini .side.front.classic .ace,
+.card.mini .side.front.classic .corner.br { display: none; }
+
+/* Samples in the look picker */
+.face-sample {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 0 2px;
+  --cw: 44px;
+}
+.face-sample .sample {
+  position: relative;
+  display: block;
+  box-shadow: 0 2px 6px var(--shadow);
+}

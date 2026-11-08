@@ -88,7 +88,7 @@ export function App() {
     syncStatusBar()
   }, [settings.theme])
   useEffect(() => saveSettings(settings), [settings])
-  useEffect(() => applyLook(settings.cardBack, settings.tableStyle), [settings.cardBack, settings.tableStyle])
+  useEffect(() => applyLook(settings.cardBack, settings.tableStyle, settings.cardFace), [settings.cardBack, settings.tableStyle, settings.cardFace])
   useEffect(() => setHaptics(settings.haptics), [settings.haptics])
   useEffect(() => setSoundEnabled(settings.sound), [settings.sound])
   useEffect(() => unlockSound(), [])

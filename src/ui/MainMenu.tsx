@@ -119,7 +119,7 @@ export function MainMenu({ stats, wallet, bonus, broke, onBonus, onRefill, canCo
             </m.button>
             <m.button type="button" className="ghost big square" aria-label="Настроить партию" {...enter(0.54)} whileTap={{ scale: 0.94 }} whileHover={{ y: -2 }} onClick={onPlay}>
               <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-                <path fill="currentColor" d="M4 6h9.2a2.5 2.5 0 0 1 4.6 0H20a1 1 0 1 1 0 2h-2.2a2.5 2.5 0 0 1-4.6 0H4a1 1 0 0 1 0-2zm0 10h2.2a2.5 2.5 0 0 1 4.6 0H20a1 1 0 1 1 0 2h-9.2a2.5 2.5 0 0 1-4.6 0H4a1 1 0 1 1 0-2z" />
+                <path fill="currentColor" d="M6.5 3h7A2.5 2.5 0 0 1 16 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 4 18.5v-13A2.5 2.5 0 0 1 6.5 3zm11 3.2 1.3.4a2.5 2.5 0 0 1 1.7 3.1l-2.9 9.6a2.5 2.5 0 0 1-1.3 1.5c.4-.6.7-1.3.7-2.1V6.2zM10 8.2 7.6 12l2.4 3.8 2.4-3.8z" />
               </svg>
             </m.button>
           </div>

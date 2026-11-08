@@ -77,7 +77,7 @@ export function SettingsPanel({ settings, onChange, onClose }: { settings: Setti
           {tab === 'look' && (
             <>
               <ThemePicker value={settings.theme} onChange={(theme) => set({ theme })} />
-              <LookPicker back={settings.cardBack} table={settings.tableStyle} onBack={(cardBack) => set({ cardBack })} onTable={(tableStyle) => set({ tableStyle })} />
+              <LookPicker back={settings.cardBack} table={settings.tableStyle} face={settings.cardFace} onBack={(cardBack) => set({ cardBack })} onTable={(tableStyle) => set({ tableStyle })} onFace={(cardFace) => set({ cardFace })} />
             </>
           )}
           {tab === 'sound' && (
@@ -162,7 +162,7 @@ export function GameMenu({ settings, onChange, onClose, onRules, onExit, online,
         {look && (
           <m.div key="look" className="tab-page" {...fold}>
             <ThemePicker value={settings.theme} onChange={(theme) => set({ theme })} />
-            <LookPicker back={settings.cardBack} table={settings.tableStyle} onBack={(cardBack) => set({ cardBack })} onTable={(tableStyle) => set({ tableStyle })} />
+            <LookPicker back={settings.cardBack} table={settings.tableStyle} face={settings.cardFace} onBack={(cardBack) => set({ cardBack })} onTable={(tableStyle) => set({ tableStyle })} onFace={(cardFace) => set({ cardFace })} />
           </m.div>
         )}
       </AnimatePresence>

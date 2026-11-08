@@ -6,6 +6,8 @@ export type Speed = 'calm' | 'normal' | 'fast'
 export type Difficulty = 'easy' | 'normal' | 'hard'
 export type CardBack = 'teal' | 'ember' | 'ink' | 'rose'
 export type TableStyle = 'forest' | 'night' | 'wine' | 'slate'
+/** classic: a light face with pips laid out as on printed cards; modern: one big suit on a dark face */
+export type CardFace = 'classic' | 'modern'
 
 export const AVATARS = ['🦊', '🐻', '🦉', '🦔', '🐺', '🐱', '🐸', '🦄']
 
@@ -28,6 +30,7 @@ export interface Settings {
   haptics: boolean
   cardBack: CardBack
   tableStyle: TableStyle
+  cardFace: CardFace
   /** address of a private room server; empty means the public one */
   server: string
   /** games in a bot tournament; 1 means a single game */
@@ -111,6 +114,7 @@ export const DEFAULT_SETTINGS: Settings = {
   haptics: true,
   cardBack: 'teal',
   tableStyle: 'forest',
+  cardFace: 'classic',
   server: '',
   series: 1,
   stake: 100,
@@ -175,6 +179,7 @@ export function loadSettings(): Settings {
     avatar: Math.max(0, Math.min(AVATARS.length - 1, Math.round(s.avatar))),
     cardBack: oneOf(s.cardBack, ['teal', 'ember', 'ink', 'rose'] as const, d.cardBack),
     tableStyle: oneOf(s.tableStyle, ['forest', 'night', 'wine', 'slate'] as const, d.tableStyle),
+    cardFace: oneOf(s.cardFace, ['classic', 'modern'] as const, d.cardFace),
     name: s.name.slice(0, 16),
   }
 }
@@ -188,10 +193,27 @@ export function applyTheme(theme: Theme) {
   else root.setAttribute('data-theme', theme)
 }
 
-export function applyLook(back: CardBack, table: TableStyle) {
+export function applyLook(back: CardBack, table: TableStyle, face: CardFace = 'classic') {
   const root = document.documentElement
   root.setAttribute('data-back', back)
   root.setAttribute('data-table', table)
+  setCardFace(face)
+}
+
+// Which face cards are drawn with; cards read it through useCardFace so they redraw when it changes.
+let cardFace: CardFace = 'classic'
+const faceWatchers = new Set<() => void>()
+export function setCardFace(face: CardFace) {
+  if (face === cardFace) return
+  cardFace = face
+  faceWatchers.forEach((w) => w())
+}
+export const getCardFace = () => cardFace
+export function watchCardFace(fn: () => void) {
+  faceWatchers.add(fn)
+  return () => {
+    faceWatchers.delete(fn)
+  }
 }
 
 /** Identifies this device to a room host, so a dropped player gets their seat back. */

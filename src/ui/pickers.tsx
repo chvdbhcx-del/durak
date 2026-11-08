@@ -1,8 +1,9 @@
 import { m } from 'framer-motion'
 import type { ReactNode } from 'react'
-import type { DeckSize } from '../engine/cards'
+import { type Card, type DeckSize, isRed, rankLabel, type Suit } from '../engine/cards'
 import type { Mode } from '../engine/game'
-import { AVATARS, type CardBack, type Difficulty, type Speed, type TableStyle, type Theme } from './settings'
+import { ClassicFace } from './CardView'
+import { AVATARS, type CardBack, type CardFace, type Difficulty, type Speed, type TableStyle, type Theme } from './settings'
 import { sheetItem } from './Sheet'
 import { SuitIcon } from './SuitIcon'
 
@@ -294,9 +295,39 @@ export const TABLES: { value: TableStyle; title: string; color: string; glow: st
   { value: 'slate', title: 'Сланец', color: '#262b2e', glow: '#5d6a72' },
 ]
 
-export function LookPicker({ back, table, onBack, onTable }: { back: CardBack; table: TableStyle; onBack: (b: CardBack) => void; onTable: (t: TableStyle) => void }) {
+export function LookPicker({ back, table, face, onBack, onTable, onFace }: { back: CardBack; table: TableStyle; face: CardFace; onBack: (b: CardBack) => void; onTable: (t: TableStyle) => void; onFace: (f: CardFace) => void }) {
+  const sample = (suit: Suit, rank: number): Card => ({ id: `look-${suit}${rank}`, suit, rank })
   return (
     <>
+      <Group title="Карты" value={face === 'classic' ? 'Классические' : 'Современные'}>
+        <div className="tiles two">
+          {(['classic', 'modern'] as const).map((f) => (
+            <Tile key={f} group="face" on={face === f} onClick={() => onFace(f)} label={f === 'classic' ? 'Классические' : 'Современные'}>
+              <span className={`face-sample ${f}`} aria-hidden="true">
+                {[sample('H', 7), sample('S', 12)].map((c) =>
+                  f === 'classic' ? (
+                    <span key={c.id} className="card full sample">
+                      <ClassicFace card={c} trump="D" />
+                    </span>
+                  ) : (
+                    <span key={c.id} className="card full sample">
+                      <span className={`side front ${isRed(c.suit) ? 'red' : ''}`}>
+                        <span className="corner tl">
+                          <b>{rankLabel(c.rank)}</b>
+                          <SuitIcon suit={c.suit} />
+                        </span>
+                        <span className="pip">
+                          <SuitIcon suit={c.suit} size="100%" />
+                        </span>
+                      </span>
+                    </span>
+                  ),
+                )}
+              </span>
+            </Tile>
+          ))}
+        </div>
+      </Group>
       <Group title="Рубашка карт" value={CARD_BACKS.find((b) => b.value === back)?.title}>
         <div className="tiles four">
           {CARD_BACKS.map((b) => (
