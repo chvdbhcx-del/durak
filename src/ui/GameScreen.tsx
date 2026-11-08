@@ -2,7 +2,7 @@ import { AnimatePresence, LayoutGroup, m, useDragControls, type DragControls, ty
 import { Coin, Payout } from './Money'
 import { formatCoins, type PayoutInfo, type Wager } from './wallet'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { beats, Card, rankLabel, sortHand, SUIT_NAME } from '../engine/cards'
+import { beats, Card, isRed, rankLabel, sortHand, SUIT_NAME } from '../engine/cards'
 import { EMOTES, type Emote } from '../engine/emotes'
 import type { Friends } from '../net/useFriends'
 import { Action, canThrow, currentActor, gameIdOf, GameState, HAND_SIZE, legalActions, previewAction } from '../engine/game'
@@ -87,8 +87,10 @@ function useCardSizes() {
     const h = window.innerHeight
     // Short landscape screens (a phone on its side) size cards by height, everything else mostly by width.
     const flat = w > h && h < 560
-    const table = Math.round(flat ? Math.max(46, h * 0.15) : Math.max(52, Math.min(128, Math.min(w * 0.185, h * 0.105))))
-    const hand = Math.round(flat ? Math.max(54, h * 0.17) : Math.max(62, Math.min(130, Math.min(w * 0.232, h * 0.122))))
+    // Wide screens (laptops, tablets on their side) have room to spare: bigger cards instead of empty felt.
+    const wide = !flat && w >= 900
+    const table = Math.round(flat ? Math.max(46, h * 0.15) : wide ? Math.max(84, Math.min(150, h * 0.125)) : Math.max(52, Math.min(128, Math.min(w * 0.185, h * 0.105))))
+    const hand = Math.round(flat ? Math.max(54, h * 0.17) : wide ? Math.max(96, Math.min(170, h * 0.155)) : Math.max(62, Math.min(130, Math.min(w * 0.232, h * 0.122))))
     return { table, hand, flat }
   }
   const [s, setS] = useState(calc)
@@ -359,9 +361,18 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
       if (word) setBubble({ seat: a.player, text: word, key: Date.now() })
     }
     if (currentActor(game) === me && currentActor(before) !== me) tap('light')
+    // The same news for screen readers, which can't watch the cards fly.
+    const said: string[] = []
+    if (a && JSON.stringify(a) !== JSON.stringify(before.lastAction)) said.push(describeMove(game, before, a.player, a.action, me))
+    if (before.table.length > 0 && game.table.length === 0 && game.lastRound) said.push(game.lastRound.end === 'beaten' ? 'Бито' : `${game.lastRound.defender === me ? 'Вы забрали' : `${game.players[game.lastRound.defender].name} забрал`} карты`)
+    if (game.over) said.push(game.loser === me ? 'Вы остались дураком' : game.loser === null ? 'Ничья' : `Дурак: ${game.players[game.loser].name}`)
+    else if (currentActor(game) === me && currentActor(before) !== me) said.push('Ваш ход')
+    if (said.length) setAnnounce(said.filter(Boolean).join('. '))
     setSelected(null)
     setPlan([])
   }, [game, me])
+
+  const [announce, setAnnounce] = useState('')
 
   // Emotes from anyone stay on screen for a couple of seconds.
   const [liveEmote, setLiveEmote] = useState<Emote | null>(null)
@@ -524,6 +535,37 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
             ? { label: passLabel, tone: 'primary', onClick: () => play(pass) }
             : { label: myTurn ? 'Ваш ход' : game.over ? 'Конец' : 'Ждём', tone: 'primary' }
 
+  // Keyboard play: 1–9 the playable cards in hand order, Enter or Space the main button, T to take, Esc to undo a choice.
+  const keys = useRef({ hand, playable, onCard, main, take, play })
+  keys.current = { hand, playable, onCard, main, take, play }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.closest('[role="dialog"]'))) return
+      const k = keys.current
+      if (/^Digit[1-9]$/.test(e.code)) {
+        const cards = k.hand.filter((c) => k.playable.has(c.id))
+        const c = cards[Number(e.code.slice(5)) - 1]
+        if (c) {
+          e.preventDefault()
+          k.onCard(c)
+        }
+      } else if ((e.code === 'Enter' || e.code === 'Space') && (!t || t === document.body) && k.main.onClick) {
+        e.preventDefault()
+        k.main.onClick()
+      } else if (e.code === 'KeyT' && k.take) {
+        e.preventDefault()
+        k.play(k.take)
+      } else if (e.code === 'Escape') {
+        setSelected(null)
+        setPlan([])
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const n = game.players.length
   const opponents = Array.from({ length: n - 1 }, (_, k) => game.players[(me + 1 + k) % n])
   // The fan gets the width of its own row (beside the buttons on a phone lying on its side).
@@ -571,6 +613,9 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
               {game.options.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'}
             </m.span>
           </AnimatePresence>
+          <span className={`chip trump-chip ${isRed(game.trump) ? 'red' : ''}`} role="img" aria-label={`Козырь: ${SUIT_NAME[game.trump]}`}>
+            <SuitIcon suit={game.trump} size={14} />
+          </span>
           {game.options.cheat && (
             <m.span className="chip warn" {...fade}>
               Шулер
@@ -594,6 +639,9 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
           </svg>
         </m.button>
       </m.header>
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        {announce}
+      </p>
       {series && !game.over && (
         <m.div className="series-strip" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} aria-label="Счёт турнира">
           <span>
@@ -1190,4 +1238,29 @@ function statusText(g: GameState, actor: number | null, me: number): string {
   if (actor !== null && actor !== me && legalActions(g, me).some((a) => a.type === 'attack')) return 'Можно подкинуть'
   // Whose turn it is already shows on the seats, so only the player's own moves need words.
   return ''
+}
+
+const cardName = (c: Card | undefined) => (c ? `${rankLabel(c.rank)} ${SUIT_NAME[c.suit]}` : '')
+
+/** One move in words, for screen readers. */
+function describeMove(g: GameState, before: GameState, player: number, a: Action, me: number): string {
+  const who = player === me ? 'Вы' : g.players[player].name
+  const find = (id: string) => before.players[player].hand.find((c) => c.id === id)
+  switch (a.type) {
+    case 'attack':
+      return `${who}: ${before.table.length === 0 ? 'ход' : 'подкидывает'} ${cardName(find(a.cardId))}`
+    case 'throw':
+      return `${who}: ${a.cardIds.map((id) => cardName(find(id))).join(', ')}`
+    case 'defend':
+    case 'bluff':
+      return `${who}: кроет ${cardName(before.table[a.pair]?.attack)} картой ${cardName(find(a.cardId))}`
+    case 'transfer':
+      return `${who}: переводит ${cardName(find(a.cardId))}`
+    case 'take':
+      return `${who}: беру`
+    case 'pass':
+      return `${who}: пас`
+    case 'accuse':
+      return `${who}: обвиняет в обмане`
+  }
 }

@@ -420,7 +420,7 @@ export function App() {
         bonus={bonusReady(wallet)}
         broke={isBroke(wallet)}
         onBonus={() => setWallet(takeBonus)}
-        onRefill={() => setWallet(refill)} canContinue={canContinue} onContinue={() => setScreen('game')} onPlay={() => setScreen('play')} onOpen={setPanel} friendCount={friends.list.length} />
+        onRefill={() => setWallet(refill)} canContinue={canContinue} onContinue={() => setScreen('game')} onPlay={() => setScreen('play')} onQuick={() => newRound()} onOpen={setPanel} friendCount={friends.list.length} />
   }
 
   return (

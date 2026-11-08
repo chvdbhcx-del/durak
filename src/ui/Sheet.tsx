@@ -18,15 +18,41 @@ interface Props {
 
 /** Bottom sheet on phones, centred card on wider screens. */
 export function Sheet({ title, onClose, children, footer, wide }: Props) {
+  const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return onClose()
+      // Tab stays inside the sheet while it is open.
+      if (e.key !== 'Tab' || !box.current) return
+      const items = [...box.current.querySelectorAll<HTMLElement>('button:not([disabled]), input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])')]
+      if (items.length === 0) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      if (e.shiftKey && (document.activeElement === first || !box.current.contains(document.activeElement))) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && (document.activeElement === last || !box.current.contains(document.activeElement))) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+  // Focus moves into the sheet when it opens and back to what opened it when it closes.
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null
+    box.current?.focus({ preventScroll: true })
+    return () => {
+      if (opener && document.contains(opener)) opener.focus({ preventScroll: true })
+    }
+  }, [])
 
   return (
     <m.div className="overlay sheet-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
       <m.div
+        ref={box}
+        tabIndex={-1}
         className={`sheet ${wide ? 'wide' : ''}`}
         role="dialog"
         aria-modal="true"

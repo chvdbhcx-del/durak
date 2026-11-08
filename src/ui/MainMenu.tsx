@@ -19,6 +19,8 @@ interface Props {
   canContinue: boolean
   onContinue: () => void
   onPlay: () => void
+  /** starts a bot game right away with the last setup */
+  onQuick: () => void
   onOpen: (panel: 'settings' | 'rules' | 'stats' | 'friends') => void
   friendCount: number
   /** a site on the iPhone home screen, which links never reach: offer to paste the invite instead */
@@ -70,7 +72,7 @@ function useUpdateLog() {
   return log
 }
 
-export function MainMenu({ stats, wallet, bonus, broke, onBonus, onRefill, canContinue, onContinue, onPlay, onOpen, friendCount, onPasteInvite }: Props) {
+export function MainMenu({ stats, wallet, bonus, broke, onBonus, onRefill, canContinue, onContinue, onPlay, onQuick, onOpen, friendCount, onPasteInvite }: Props) {
   const updateLog = useUpdateLog()
   const apkVersion = useApkVersion()
   return (
@@ -105,9 +107,23 @@ export function MainMenu({ stats, wallet, bonus, broke, onBonus, onRefill, canCo
             Продолжить партию
           </m.button>
         )}
-        <m.button type="button" className={canContinue ? 'ghost big' : 'primary big'} {...enter(canContinue ? 0.56 : 0.5)} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={onPlay}>
-          {canContinue ? 'Новая партия' : 'Играть'}
-        </m.button>
+        {canContinue ? (
+          <m.button type="button" className="ghost big" {...enter(0.56)} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={onPlay}>
+            Новая партия
+          </m.button>
+        ) : (
+          // One tap to the table with the last setup; the square next to it opens the setup (and online play).
+          <div className="play-row">
+            <m.button type="button" className="primary big" {...enter(0.5)} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={onQuick}>
+              Играть
+            </m.button>
+            <m.button type="button" className="ghost big square" aria-label="Настроить партию" {...enter(0.54)} whileTap={{ scale: 0.94 }} whileHover={{ y: -2 }} onClick={onPlay}>
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+                <path fill="currentColor" d="M4 6h9.2a2.5 2.5 0 0 1 4.6 0H20a1 1 0 1 1 0 2h-2.2a2.5 2.5 0 0 1-4.6 0H4a1 1 0 0 1 0-2zm0 10h2.2a2.5 2.5 0 0 1 4.6 0H20a1 1 0 1 1 0 2h-9.2a2.5 2.5 0 0 1-4.6 0H4a1 1 0 1 1 0-2z" />
+              </svg>
+            </m.button>
+          </div>
+        )}
         {onPasteInvite && (
           <m.button type="button" className="setup-chip paste-invite" {...enter(0.62)} whileTap={{ scale: 0.97 }} onClick={onPasteInvite}>
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
