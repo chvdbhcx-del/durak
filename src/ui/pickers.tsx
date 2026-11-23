@@ -1,5 +1,5 @@
 import { m } from 'framer-motion'
-import type { ReactNode } from 'react'
+import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
 import { type Card, type DeckSize, isRed, rankLabel, type Suit } from '../engine/cards'
 import type { Mode } from '../engine/game'
 import { ClassicFace } from './CardView'
@@ -246,6 +246,18 @@ export function Switch({ label, note, value, onChange, icon }: { label: string; 
   )
 }
 
+/** A compact on/off button: an icon over a short label, lit when on. */
+export function IconToggle({ label, value, onChange, icon }: { label: string; value: boolean; onChange: (on: boolean) => void; icon: ReactNode }) {
+  return (
+    <m.button type="button" role="switch" aria-checked={value} aria-label={label} className={`icon-toggle ${value ? 'on' : ''}`} whileTap={{ scale: 0.95 }} onClick={() => onChange(!value)}>
+      <span className="icon-toggle-icon" aria-hidden="true">
+        {icon}
+        {!value && <span className="icon-toggle-off" />}
+      </span>
+      <span>{label}</span>
+    </m.button>
+  )
+}
 export const BIG_ICON = (
   <svg viewBox="0 0 24 24" width="22" height="22">
     <path fill="currentColor" d="M9.2 4h2.1l5.4 15h-2.4l-1.4-4H6.6l-1.4 4H2.8L9.2 4zm-1.9 9h5.2l-2.6-7.4L7.3 13zm11.2-9H20v3h3v1.6h-3v3h-1.5v-3h-3V7h3V4z" />
@@ -290,12 +302,12 @@ export function DifficultyPicker({ value, onChange }: { value: Difficulty; onCha
   )
 }
 
-// `a` and `b` are the real back colours; `pa` and `pb` are livelier versions of the same hues so the choices read on a dark panel.
-export const CARD_BACKS: { value: CardBack; title: string; a: string; b: string; pa: string; pb: string }[] = [
-  { value: 'teal', title: 'Изумруд', a: '#173a34', b: '#1f4d45', pa: '#1f6b5c', pb: '#3fb399' },
-  { value: 'ember', title: 'Уголь', a: '#3b1f17', b: '#57301f', pa: '#7a3b22', pb: '#d9854f' },
-  { value: 'ink', title: 'Тушь', a: '#1c2540', b: '#2a3860', pa: '#2a3d7a', pb: '#6d8bea' },
-  { value: 'rose', title: 'Роза', a: '#3d1c2e', b: '#5a2a44', pa: '#7a2c53', pb: '#e06f9f' },
+// The real back colours, as styles.css sets them for each data-back.
+export const CARD_BACKS: { value: CardBack; title: string; a: string; b: string }[] = [
+  { value: 'teal', title: 'Изумруд', a: '#173a34', b: '#1f4d45' },
+  { value: 'ember', title: 'Уголь', a: '#3b1f17', b: '#57301f' },
+  { value: 'ink', title: 'Тушь', a: '#1c2540', b: '#2a3860' },
+  { value: 'rose', title: 'Роза', a: '#3d1c2e', b: '#5a2a44' },
 ]
 
 export const TABLES: { value: TableStyle; title: string; color: string; glow: string }[] = [
@@ -342,8 +354,11 @@ export function LookPicker({ back, table, face, onBack, onTable, onFace }: { bac
         <div className="tiles four">
           {CARD_BACKS.map((b) => (
             <Tile key={b.value} group="back" on={back === b.value} onClick={() => onBack(b.value)} label={b.title}>
-              <span className="swatch back" style={{ background: `linear-gradient(135deg, ${b.pa}, ${b.pb})`, borderColor: b.pb }} aria-hidden="true">
-                <span style={{ borderColor: b.pb, background: `repeating-linear-gradient(45deg, ${b.pa} 0 4px, ${b.pb}55 4px 8px)` }} />
+              {/* the real back, drawn with the same rules as at the table; teal follows the theme like the table does */}
+              <span className="card full sample back-sample" style={b.value === 'teal' ? undefined : ({ '--back-a': b.a, '--back-b': b.b } as CSSProperties)} aria-hidden="true">
+                <span className="side back">
+                  <span className="back-art" />
+                </span>
               </span>
             </Tile>
           ))}
@@ -397,10 +412,20 @@ export function SeriesPicker({ value, onChange }: { value: number; onChange: (n:
 
 /** A compact one-line choice: a pill slides between the options. */
 export function Segmented<T extends string | number>({ group, value, options, onChange, label }: { group: string; value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string }) {
+  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0
+    if (!step) return
+    e.preventDefault()
+    const i = options.findIndex((o) => o.value === value)
+    const next = (i + step + options.length) % options.length
+    onChange(options[next].value)
+    const buttons = e.currentTarget.querySelectorAll<HTMLButtonElement>('button')
+    buttons[next]?.focus()
+  }
   return (
-    <div className="tabs segmented" role="radiogroup" aria-label={label} style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+    <div className="tabs segmented" role="radiogroup" aria-label={label} onKeyDown={onKey} style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
       {options.map((o) => (
-        <button key={String(o.value)} type="button" role="radio" aria-checked={value === o.value} className={`tab ${value === o.value ? 'on' : ''}`} onClick={() => onChange(o.value)}>
+        <button key={String(o.value)} type="button" role="radio" aria-checked={value === o.value} tabIndex={value === o.value ? 0 : -1} className={`tab ${value === o.value ? 'on' : ''}`} onClick={() => onChange(o.value)}>
           {value === o.value && <m.span layoutId={`seg-${group}`} className="tab-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
           <span>{o.label}</span>
         </button>

@@ -58,7 +58,7 @@ const enter = (delay: number) => ({
 export function MainMenu({ settings, wallet, bonus, broke, onBonus, onRefill, canContinue, onContinue, onSetup, onQuick, onFriendsGame, onOpen, friendCount, onPasteInvite }: Props) {
   return (
     <m.main className="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.25 }}>
-      <WalletPill wallet={wallet} bonus={bonus} broke={broke} onBonus={onBonus} onRefill={onRefill} />
+      <WalletPill wallet={wallet} bonus={bonus} broke={broke} onBonus={onBonus} onRefill={onRefill} onOpen={() => onOpen('stats')} />
       <m.button type="button" className="icon menu-rules" aria-label="Правила" {...enter(0.2)} whileTap={{ scale: 0.9 }} onClick={() => onOpen('rules')}>
         ?
       </m.button>

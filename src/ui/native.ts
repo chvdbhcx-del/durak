@@ -4,6 +4,18 @@ import { StatusBar, Style } from '@capacitor/status-bar'
 
 export const isNative = Capacitor.isNativePlatform()
 
+/**
+ * Whether a buzz can be felt here: the apps always, the web only on a touch device whose browser
+ * vibrates (Safari on iPhone never does, a desktop has nothing to buzz).
+ */
+export const hasHaptics =
+  isNative ||
+  (typeof navigator !== 'undefined' &&
+    'vibrate' in navigator &&
+    !/iPad|iPhone|iPod/.test(navigator.userAgent) &&
+    typeof matchMedia === 'function' &&
+    matchMedia('(pointer: coarse)').matches)
+
 let hapticsOn = true
 export function setHaptics(on: boolean) {
   hapticsOn = on

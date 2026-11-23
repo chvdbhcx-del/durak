@@ -4,11 +4,11 @@ import { type Difficulty, sanitize } from './settings'
 export const START_BALANCE = 1000
 /** Free coins once a day. */
 export const DAILY_BONUS = 200
-/** When the player is broke, they can take this much to keep playing. */
+/** When the player is broke, they can take this much to keep playing, once a day. */
 export const REFILL = 500
 
-/** Stakes for bot games; 0 plays just for fun. */
-export const STAKES = [0, 100, 500, 2500] as const
+/** Stakes; 0 plays just for fun. The top one fits the starting balance against one bot. */
+export const STAKES = [0, 100, 250, 1000] as const
 
 /** Stronger bots pay more for a win. */
 export const LEVEL_BONUS: Record<Difficulty, number> = { easy: 1, normal: 1.5, hard: 2 }
@@ -33,6 +33,8 @@ export interface Wallet {
   lost: number
   /** local date (YYYY-MM-DD) the daily bonus was last taken */
   bonusDay: string
+  /** local date the last refill was taken */
+  refillDay?: string
   /** the bot game on this device */
   wager: Wager | null
   /** the online room game; kept apart so a paused bot game is not lost by playing online */
@@ -109,23 +111,44 @@ export function takeBonus(w: Wallet, day = today()): Wallet {
   return { ...w, balance, best: Math.max(w.best, balance), bonusDay: day }
 }
 
-/** Broke: not even the smallest stake fits and nothing is riding on a game. */
-export const isBroke = (w: Wallet) => !w.wager && !w.roomWager && w.balance < STAKES[1]
+/**
+ * Broke: not even the smallest stake fits and no paused bot game holds coins that could come back.
+ * A room stake doesn't count: it is gone the moment the player leaves that room.
+ */
+export const isBroke = (w: Wallet) => !w.wager && w.balance < STAKES[1]
 
-export function refill(w: Wallet): Wallet {
-  return isBroke(w) ? { ...w, balance: Math.max(w.balance, REFILL) } : w
+/** A refill is there when broke, once a day. */
+export const canRefill = (w: Wallet, day = today()) => isBroke(w) && w.refillDay !== day
+
+export function refill(w: Wallet, day = today()): Wallet {
+  return canRefill(w, day) ? { ...w, balance: Math.max(w.balance, REFILL), refillDay: day } : w
 }
 
-export function loadWallet(): Wallet {
+/** Closes a room stake as lost: the room it belonged to is gone. */
+export function dropRoomWager(w: Wallet): Wallet {
+  return w.roomWager ? { ...w, lost: w.lost + w.roomWager.held, roomWager: null } : w
+}
+
+/**
+ * The saved wallet. `roomAlive` says whether a room this device can return to is still saved:
+ * without one, a room stake left behind by an older version is closed as lost instead of hanging forever.
+ * A brand-new wallet gets its first daily bonus tomorrow, so the starting coins come on their own.
+ */
+export function loadWallet(roomAlive = true, day = today()): Wallet {
   try {
     const raw = localStorage.getItem('durak.wallet')
-    const w = raw ? sanitize(NEW_WALLET, JSON.parse(raw)) : NEW_WALLET
+    if (!raw) return { ...NEW_WALLET, bonusDay: day }
+    const w = sanitize(NEW_WALLET, JSON.parse(raw))
     const wager = (g: unknown): Wager | null => (g && typeof g === 'object' && [(g as Wager).seed, (g as Wager).held, (g as Wager).prize, (g as Wager).stake].every((n) => Number.isFinite(n)) ? (g as Wager) : null)
-    return { ...w, balance: Math.max(0, w.balance), wager: wager(w.wager), roomWager: wager(w.roomWager) }
+    const out: Wallet = { ...w, balance: Math.max(0, w.balance), wager: wager(w.wager), roomWager: wager(w.roomWager), refillDay: typeof w.refillDay === 'string' ? w.refillDay : '' }
+    return roomAlive ? out : dropRoomWager(out)
   } catch {
-    return NEW_WALLET
+    return { ...NEW_WALLET, bonusDay: day }
   }
 }
+
+/** Nothing was ever staked: the won/lost lines of the profile would only show zeros. */
+export const neverStaked = (w: Wallet) => w.won === 0 && w.lost === 0
 
 export function saveWallet(w: Wallet) {
   try {

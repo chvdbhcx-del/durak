@@ -44,13 +44,15 @@ interface Props {
   wallet: Wallet
   /** coins riding on an unfinished bot game, lost if a new one starts */
   pendingStake: number
+  /** shown in the stake block when the balance can be topped up */
+  onRefill?: () => void
   onChange: (s: Settings) => void
   onStart: () => void
   onClose: () => void
 }
 
 /** The bot game setup, opened from the chip under "Играть". */
-export function BotSetupSheet({ settings, wallet, pendingStake, onChange, onStart, onClose }: Props) {
+export function BotSetupSheet({ settings, wallet, pendingStake, onRefill, onChange, onStart, onClose }: Props) {
   const set = (patch: Partial<Settings>) => onChange(withValidOpponents({ ...settings, ...patch }))
   const players = playersOf(settings)
   // a stake the balance can't cover drops to one it can, as more opponents raise what the fool pays
@@ -83,7 +85,7 @@ export function BotSetupSheet({ settings, wallet, pendingStake, onChange, onStar
         <SeriesPicker value={settings.series} onChange={(series) => set({ series })} />
       </Section>
       <Section title="Ставка">
-        <StakePicker title="Монеты" value={stake} onChange={(s) => set({ stake: s })} wallet={wallet} players={players} mult={LEVEL_BONUS[settings.difficulty]} />
+        <StakePicker title="Монеты" value={stake} onChange={(s) => set({ stake: s })} wallet={wallet} players={players} mult={LEVEL_BONUS[settings.difficulty]} wanted={settings.stake} onRefill={onRefill} />
       </Section>
     </Sheet>
   )

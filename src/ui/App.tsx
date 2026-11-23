@@ -25,7 +25,7 @@ import { addResult, applyLook, applyTheme, BOT_DELAY, deviceToken, EMPTY_STATS, 
 import { setSoundEnabled, unlockSound } from './sfx'
 import { UpdateToast } from './UpdateToast'
 import { applyTextScale } from './textScale'
-import { affordableStake, bonusReady, cancelWager, forfeitRoom, isBroke, LEVEL_BONUS, loadWallet, placeWager, PayoutInfo, refill, refundRoom, saveWallet, settle, takeBonus, Wallet } from './wallet'
+import { affordableStake, bonusReady, cancelWager, canRefill, DAILY_BONUS, forfeitRoom, formatCoins, LEVEL_BONUS, loadWallet, NEW_WALLET, placeWager, PayoutInfo, REFILL, refill, refundRoom, saveWallet, settle, takeBonus, today, Wallet } from './wallet'
 import { applyIfIdle, startUpdates, UpdateState } from './updates'
 
 const ME = 0
@@ -72,7 +72,8 @@ export function App() {
   const roomServer = joinServer || settings.server
   setRoomServer(roomServer)
   const [stats, setStats] = useState<Stats>(loadStats)
-  const [wallet, setWallet] = useState<Wallet>(loadWallet)
+  // A room stake whose room is no longer saved is closed as lost, so it can't hang in the wallet for good.
+  const [wallet, setWallet] = useState<Wallet>(() => loadWallet(hasSavedRoom()))
   const [payout, setPayout] = useState<PayoutInfo | null>(null)
   useEffect(() => saveWallet(wallet), [wallet])
   const [game, setGame] = useState<GameState | null>(loadGame)
@@ -352,6 +353,26 @@ export function App() {
     setScreen('game')
   }
 
+  const takeDailyBonus = () => {
+    setWallet(takeBonus)
+    friends.say(`+${formatCoins(DAILY_BONUS)} монет. Следующий бонус завтра`)
+  }
+  const takeRefill = () => {
+    setWallet(refill)
+    friends.say(`Баланс пополнен до ${formatCoins(REFILL)}. Следующее пополнение завтра`)
+  }
+  // "Начать заново" in the settings: statistics and coins as on the first launch.
+  const startOver = () => {
+    saveStats(EMPTY_STATS)
+    setStats(EMPTY_STATS)
+    setWallet({ ...NEW_WALLET, bonusDay: today() })
+    setGame(null)
+    setSeries(null)
+    setPayout(null)
+    setPanel(null)
+  }
+  const refillOffer = canRefill(wallet) ? takeRefill : undefined
+
   // Any unfinished game can be gone back to, even one only just dealt.
   const canContinue = !!game && !game.over
   const started = !!game && !game.over && (game.discard.length > 0 || game.table.length > 0 || game.lastAction !== null)
@@ -360,7 +381,7 @@ export function App() {
 
   const panels = (
     <AnimatePresence>
-      {panel === 'settings' && <SettingsPanel key="settings" settings={settings} onClose={() => setPanel(null)} onChange={setSettings} />}
+      {panel === 'settings' && <SettingsPanel key="settings" settings={settings} onClose={() => setPanel(null)} onChange={setSettings} onStartOver={startOver} />}
       {panel === 'game' && (onlineGame || screen === 'game') && (
         <GameMenu
           key="game-menu"
@@ -374,6 +395,7 @@ export function App() {
           onExit={() => (onlineGame ? online.leave() : setScreen('menu'))}
           online={!!onlineGame}
           botSpeed={onlineGame ? online.role === 'host' && onlineGame.players.some((p) => !p.human) : true}
+          roomStake={onlineGame && wallet.roomWager?.seed === gameIdOf(onlineGame) ? wallet.roomWager.held : 0}
         />
       )}
       {panel === 'friends' && <FriendsPanel
@@ -395,7 +417,7 @@ export function App() {
           }}
         />
       )}
-      {panel === 'setup' && <BotSetupSheet key="setup" settings={settings} wallet={wallet} pendingStake={pendingStake} onChange={setSettings} onStart={() => newRound()} onClose={() => setPanel(null)} />}
+      {panel === 'setup' && <BotSetupSheet key="setup" settings={settings} wallet={wallet} pendingStake={pendingStake} onRefill={refillOffer} onChange={setSettings} onStart={() => newRound()} onClose={() => setPanel(null)} />}
       {ask && <ConfirmSheet key="confirm" ask={ask} onClose={() => setAsk(null)} />}
       {panel === 'stats' && (
         <StatsPanel
@@ -405,6 +427,9 @@ export function App() {
           settings={settings}
           onSettings={setSettings}
           onClose={() => setPanel(null)}
+          onPlay={() => {
+            setPanel('setup')
+          }}
           onReset={() => {
             saveStats(EMPTY_STATS)
             setStats(EMPTY_STATS)
@@ -441,6 +466,7 @@ export function App() {
         onFinished={recordResult}
         wager={wallet.roomWager?.seed === gameIdOf(onlineGame) ? wallet.roomWager : null}
         payout={payout?.seed === gameIdOf(onlineGame) ? payout : null}
+        onRefill={refillOffer}
         onExit={() => confirmClose(() => online.leave())}
         onOpenSettings={() => setPanel('game')}
         onPlayAgain={host ? () => online.start(settings.difficulty) : undefined}
@@ -469,6 +495,7 @@ export function App() {
         onFinished={recordResult}
         wager={wallet.wager?.seed === gameIdOf(game) ? wallet.wager : null}
         payout={payout?.seed === gameIdOf(game) ? payout : null}
+        onRefill={refillOffer}
         onExit={() => setScreen('menu')}
         onOpenSettings={() => setPanel('game')}
         series={series}
@@ -508,9 +535,9 @@ export function App() {
         settings={settings}
         wallet={wallet}
         bonus={bonusReady(wallet)}
-        broke={isBroke(wallet)}
-        onBonus={() => setWallet(takeBonus)}
-        onRefill={() => setWallet(refill)}
+        broke={canRefill(wallet)}
+        onBonus={takeDailyBonus}
+        onRefill={takeRefill}
         canContinue={canContinue}
         onContinue={() => setScreen('game')}
         onSetup={() => setPanel('setup')}

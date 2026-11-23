@@ -10,7 +10,7 @@ import type { Online } from '../net/useOnline'
 import { BackButton } from './PlayScreen'
 import { BOT_NAMES, CheatPicker, DeckPicker, DifficultyPicker, Group, ModePicker, plural } from './pickers'
 import { RoomLink } from './RoomStatus'
-import type { Settings } from './settings'
+import { cleanName, type Settings } from './settings'
 import { Sheet, sheetItem, sheetList } from './Sheet'
 import { useBack } from './back'
 import { isNative } from './native'
@@ -182,7 +182,7 @@ function markNameAsked() {
 
 function NameSheet({ name, onDone, onClose }: { name: string; onDone: (n: string) => void; onClose: () => void }) {
   const [value, setValue] = useState(isDefaultName(name) ? '' : name)
-  const done = () => onDone(value.trim().slice(0, 16) || name)
+  const done = () => onDone(cleanName(value, name))
   return (
     <Sheet
       title="Как вас зовут?"
