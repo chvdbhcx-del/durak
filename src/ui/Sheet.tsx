@@ -72,7 +72,8 @@ export function Sheet({ title, onClose, children, footer, wide }: Props) {
             </svg>
           </m.button>
         </div>
-        <m.div className="sheet-body" variants={sheetList} initial="hidden" animate="shown">
+        {/* focusable, so a keyboard can scroll a long sheet such as the rules */}
+        <m.div className="sheet-body" variants={sheetList} initial="hidden" animate="shown" tabIndex={0} role="region" aria-label={title}>
           {children}
         </m.div>
         {footer && (

@@ -21,6 +21,7 @@ import { GameMenu, SettingsPanel } from './SettingsPanel'
 import { addResult, applyLook, applyTheme, BOT_DELAY, deviceToken, EMPTY_STATS, loadSettings, loadStats, saveSettings, saveStats, Settings, Stats } from './settings'
 import { setSoundEnabled, unlockSound } from './sfx'
 import { UpdateToast } from './UpdateToast'
+import { applyTextScale } from './textScale'
 import { affordableStake, bonusReady, cancelWager, isBroke, LEVEL_BONUS, loadWallet, placeWager, PayoutInfo, refill, saveWallet, settle, takeBonus, Wallet } from './wallet'
 import { applyIfIdle, startUpdates, UpdateState } from './updates'
 
@@ -90,6 +91,13 @@ export function App() {
   useEffect(() => saveSettings(settings), [settings])
   useEffect(() => applyLook(settings.cardBack, settings.tableStyle, settings.cardFace), [settings.cardBack, settings.tableStyle, settings.cardFace])
   useEffect(() => setHaptics(settings.haptics), [settings.haptics])
+  useEffect(() => {
+    applyTextScale(settings.big)
+    // the phone's text size can change while the app sits in the background
+    const again = () => document.visibilityState === 'visible' && applyTextScale(settings.big)
+    document.addEventListener('visibilitychange', again)
+    return () => document.removeEventListener('visibilitychange', again)
+  }, [settings.big])
   useEffect(() => setSoundEnabled(settings.sound), [settings.sound])
   useEffect(() => unlockSound(), [])
   // A downloaded update switches in only while nobody is mid-game (and right away if the player taps it).
@@ -383,6 +391,7 @@ export function App() {
         onExit={() => setScreen('menu')}
         onOpenSettings={() => setPanel('game')}
         series={series}
+        coach={stats.wins + stats.losses + stats.draws < 3}
         emote={shownEmote}
         onEmote={sendMyEmote}
         onPlayAgain={() => newRound(settings, false)}
