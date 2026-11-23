@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseServer, parseToHost, publicLobby } from './room'
+import { describe as describeError, parseServer, parseToHost, publicLobby } from './room'
 
 describe('parseServer', () => {
   it('reads an https address', () => {
@@ -42,5 +42,20 @@ describe('parseToHost', () => {
     expect(parseToHost({ t: 'act', action: { type: 'defend', cardId: 'x', pair: -1 } })).toBeNull()
     expect(parseToHost({ t: 'act', action: { type: 'throw', cardIds: Array(20).fill('a') } })).toBeNull()
     expect(parseToHost({ t: 'emote', emoji: 'x'.repeat(100) })).toBeNull()
+  })
+})
+
+describe('heartbeat and room messages', () => {
+  it('accepts pong, peek and away', () => {
+    expect(parseToHost({ t: 'pong' })).toEqual({ t: 'pong' })
+    expect(parseToHost({ t: 'peek', extra: 'x' })).toEqual({ t: 'peek' })
+    expect(parseToHost({ t: 'away', on: true })).toEqual({ t: 'away', on: true })
+    expect(parseToHost({ t: 'away', on: 'yes' })).toBeNull()
+  })
+  it('names each kind of failure so the error screen can offer the right next step', () => {
+    expect(describeError({ type: 'peer-unavailable' }).kind).toBe('not-found')
+    expect(describeError({ type: 'network' }).kind).toBe('network')
+    expect(describeError({ type: 'server-error' }).kind).toBe('server')
+    expect(describeError({ type: 'whatever' }).kind).toBe('other')
   })
 })

@@ -5,14 +5,29 @@ import { think } from '../engine/think'
 import { EMOTES, type Emote } from '../engine/emotes'
 import { Action, applyAction, currentActor, GameState, isValidGame, maxPlayers, Mode, newGame, timeoutAction, viewFor } from '../engine/game'
 import { BOT_NAMES } from '../ui/pickers'
-import { GuestRoom, HostRoom, LobbyInfo, Member, memberId, publicLobby, ToGuest } from './room'
+import { type ErrorKind, GuestRoom, HostRoom, type JoinStage, LobbyInfo, Member, memberId, publicLobby, type RoomError, type RoomPreview, ToGuest } from './room'
 
 export type OnlinePhase = 'idle' | 'connecting' | 'lobby' | 'playing' | 'error'
+
+/** How a room game in progress ended for this device: left on purpose, or cut off through no fault of its own. */
+export type RoomEnd = 'left' | 'interrupted'
 
 export interface Online {
   phase: OnlinePhase
   role: 'host' | 'guest' | null
-  error: string | null
+  error: RoomError | null
+  /** the room code being joined or hosted, kept for the error screen and «Повторить» */
+  code: string
+  /** guest: the step of getting in, while connecting */
+  stage: JoinStage | null
+  /** guest: getting in is taking longer than usual */
+  slow: boolean
+  /** guest: when the line to the host dropped (0 while it is up), for a countdown */
+  lostAt: number
+  /** guest: the host put the app in the background */
+  hostAway: boolean
+  /** other people in the room (not bots, not this device), online or not */
+  others: number
   lobby: LobbyInfo | null
   game: GameState | null
   seat: number
@@ -22,8 +37,13 @@ export interface Online {
   create: (opts: { name: string; mode: Mode; deckSize: DeckSize; cheat?: boolean }) => void
   join: (code: string, name: string) => void
   leave: () => void
+  /** tries the same room again after an error */
+  retry: () => void
   start: (level?: Level) => void
-  act: (action: Action) => void
+  /** host only: back from a finished game to the room, to change the setup */
+  toLobby: () => void
+  /** false when the move could not go out (the line is down) */
+  act: (action: Action) => boolean
   setLobby: (patch: Partial<Pick<LobbyInfo, 'bots' | 'mode' | 'deckSize' | 'cheat' | 'stake'>>) => void
   /** host only: removes the member with this lobby id */
   kick: (id: string) => void
@@ -92,10 +112,34 @@ function fitBots(lobby: LobbyInfo): LobbyInfo {
   return { ...lobby, bots: Math.max(0, Math.min(lobby.bots, room)) }
 }
 
-export function useOnline(token: string, fid: string): Online {
+/** A guest's error from the host's own words, for hosts that do not say which kind it is. */
+function kindOf(reason: string): ErrorKind {
+  if (/закрыл/i.test(reason)) return 'closed'
+  if (/убрал/i.test(reason)) return 'kicked'
+  if (/заполнена/i.test(reason)) return 'full'
+  if (/этом же устройстве|ваша же/i.test(reason)) return 'same-device'
+  return 'other'
+}
+
+export function useOnline(token: string, fid: string, onEnd?: (why: RoomEnd) => void): Online {
   const [phase, setPhase] = useState<OnlinePhase>('idle')
   const [role, setRole] = useState<'host' | 'guest' | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<RoomError | null>(null)
+  const [code, setCode] = useState('')
+  const [stage, setStage] = useState<JoinStage | null>(null)
+  const [slow, setSlow] = useState(false)
+  const [lostAt, setLostAt] = useState(0)
+  const [hostAway, setHostAway] = useState(false)
+  const endRef = useRef(onEnd)
+  endRef.current = onEnd
+  /** a game is on for this device: leaving or losing the room now decides the stake */
+  const midGame = () => {
+    const g = gameRef.current
+    return !!g && !g.over && phaseRef.current === 'playing'
+  }
+  const phaseRef = useRef<OnlinePhase>('idle')
+  phaseRef.current = phase
+  const lastCreate = useRef<{ name: string; mode: Mode; deckSize: DeckSize; cheat?: boolean } | null>(null)
   const [lobby, setLobbyState] = useState<LobbyInfo | null>(null)
   const [game, setGame] = useState<GameState | null>(null)
   const [seat, setSeat] = useState(0)
@@ -119,8 +163,16 @@ export function useOnline(token: string, fid: string): Online {
   const updateLobby = useCallback((fn: (l: LobbyInfo) => LobbyInfo) => {
     setLobbyState((prev) => {
       if (!prev) return prev
-      const base = fitBots(fn(prev))
-      const roster = base.members.filter((m) => m.token && seats.current.has(m.token)).map((m) => ({ seat: seats.current.get(m.token!)!, name: m.name, fid: m.fid }))
+      const raw = fn(prev)
+      const base = fitBots(raw)
+      // A bot that has to make room for a person says so, instead of vanishing.
+      const newcomer = raw.members.length > prev.members.length ? raw.members[raw.members.length - 1] : null
+      if (newcomer && base.bots < raw.bots && BOT_NAMES[base.bots]) base.note = { key: Date.now(), text: `${BOT_NAMES[base.bots]} уступил место: ${newcomer.name}` }
+      const g = gameRef.current
+      base.playing = !!g && !g.over
+      const roster = base.members
+        .filter((m) => m.token && seats.current.has(m.token))
+        .map((m) => ({ seat: seats.current.get(m.token!)!, name: m.name, fid: m.fid, ...(m.online ? {} : { off: true }), ...(m.away && m.online ? { away: true } : {}) }))
       const next = roster.length ? { ...base, roster } : { ...base, roster: undefined }
       lobbyRef.current = next
       host.current?.broadcast({ t: 'lobby', lobby: publicLobby(next) })
@@ -133,6 +185,12 @@ export function useOnline(token: string, fid: string): Online {
     if (role !== 'host' || !game || !host.current) return
     for (const [t, s] of seats.current) if (t !== token) host.current.send(t, { t: 'state', view: viewFor(game, s), seat: s })
   }, [game, role, token])
+
+  // Late joiners waiting in the room see when the game they wait for is over.
+  const over = role === 'host' && !!game?.over
+  useEffect(() => {
+    if (over) updateLobby((cur) => cur)
+  }, [over, updateLobby])
 
   // Nobody holds the table up: a person who lets the clock run out gets the safe move played for them,
   // and after a couple of those a bot keeps the seat warm until they come back.
@@ -189,7 +247,11 @@ export function useOnline(token: string, fid: string): Online {
   // Coming back from another app: check the line and restore it if it dropped.
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState !== 'visible') return
+      // The others hear at once that this player put the app away, before the line itself goes quiet.
+      const hidden = document.visibilityState === 'hidden'
+      host.current?.away(hidden)
+      guest.current?.away(hidden)
+      if (hidden) return
       host.current?.resume()
       guest.current?.resume()
     }
@@ -208,6 +270,7 @@ export function useOnline(token: string, fid: string): Online {
     setRole('host')
     setPhase('connecting')
     setError(null)
+    setCode(restore?.code ?? '')
     seats.current = new Map(restore?.seats ?? [])
     if (restore?.game) {
       // Friends count as away until they reconnect; bots keep their seats warm meanwhile.
@@ -217,6 +280,7 @@ export function useOnline(token: string, fid: string): Online {
     }
     host.current = new HostRoom({
       onReady: (code) => {
+        setCode(code)
         const l: LobbyInfo = restore?.lobby
           ? { ...restore.lobby, members: restore.lobby.members.map((m) => ({ ...m, id: m.id ?? memberId(), online: m.token === token, fid: m.token === token ? fid : m.fid })) }
           : { code, members: [{ id: memberId(), token, name, host: true, online: true, fid }], bots: 0, mode: fresh!.mode, deckSize: fresh!.deckSize, cheat: fresh!.cheat }
@@ -230,9 +294,10 @@ export function useOnline(token: string, fid: string): Online {
         const g = gameRef.current
         if (g && !g.over) {
           if (seatTaken === undefined) {
-            host.current?.send(t, { t: 'closed', reason: 'Партия уже идёт. Дождитесь следующей.' })
-            return
-          }
+            // Someone new while a game is on waits in the room and sits down at the next game.
+            const l = lobbyRef.current
+            if (l && !l.members.some((m) => m.token === t) && l.members.length < maxPlayers(l.deckSize)) say(`${guestName} ждёт следующую партию`)
+          } else {
           // A returning player gets the table as it is now, and their seat back from the bot.
           host.current?.send(t, { t: 'state', view: viewFor(g, seatTaken), seat: seatTaken })
           if (!g.players[seatTaken].human) {
@@ -244,16 +309,32 @@ export function useOnline(token: string, fid: string): Online {
             })
             say(`${guestName} вернулся`)
           }
+          }
         }
         updateLobby((l) => {
           const known = l.members.find((m) => m.token === t)
           if (known) return { ...l, members: l.members.map((m) => (m.token === t ? { ...m, name: guestName, online: true, fid: guestFid ?? m.fid } : m)) }
           if (l.members.length >= maxPlayers(l.deckSize)) {
-            host.current?.send(t, { t: 'closed', reason: 'Комната заполнена.' })
+            host.current?.dismiss(t, 'Комната заполнена: за столом нет свободных мест.', 'full')
             return l
           }
           return { ...l, members: [...l.members, { id: memberId(), token: t, name: guestName, host: false, online: true, fid: guestFid }] }
         })
+      },
+      onAway: (t, on) => updateLobby((l) => ({ ...l, members: l.members.map((m) => (m.token === t ? { ...m, away: on } : m)) })),
+      onPeek: () => {
+        const l = lobbyRef.current
+        if (!l) return null
+        const g = gameRef.current
+        return {
+          host: l.members.find((m) => m.host)?.name ?? 'Хост',
+          mode: l.mode,
+          deckSize: l.deckSize,
+          stake: l.stake ?? 0,
+          players: l.members.filter((m) => m.online).length + l.bots,
+          max: maxPlayers(l.deckSize),
+          playing: !!g && !g.over,
+        } satisfies RoomPreview
       },
       onLeave: (t) => {
         const s = seats.current.get(t)
@@ -261,10 +342,10 @@ export function useOnline(token: string, fid: string): Online {
           if (!g || g.over || s === undefined) return g
           const next = structuredClone(g)
           next.players[s].human = false
-          say(`${next.players[s].name} отключился, за него играет бот`)
+          say(`${next.players[s].name} без связи, за него играет бот`)
           return next
         })
-        updateLobby((l) => (s === undefined ? { ...l, members: l.members.filter((m) => m.token !== t) } : { ...l, members: l.members.map((m) => (m.token === t ? { ...m, online: false } : m)) }))
+        updateLobby((l) => (s === undefined ? { ...l, members: l.members.filter((m) => m.token !== t) } : { ...l, members: l.members.map((m) => (m.token === t ? { ...m, online: false, away: false } : m)) }))
       },
       onAction: (t, action) => {
         const s = seats.current.get(t)
@@ -287,28 +368,53 @@ export function useOnline(token: string, fid: string): Online {
         const s = seats.current.get(t)
         if (s !== undefined && EMOTES.includes(emoji)) emitEmote(s, emoji)
       },
-      onError: (message) => {
-        setError(message)
+      onError: (err) => {
+        if (midGame()) endRef.current?.('interrupted')
+        setError(err)
         setPhase('error')
+        setReconnecting(false)
         writeSaved(null)
       },
     }, restore?.code, token)
   }
 
-  const create: Online['create'] = ({ name, mode, deckSize, cheat }) => openHost(name, null, { mode, deckSize, cheat })
+  const create: Online['create'] = ({ name, mode, deckSize, cheat }) => {
+    lastCreate.current = { name, mode, deckSize, cheat }
+    openHost(name, null, { mode, deckSize, cheat })
+  }
 
-  const join: Online['join'] = (code, name) => {
+  const join: Online['join'] = (roomCode, name) => {
     nameRef.current = name
+    lastCreate.current = null
     setRole('guest')
     setPhase('connecting')
     setError(null)
-    guest.current = new GuestRoom(code, name, token, fid, {
-      onConnected: () => {},
-      onReconnecting: setReconnecting,
+    setCode(roomCode)
+    setStage(null)
+    setSlow(false)
+    setHostAway(false)
+    setLostAt(0)
+    guest.current?.close()
+    guest.current = new GuestRoom(roomCode, name, token, fid, {
+      onStage: setStage,
+      onSlow: () => setSlow(true),
+      onConnected: () => {
+        setSlow(false)
+        setHostAway(false)
+      },
+      onReconnecting: (on) => {
+        setReconnecting(on)
+        setLostAt((at) => (on ? at || Date.now() : 0))
+      },
       onMessage: (msg: ToGuest) => {
         if (msg.t === 'lobby') {
           setLobbyState(msg.lobby)
           setPhase((p) => (p === 'playing' ? p : 'lobby'))
+        } else if (msg.t === 'tolobby') {
+          setGame(null)
+          setPhase('lobby')
+        } else if (msg.t === 'away') {
+          setHostAway(msg.on)
         } else if (msg.t === 'state') {
           setSeat(msg.seat)
           setGame(msg.view)
@@ -318,13 +424,16 @@ export function useOnline(token: string, fid: string): Online {
         } else if (msg.t === 'reject') {
           say(msg.reason)
         } else if (msg.t === 'closed') {
-          setError(msg.reason)
+          if (midGame()) endRef.current?.('interrupted')
+          setError({ message: msg.reason, kind: msg.kind ?? kindOf(msg.reason) })
           setPhase('error')
+          setReconnecting(false)
           writeSaved(null)
         }
       },
-      onLost: (message) => {
-        setError(message)
+      onLost: (err) => {
+        if (midGame()) endRef.current?.('interrupted')
+        setError(err)
         setPhase('error')
         setReconnecting(false)
         writeSaved(null)
@@ -333,6 +442,7 @@ export function useOnline(token: string, fid: string): Online {
   }
 
   const leave = () => {
+    if (midGame()) endRef.current?.('left')
     host.current?.close()
     guest.current?.close()
     host.current = null
@@ -344,8 +454,31 @@ export function useOnline(token: string, fid: string): Online {
     setRole(null)
     setError(null)
     setReconnecting(false)
+    setStage(null)
+    setSlow(false)
+    setLostAt(0)
+    setHostAway(false)
     setPhase('idle')
     writeSaved(null)
+  }
+
+  const retry = () => {
+    const again = role === 'guest' ? code : null
+    const opts = lastCreate.current
+    leave()
+    if (again) join(again, nameRef.current || 'Игрок')
+    else if (opts) create(opts)
+  }
+
+  /** Host: from a finished game back to the room; everyone goes along. */
+  const toLobby = () => {
+    if (role !== 'host' || (gameRef.current && !gameRef.current.over)) return
+    gameRef.current = null
+    seats.current = new Map()
+    setGame(null)
+    setPhase('lobby')
+    host.current?.broadcast({ t: 'tolobby' })
+    updateLobby((cur) => cur)
   }
 
   /** Picks up the room this device was in before the app was reloaded. */
@@ -377,16 +510,16 @@ export function useOnline(token: string, fid: string): Online {
       humans: online.map((_, i) => i),
     })
     strikes.current = new Map()
+    gameRef.current = g
     setSeat(0)
     setGame(g)
     setPhase('playing')
     updateLobby((cur) => cur)
   }
 
-  const act = (action: Action) => {
-    if (role === 'guest') guest.current?.act(action)
-    else
-      setGame((g) => {
+  const act = (action: Action): boolean => {
+    if (role === 'guest') return guest.current?.act(action) ?? false
+    setGame((g) => {
         if (!g) return g
         try {
           return applyAction(role === 'host' ? own(g, 0) : g, 0, action)
@@ -394,6 +527,7 @@ export function useOnline(token: string, fid: string): Online {
           return g
         }
       })
+    return true
   }
 
   /** Host: show an emote here and send it to every guest. */
@@ -441,6 +575,8 @@ export function useOnline(token: string, fid: string): Online {
     guest.current?.close()
   }, [])
 
-  return { phase, role, error, lobby, game, seat, notice, reconnecting, create, join, leave, start, act, setLobby, kick, stepBot, restore, emote, sendEmote, emitEmote, botThrow }
+  const others = lobby ? Math.max(0, lobby.members.filter((m) => m.online).length - 1) : 0
+
+  return { phase, role, error, code, stage, slow, lostAt, hostAway, others, lobby, game, seat, notice, reconnecting, create, join, leave, retry, start, toLobby, act, setLobby, kick, stepBot, restore, emote, sendEmote, emitEmote, botThrow }
 }
 

@@ -7,7 +7,8 @@ import { Action, applyAction, currentActor, gameIdOf, GameState, isValidGame, ma
 import { setRoomServer } from '../net/room'
 import { inBrowserTab, inviteFromText, type Invite, iosHomeScreen, parseInvite, watchInvites } from './deeplink'
 import { useFriends } from '../net/useFriends'
-import { hasSavedRoom, TURN_MS, useOnline } from '../net/useOnline'
+import { hasSavedRoom, type RoomEnd, TURN_MS, useOnline } from '../net/useOnline'
+import { type ConfirmAsk, ConfirmSheet } from './Confirm'
 import { GameScreen, Result, Series } from './GameScreen'
 import { FriendToast } from './FriendToast'
 import { FriendsPanel } from './FriendsPanel'
@@ -15,14 +16,14 @@ import { RulesPanel, StatsPanel } from './InfoPanels'
 import { MainMenu } from './MainMenu'
 import { setHaptics, syncStatusBar, tap } from './native'
 import { OnlineScreen } from './OnlineScreen'
-import { BOT_NAMES } from './pickers'
+import { BOT_NAMES, plural } from './pickers'
 import { PlayScreen } from './PlayScreen'
 import { GameMenu, SettingsPanel } from './SettingsPanel'
 import { addResult, applyLook, applyTheme, BOT_DELAY, deviceToken, EMPTY_STATS, loadSettings, loadStats, saveSettings, saveStats, Settings, Stats } from './settings'
 import { setSoundEnabled, unlockSound } from './sfx'
 import { UpdateToast } from './UpdateToast'
 import { applyTextScale } from './textScale'
-import { affordableStake, bonusReady, cancelWager, isBroke, LEVEL_BONUS, loadWallet, placeWager, PayoutInfo, refill, saveWallet, settle, takeBonus, Wallet } from './wallet'
+import { affordableStake, bonusReady, cancelWager, forfeitRoom, isBroke, LEVEL_BONUS, loadWallet, placeWager, PayoutInfo, refill, refundRoom, saveWallet, settle, takeBonus, Wallet } from './wallet'
 import { applyIfIdle, startUpdates, UpdateState } from './updates'
 
 const ME = 0
@@ -82,7 +83,32 @@ export function App() {
   const [update, setUpdate] = useState<UpdateState>({ kind: 'idle' })
   const [token] = useState(deviceToken)
   const friends = useFriends(settings.name, settings.server)
-  const online = useOnline(token, friends.fid)
+  // A room game that ends before its last card settles the stake right away: leaving on purpose loses it,
+  // being cut off (the host closed the room, the line was lost) gives it back.
+  const [refund, setRefund] = useState<number | null>(null)
+  const roomGame = useRef<GameState | null>(null)
+  const onRoomEnd = useCallback((why: RoomEnd) => {
+    const g = roomGame.current
+    if (!g) return
+    const seed = gameIdOf(g)
+    setWallet((w) => {
+      if (why === 'left') return forfeitRoom(w, seed)
+      const r = refundRoom(w, seed)
+      if (r.back) setRefund(r.back)
+      return r.wallet
+    })
+  }, [])
+  const online = useOnline(token, friends.fid, onRoomEnd)
+  roomGame.current = online.game
+  useEffect(() => {
+    if (online.phase !== 'error') setRefund(null)
+  }, [online.phase])
+  const [ask, setAsk] = useState<ConfirmAsk | null>(null)
+  /** The host leaving a room with friends in it closes it for them too: asked once, first. */
+  const confirmClose = (run: () => void, what = 'Закрыть комнату?') => {
+    if (online.role === 'host' && online.others > 0) setAsk({ title: what, text: `${plural(online.others, 'Друг', 'Друзья', 'Друзья')} (${online.others}) ${online.others === 1 ? 'выйдет' : 'выйдут'} из неё.`, yes: 'Закрыть', no: 'Остаться', run })
+    else run()
+  }
 
   useEffect(() => {
     applyTheme(settings.theme)
@@ -128,11 +154,15 @@ export function App() {
       friends.say(`Приглашение в комнату ${inv.code}: доиграйте партию и войдите по коду`)
       return
     }
-    setJoinServer(inv.server)
-    online.leave()
-    setPanel(null)
-    setInvite(inv)
-    setScreen('online')
+    const go = () => {
+      setJoinServer(inv.server)
+      online.leave()
+      setPanel(null)
+      setInvite(inv)
+      setScreen('online')
+    }
+    if (online.role === 'host' && online.others > 0) setAsk({ title: `Перейти в комнату ${inv.code}?`, text: 'Ваша комната закроется, и друзья выйдут из неё.', yes: 'Перейти', no: 'Остаться', run: go })
+    else go()
   }
   useEffect(() => watchInvites((inv) => inviteWatch.current(inv)), [])
 
@@ -252,11 +282,15 @@ export function App() {
   const [pendingJoin, setPendingJoin] = useState<string | null>(null)
   const [pendingInvite, setPendingInvite] = useState<string | null>(null)
   const joinFromInvite = (code: string, server?: string) => {
-    setJoinServer(server ?? '')
-    online.leave()
-    setPanel(null)
-    setScreen('online')
-    setPendingJoin(code)
+    const go = () => {
+      setJoinServer(server ?? '')
+      online.leave()
+      setPanel(null)
+      setScreen('online')
+      setPendingJoin(code)
+    }
+    if (online.role === 'host' && online.others > 0) setAsk({ title: `Перейти в комнату ${code}?`, text: 'Ваша комната закроется, и друзья выйдут из неё.', yes: 'Перейти', no: 'Остаться', run: go })
+    else go()
   }
   useEffect(() => {
     if (!pendingJoin) return
@@ -332,6 +366,7 @@ export function App() {
       )}
       {panel === 'friends' && <FriendsPanel key="friends" friends={friends} onInvite={inviteFriend} onClose={() => setPanel(null)} />}
       {panel === 'rules' && <RulesPanel key="rules" onClose={() => setPanel(null)} />}
+      {ask && <ConfirmSheet key="confirm" ask={ask} onClose={() => setAsk(null)} />}
       {panel === 'stats' && (
         <StatsPanel
           key="stats"
@@ -368,10 +403,18 @@ export function App() {
         onFinished={recordResult}
         wager={wallet.roomWager?.seed === gameIdOf(onlineGame) ? wallet.roomWager : null}
         payout={payout?.seed === gameIdOf(onlineGame) ? payout : null}
-        onExit={() => online.leave()}
+        onExit={() => confirmClose(() => online.leave())}
         onOpenSettings={() => setPanel('game')}
         onPlayAgain={host ? () => online.start(settings.difficulty) : undefined}
-        room={{ code: online.lobby?.code ?? '', notice: online.notice, reconnecting: online.reconnecting, roster: online.lobby?.roster, turnMs: TURN_MS }}
+        onToLobby={host ? () => online.toLobby() : undefined}
+        room={{
+          code: online.lobby?.code ?? '',
+          notice: online.notice,
+          reconnecting: online.reconnecting,
+          roster: online.lobby?.roster,
+          turnMs: TURN_MS,
+          link: { guest: !host, reconnecting: online.reconnecting, lostAt: online.lostAt, hostAway: online.hostAway, hostName: online.lobby?.members.find((m) => m.host)?.name, onLeave: () => online.leave() },
+        }}
       />
     )
   } else if (screen === 'game' && game) {
@@ -411,6 +454,7 @@ export function App() {
         offerApp={!!inviteCode && !invite.noApp && inBrowserTab()}
         friends={friends}
         onInviteFriend={inviteFriend}
+        refund={refund}
         onBack={() => {
           online.leave()
           setScreen(inviteCode ? 'menu' : 'play')
