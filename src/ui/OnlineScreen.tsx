@@ -10,7 +10,7 @@ import type { Online } from '../net/useOnline'
 import { BackButton } from './PlayScreen'
 import { BOT_NAMES, CheatPicker, DeckPicker, DifficultyPicker, Group, ModePicker, plural } from './pickers'
 import { RoomLink } from './RoomStatus'
-import type { Settings } from './settings'
+import { AVATARS, cleanName, type Settings } from './settings'
 import { Sheet, sheetList } from './Sheet'
 import { appLink, type Invite, inviteFromText, inviteUrl, webPlatform } from './deeplink'
 
@@ -156,30 +156,40 @@ function PasteButton({ onCode }: { onCode: (inv: Invite) => void }) {
   )
 }
 
-function NameBadge({ name, onChange }: { name: string; onChange: (n: string) => void }) {
+/** The name friends see, with the profile's avatar; the same rule as the profile: an emptied field keeps the old name. */
+function NameBadge({ name, avatar, onChange }: { name: string; avatar: string; onChange: (n: string) => void }) {
   const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(name)
   return (
     <div className="name-badge">
-      <m.span key={name[0]} className="name-avatar" initial={{ scale: 0.6 }} animate={{ scale: 1 }}>
-        {name.trim()[0]?.toUpperCase() ?? '?'}
+      <m.span key={avatar} className="name-avatar" initial={{ scale: 0.6 }} animate={{ scale: 1 }}>
+        {avatar}
       </m.span>
       {editing ? (
         <input
           id="player-name"
           className="name-edit"
-          value={name}
+          value={draft}
           maxLength={16}
           autoFocus
           aria-label="Ваше имя"
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => setDraft(e.target.value)}
           onBlur={() => {
-            if (!name.trim()) onChange('Игрок')
+            const next = cleanName(draft, name)
+            if (next !== name) onChange(next)
             setEditing(false)
           }}
           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
         />
       ) : (
-        <button type="button" className="name-show" onClick={() => setEditing(true)}>
+        <button
+          type="button"
+          className="name-show"
+          onClick={() => {
+            setDraft(name)
+            setEditing(true)
+          }}
+        >
           {name}
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
             <path fill="currentColor" d="M4 17.3V20h2.7l8-8-2.7-2.7-8 8zm12.7-7.6a.9.9 0 0 0 0-1.3l-1.1-1.1a.9.9 0 0 0-1.3 0l-1 1 2.4 2.4 1-1z" />
@@ -343,7 +353,7 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
         <AnimatePresence mode="wait">
           {phase === 'idle' && (
             <m.div key={`idle-${mode}`} className="online-block" variants={sheetList} initial="hidden" animate="shown" exit={{ opacity: 0, y: -10 }}>
-              <NameBadge name={settings.name} onChange={(name) => onChange({ ...settings, name })} />
+              <NameBadge name={settings.name} avatar={AVATARS[settings.avatar] ?? AVATARS[0]} onChange={(name) => onChange({ ...settings, name })} />
               {mode === 'choose' ? (
                 <div className="way-cards">
                   <m.button

@@ -56,6 +56,8 @@ interface Props {
   /** this player's money on the game, if any */
   wager?: Wager | null
   payout?: PayoutInfo | null
+  /** offered on the result card instead of the balance when the player can't afford any stake */
+  onRefill?: () => void
   emote?: Emote | null
   /** online rooms: lets a player turn an opponent into a friend */
   friends?: Friends
@@ -184,7 +186,7 @@ function rememberAccuse() {
   }
 }
 
-export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTurn, onBotThrow, onFinished, series, wager, payout, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, onToLobby, room, onUndo, nextStake, coach }: Props) {
+export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTurn, onBotThrow, onFinished, series, wager, payout, onRefill, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, onToLobby, room, onUndo, nextStake, coach }: Props) {
   /** a guest whose line to the host is down: moves can't go out, so the hand waits */
   const unlinked = !!room?.link?.guest && !!room.reconnecting
   const { table: baseCw, hand: hw, flat, tall } = useCardSizes()
@@ -1220,7 +1222,7 @@ export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTu
                 <p className="result-sub">
                   {game.loser === null ? 'Последние карты ушли одновременно.' : game.loser === me ? 'Карты остались только у вас. Отыграйтесь.' : `Дураком остался ${game.players[game.loser].name}.`}
                 </p>
-                {payout && <Payout delta={payout.delta} balance={payout.balance} />}
+                {payout && <Payout delta={payout.delta} balance={payout.balance} onRefill={onRefill} />}
                 {series && (
                   <ul className="series-board" aria-label="Счёт турнира">
                     {game.players.map((p, i) => (
