@@ -58,7 +58,7 @@ export function WalletPill({ wallet, bonus, broke, onBonus, onRefill }: { wallet
             whileTap={{ scale: 0.92 }}
             onClick={bonus ? onBonus : onRefill}
           >
-            <m.span animate={{ rotate: [0, -12, 12, -6, 0] }} transition={{ duration: 0.9, repeat: Infinity, repeatDelay: 2.4 }} aria-hidden="true">
+            <m.span animate={{ rotate: [0, -12, 12, -6, 0] }} transition={{ duration: 0.9, repeat: 2, repeatDelay: 2.4 }} aria-hidden="true">
               🎁
             </m.span>
             {bonus ? 'Бонус дня' : 'Пополнить'}
