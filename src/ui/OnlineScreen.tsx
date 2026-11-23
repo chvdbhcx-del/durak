@@ -4,13 +4,14 @@ import { affordableStake, formatCoins, type Wallet } from './wallet'
 import { AnimatePresence, m } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { maxPlayers } from '../engine/game'
-import { CODE_LENGTH, normalizeCode } from '../net/room'
+import { CODE_LENGTH, normalizeCode, peekRoom, type RoomPreview } from '../net/room'
 import type { Friends } from '../net/useFriends'
 import type { Online } from '../net/useOnline'
 import { BackButton } from './PlayScreen'
-import { BOT_NAMES, CheatPicker, DeckPicker, Group, ModePicker, plural } from './pickers'
+import { BOT_NAMES, CheatPicker, DeckPicker, DifficultyPicker, Group, ModePicker, plural } from './pickers'
+import { RoomLink } from './RoomStatus'
 import type { Settings } from './settings'
-import { sheetList } from './Sheet'
+import { Sheet, sheetList } from './Sheet'
 import { appLink, type Invite, inviteFromText, inviteUrl, webPlatform } from './deeplink'
 
 
@@ -27,7 +28,35 @@ interface Props {
   offerApp?: boolean
   friends: Friends
   onInviteFriend: (fid: string) => void
+  /** coins given back when a room game was cut off through no fault of this player */
+  refund?: number | null
   onBack: () => void
+}
+
+const STAGE_TEXT = { loading: 'Загружаем онлайн-игру…', broker: 'Ищем комнату', host: 'Соединяемся с хостом…', hello: 'Входим…' } as const
+
+const modeName = (mode: string) => (mode === 'podkidnoy' ? 'Подкидной' : 'Переводной')
+
+/** «Хост зовёт: Подкидной · 36 · ставка 100», asked from the room itself before joining. */
+function InvitePreview({ code }: { code: string }) {
+  const [info, setInfo] = useState<RoomPreview | null>(null)
+  useEffect(() => {
+    let live = true
+    peekRoom(code).then((p) => live && setInfo(p))
+    return () => {
+      live = false
+    }
+  }, [code])
+  return (
+    <AnimatePresence>
+      {info && (
+        <m.p className="invite-preview" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+          <b>{info.host} зовёт:</b> {modeName(info.mode)} · {info.deckSize} карт{info.stake > 0 ? ` · ставка ${formatCoins(info.stake)}` : ''} · {info.players} из {info.max}
+          {info.playing && <span className="muted"> · партия уже идёт, сыграете в следующей</span>}
+        </m.p>
+      )}
+    </AnimatePresence>
+  )
 }
 
 /** Five big letter boxes over one real input, so phone keyboards and paste just work. */
@@ -61,40 +90,46 @@ function CodeInput({ value, onChange, onDone }: { value: string; onChange: (v: s
  * Shown when an invite opens in a plain browser tab. The browser keeps its own profile (name, coins,
  * friends) apart from the app and from a site on the home screen, so the invite is offered there first.
  */
-function AppHandoff({ code, server }: { code: string; server: string }) {
+function AppHandoff({ code, server, onBrowser }: { code: string; server: string; onBrowser: () => void }) {
   const platform = webPlatform()
   const link = appLink({ code, server }, platform)
   const [copied, setCopied] = useState(false)
   // On iPhone the whole link is copied: the home-screen game pastes it in one tap.
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(platform === 'ios' ? inviteUrl(code, server) : code)
+      await navigator.clipboard.writeText(inviteUrl(code, server))
       setCopied(true)
     } catch {
       /* clipboard blocked: the code is on screen */
     }
   }
-  return (
-    <m.section className="app-handoff" initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 320, damping: 26 }}>
-      <span className="handoff-title">Вас позвали в комнату {code}</span>
-      {link && (
+  if (link)
+    return (
+      <m.section className="app-handoff" initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 320, damping: 26 }}>
+        <span className="handoff-title">Вас позвали в комнату {code}</span>
         <m.a className="primary big handoff-open" href={link} whileTap={{ scale: 0.96 }}>
           Открыть в приложении
         </m.a>
+        <button type="button" className="link" onClick={onBrowser}>
+          Играть в браузере
+        </button>
+      </m.section>
+    )
+  // No app to open: joining here is the main action, and a home-screen game on iPhone gets one quiet line.
+  if (platform !== 'ios') return null
+  return (
+    <p className="handoff-note handoff-line">
+      {copied ? (
+        'Скопировано. Откройте Дурак с экрана «Домой» и нажмите «Вставить приглашение».'
+      ) : (
+        <>
+          Есть Дурак на экране «Домой»?{' '}
+          <button type="button" className="link" onClick={copy}>
+            Скопировать приглашение
+          </button>
+        </>
       )}
-      <m.button type="button" className={`${link ? 'ghost' : 'primary'} big handoff-copy`} whileTap={{ scale: 0.95 }} onClick={copy}>
-        <AnimatePresence mode="wait" initial={false}>
-          <m.span key={copied ? 'ok' : 'copy'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
-            {copied ? 'Скопировано' : platform === 'ios' ? 'Скопировать приглашение' : `Скопировать код ${code}`}
-          </m.span>
-        </AnimatePresence>
-      </m.button>
-      {platform === 'ios' && (
-        <p className="handoff-note">
-          {copied ? 'Теперь откройте Дурак с экрана «Домой» и нажмите «Вставить приглашение».' : 'Дурак на экране «Домой»? iPhone не передаёт ему ссылки: скопируйте приглашение и вставьте его там.'}
-        </p>
-      )}
-    </m.section>
+    </p>
   )
 }
 
@@ -165,11 +200,38 @@ function CardSpinner() {
   )
 }
 
-export function OnlineScreen({ online, settings, wallet, onChange, server, onInviteServer, initialCode, offerApp = false, friends, onInviteFriend, onBack }: Props) {
+export function OnlineScreen({ online, settings, wallet, onChange, server, onInviteServer, initialCode, offerApp = false, friends, onInviteFriend, refund, onBack }: Props) {
   const [mode, setMode] = useState<'choose' | 'join'>(initialCode ? 'join' : 'choose')
   const [code, setCode] = useState(initialCode)
   const [copied, setCopied] = useState(false)
+  const [codeCopied, setCodeCopied] = useState(false)
+  const [setup, setSetup] = useState(false)
+  /** Android: the app was offered first; the code field shows once the player picks the browser */
+  const [inBrowser, setInBrowser] = useState(false)
   const { phase, lobby, role, error } = online
+  const handoff = offerApp && code === initialCode && !!appLink({ code: initialCode, server }) && !inBrowser
+  // A short note in the room: a bot making way, or the stake the host just changed.
+  const [roomNote, setRoomNote] = useState<{ key: number; text: string } | null>(null)
+  const noteKey = lobby?.note?.key
+  useEffect(() => {
+    if (lobby?.note) setRoomNote(lobby.note)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noteKey])
+  const stake = lobby?.stake ?? 0
+  const lastStake = useRef<number | null>(null)
+  useEffect(() => {
+    if (phase !== 'lobby') {
+      lastStake.current = null
+      return
+    }
+    if (role === 'guest' && lastStake.current !== null && lastStake.current !== stake) setRoomNote({ key: Date.now(), text: stake ? `Ставка теперь ${formatCoins(stake)}` : 'Теперь без ставки' })
+    lastStake.current = stake
+  }, [stake, phase, role])
+  useEffect(() => {
+    if (!roomNote) return
+    const t = setTimeout(() => setRoomNote((n) => (n === roomNote ? null : n)), 3500)
+    return () => clearTimeout(t)
+  }, [roomNote])
   const { refresh } = friends
   const watching = phase !== 'idle' && role === 'host'
   useEffect(() => {
@@ -185,10 +247,21 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
     else onBack()
   }
 
-  const invite = async () => {
+  const copyCode = async () => {
     if (!lobby) return
-    const url = inviteUrl(lobby.code, server)
-    const text = `Сыграем в дурака? Код комнаты: ${lobby.code}`
+    try {
+      await navigator.clipboard.writeText(lobby.code)
+      setCodeCopied(true)
+      setTimeout(() => setCodeCopied(false), 1600)
+    } catch {
+      /* clipboard blocked: the code stays on screen */
+    }
+  }
+
+  const invite = async (roomCode = lobby?.code) => {
+    if (!roomCode) return
+    const url = inviteUrl(roomCode, server)
+    const text = `Сыграем в дурака? Код комнаты: ${roomCode}`
     try {
       if (navigator.share) {
         await navigator.share({ title: 'Дурак', text, url })
@@ -209,7 +282,47 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
   const host = role === 'host'
   const players = lobby ? lobby.members.filter((m) => m.online).length + lobby.bots : 0
   const roomFull = lobby ? lobby.members.length + lobby.bots >= maxPlayers(lobby.deckSize) : false
-  const hostName = lobby?.members.find((m) => m.host)?.name ?? 'хозяин'
+  const hostName = lobby?.members.find((m) => m.host)?.name ?? 'хост'
+  const joinNow = () => online.join(code, settings.name.trim() || 'Игрок')
+  const createOwn = () => {
+    online.leave()
+    online.create({ name: settings.name.trim() || 'Игрок', mode: settings.mode, deckSize: settings.deckSize, cheat: settings.cheat })
+  }
+  const otherCode = () => {
+    online.leave()
+    setCode('')
+    setMode('join')
+  }
+  const toMenu = () => onBack()
+  const kind = error?.kind ?? 'other'
+  const netHint = kind === 'network' || kind === 'server' || kind === 'p2p'
+  const errorTitle =
+    kind === 'not-found'
+      ? `Комнаты ${online.code} нет`
+      : kind === 'closed'
+        ? 'Хост закрыл комнату'
+        : kind === 'kicked'
+          ? 'Хост убрал вас из комнаты'
+          : kind === 'same-device'
+            ? 'Это ваша же комната'
+            : kind === 'full'
+              ? 'В комнате нет мест'
+              : kind === 'lost'
+                ? 'Связь потеряна'
+                : (error?.message ?? 'Что-то пошло не так')
+  const errorNote =
+    kind === 'not-found'
+      ? 'Возможно, хост её уже закрыл. Проверьте код или создайте свою.'
+      : kind === 'same-device'
+        ? 'Она открыта на этом же устройстве. Отправьте ссылку другу.'
+        : kind === 'full'
+          ? 'За столом уже все места заняты.'
+          : kind === 'closed' || kind === 'kicked'
+            ? ''
+            : errorTitle === error?.message
+              ? ''
+              : (error?.message ?? '')
+  const summary = lobby ? `${modeName(lobby.mode)} · ${lobby.deckSize} · ${lobby.cheat ? 'шулер' : 'честно'} · ${stake ? `ставка ${formatCoins(stake)}` : 'без ставки'}` : ''
 
   return (
     <m.main className="screen" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}>
@@ -219,10 +332,11 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
       </header>
 
       <div className="screen-body">
+        {phase !== 'error' && <RoomLink inline link={{ guest: role === 'guest', reconnecting: online.reconnecting, lostAt: online.lostAt, hostAway: online.hostAway, hostName, onLeave: () => online.leave() }} />}
         <AnimatePresence>
-          {online.reconnecting && (
-            <m.p key="reconnecting" className="reconnecting inline" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
-              Восстанавливаем связь…
+          {roomNote && phase === 'lobby' && (
+            <m.p key={roomNote.key} className="room-note" role="status" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+              {roomNote.text}
             </m.p>
           )}
         </AnimatePresence>
@@ -260,9 +374,12 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
                 </div>
               ) : (
                 <m.div className="join-block" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
-                  {offerApp && code === initialCode && <AppHandoff code={initialCode} server={server} />}
+                  {offerApp && code === initialCode && !inBrowser && <AppHandoff code={initialCode} server={server} onBrowser={() => setInBrowser(true)} />}
+                  {initialCode && code === initialCode && <InvitePreview code={initialCode} />}
+                  {!handoff && (
+                  <>
                   <div className="join-head">
-                    <p className="join-label">{offerApp && code === initialCode ? 'Или играйте здесь, в браузере' : 'Код комнаты'}</p>
+                    <p className="join-label">Код комнаты</p>
                     {!(offerApp && code === initialCode) && (
                       <PasteButton
                         onCode={(inv) => {
@@ -272,16 +389,12 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
                       />
                     )}
                   </div>
-                  <CodeInput value={code} onChange={setCode} onDone={() => online.join(code, settings.name.trim() || 'Игрок')} />
-                  <m.button
-                    type="button"
-                    className="primary big"
-                    disabled={code.length !== CODE_LENGTH}
-                    whileTap={{ scale: 0.96 }}
-                    onClick={() => online.join(code, settings.name.trim() || 'Игрок')}
-                  >
+                  <CodeInput value={code} onChange={setCode} onDone={joinNow} />
+                  <m.button type="button" className="primary big" disabled={code.length !== CODE_LENGTH} whileTap={{ scale: 0.96 }} onClick={joinNow}>
                     Войти
                   </m.button>
+                  </>
+                  )}
                 </m.div>
               )}
             </m.div>
@@ -290,7 +403,19 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
           {phase === 'connecting' && (
             <m.div key="connecting" className="online-block center" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
               <CardSpinner />
-              <p className="big-note">{role === 'host' ? 'Создаём комнату…' : 'Подключаемся…'}</p>
+              <p className="big-note" role="status">
+                {role === 'host' ? 'Создаём комнату…' : online.stage === 'broker' ? `${STAGE_TEXT.broker} ${online.code}…` : online.stage ? STAGE_TEXT[online.stage] : 'Подключаемся…'}
+              </p>
+              <AnimatePresence>
+                {online.slow && (
+                  <m.p className="muted" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    Дольше обычного…
+                  </m.p>
+                )}
+              </AnimatePresence>
+              <m.button type="button" className="ghost narrow" whileTap={{ scale: 0.96 }} onClick={() => online.leave()}>
+                Отмена
+              </m.button>
             </m.div>
           )}
 
@@ -299,27 +424,73 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
               <m.span className="error-mark" initial={{ rotate: -20, scale: 0.5 }} animate={{ rotate: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 400, damping: 14 }} aria-hidden="true">
                 !
               </m.span>
-              <p className="big-note">{error}</p>
-              <p className="muted">Если вы в мобильной сети, попробуйте через Wi-Fi.</p>
-              <m.button type="button" className="primary big narrow" whileTap={{ scale: 0.96 }} onClick={() => online.leave()}>
-                Понятно
-              </m.button>
+              <p className="big-note">{errorTitle}</p>
+              {errorNote && <p className="muted">{errorNote}</p>}
+              {refund ? (
+                <p className="refund-note">
+                  <Coin size={14} /> Партия прервана, ставка {formatCoins(refund)} возвращена
+                </p>
+              ) : null}
+              <div className="error-actions">
+                {kind === 'not-found' || kind === 'full' ? (
+                  <>
+                    <m.button type="button" className="primary big" whileTap={{ scale: 0.96 }} autoFocus onClick={otherCode}>
+                      Ввести другой код
+                    </m.button>
+                    <m.button type="button" className="ghost big" whileTap={{ scale: 0.96 }} onClick={kind === 'full' ? toMenu : createOwn}>
+                      {kind === 'full' ? 'В меню' : 'Создать свою'}
+                    </m.button>
+                  </>
+                ) : kind === 'closed' ? (
+                  <>
+                    <m.button type="button" className="primary big" whileTap={{ scale: 0.96 }} autoFocus onClick={createOwn}>
+                      Создать свою
+                    </m.button>
+                    <m.button type="button" className="ghost big" whileTap={{ scale: 0.96 }} onClick={toMenu}>
+                      В меню
+                    </m.button>
+                  </>
+                ) : kind === 'same-device' ? (
+                  <>
+                    <m.button type="button" className="primary big" whileTap={{ scale: 0.96 }} autoFocus onClick={() => invite(online.code)}>
+                      {copied ? 'Ссылка скопирована' : 'Поделиться ссылкой'}
+                    </m.button>
+                    <m.button type="button" className="ghost big" whileTap={{ scale: 0.96 }} onClick={toMenu}>
+                      В меню
+                    </m.button>
+                  </>
+                ) : kind === 'kicked' || kind === 'browser' ? (
+                  <m.button type="button" className="primary big" whileTap={{ scale: 0.96 }} autoFocus onClick={toMenu}>
+                    В меню
+                  </m.button>
+                ) : (
+                  <>
+                    <m.button type="button" className="primary big" whileTap={{ scale: 0.96 }} autoFocus onClick={() => online.retry()}>
+                      Повторить
+                    </m.button>
+                    <m.button type="button" className="ghost big" whileTap={{ scale: 0.96 }} onClick={toMenu}>
+                      В меню
+                    </m.button>
+                  </>
+                )}
+              </div>
+              {netHint && <p className="muted small">В мобильной сети? Попробуйте через Wi-Fi.</p>}
             </m.div>
           )}
 
           {phase === 'lobby' && lobby && (
             <m.div key="lobby" className="online-block" variants={sheetList} initial="hidden" animate="shown" exit={{ opacity: 0 }}>
               <m.section className="room-code" initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }}>
-                <span className="group-title">Код комнаты</span>
-                <div className="code-display" aria-label={`Код ${lobby.code.split('').join(' ')}`}>
+                <span className="group-title" aria-live="polite">{codeCopied ? 'Код скопирован' : 'Код комнаты'}</span>
+                <button type="button" className="code-display" aria-label={`Код ${lobby.code.split('').join(' ')}. Скопировать`} onClick={copyCode}>
                   {lobby.code.split('').map((ch, i) => (
                     <m.span key={i} className="code-box filled" initial={{ rotateX: 90, opacity: 0 }} animate={{ rotateX: 0, opacity: 1 }} transition={{ delay: 0.1 + i * 0.06, type: 'spring', stiffness: 300, damping: 20 }}>
                       {ch}
                     </m.span>
                   ))}
-                </div>
+                </button>
                 {host && (
-                  <m.button type="button" className="ghost invite" whileTap={{ scale: 0.95 }} onClick={invite}>
+                  <m.button type="button" className="ghost invite" whileTap={{ scale: 0.95 }} onClick={() => invite()}>
                     <AnimatePresence mode="wait" initial={false}>
                       <m.span key={copied ? 'ok' : 'share'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
                         {copied ? 'Ссылка скопирована' : 'Пригласить друзей'}
@@ -336,7 +507,7 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
                       <m.div key={mem.id} layout className={`lobby-seat ${mem.online ? '' : 'off'}`} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: mem.online ? 1 : 0.4 }} exit={{ scale: 0, opacity: 0 }} transition={{ type: 'spring', stiffness: 500, damping: 24 }}>
                         <span className="avatar-circle person">{mem.name[0]?.toUpperCase()}</span>
                         <span className="avatar-name">{mem.name}</span>
-                        {mem.host && <span className="seat-tag">хозяин</span>}
+                        {mem.fid && mem.fid === friends.fid ? <span className="seat-tag me">вы</span> : mem.host ? <span className="seat-tag">хост</span> : null}
                         {mem.fid && mem.fid !== friends.fid && (
                           <button type="button" className={`seat-add ${friends.isFriend(mem.fid) ? 'done' : ''}`} aria-label={friends.isFriend(mem.fid) ? `${mem.name} уже в друзьях` : `Добавить ${mem.name} в друзья`} disabled={friends.isFriend(mem.fid)} onClick={() => friends.add(mem.fid!, mem.name)}>
                             {friends.isFriend(mem.fid) ? '✓' : '+'}
@@ -397,10 +568,21 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
 
               {host ? (
                 <>
-                  <ModePicker value={lobby.mode} onChange={(m) => online.setLobby({ mode: m })} />
-                  <DeckPicker value={lobby.deckSize} onChange={(d) => online.setLobby({ deckSize: d })} />
-                  <CheatPicker value={!!lobby.cheat} onChange={(c) => online.setLobby({ cheat: c })} />
-                  <StakePicker title="Ставка в комнате" value={lobby.stake ?? 0} onChange={(stake) => online.setLobby({ stake })} wallet={wallet} players={Math.max(2, players)} mult={1} />
+                  <m.button type="button" className="setup-summary" whileTap={{ scale: 0.98 }} onClick={() => setSetup(true)} aria-label={`Настройки партии: ${summary}`}>
+                    <span>{summary}</span>
+                    <span aria-hidden="true">›</span>
+                  </m.button>
+                  <AnimatePresence>
+                    {setup && (
+                      <Sheet key="room-setup" title="Настройки партии" onClose={() => setSetup(false)}>
+                        <ModePicker value={lobby.mode} onChange={(m) => online.setLobby({ mode: m })} />
+                        <DeckPicker value={lobby.deckSize} onChange={(d) => online.setLobby({ deckSize: d })} />
+                        <CheatPicker value={!!lobby.cheat} onChange={(c) => online.setLobby({ cheat: c })} />
+                        <StakePicker title="Ставка в комнате" value={stake} onChange={(next) => online.setLobby({ stake: next })} wallet={wallet} players={Math.max(2, players)} mult={1} />
+                        {lobby.bots > 0 && <DifficultyPicker value={settings.difficulty} onChange={(difficulty) => onChange({ ...settings, difficulty })} />}
+                      </Sheet>
+                    )}
+                  </AnimatePresence>
                   <m.button type="button" className="primary big" disabled={players < 2} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={() => online.start(settings.difficulty)}>
                     {players < 2 ? 'Ждём хотя бы одного игрока' : 'Начать игру'}
                   </m.button>
@@ -408,7 +590,7 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
               ) : (
                 <m.div className="waiting" variants={sheetList}>
                   <span className="chip">
-                    {lobby.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'} · {lobby.deckSize} карт
+                    {modeName(lobby.mode)} · {lobby.deckSize} карт
                   </span>
                   {(lobby.stake ?? 0) > 0 && (
                     <span className="chip stake-chip">
@@ -420,7 +602,7 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
                     <p className="stake-warn">Монет не хватает на всю ставку: сыграете на {formatCoins(affordableStake(wallet, lobby.stake!, Math.max(2, players)))}.</p>
                   )}
                   <p className="big-note">
-                    Ждём, пока {hostName} начнёт
+                    {lobby.playing ? 'Партия идёт, вы сыграете в следующей' : `Ждём, пока ${hostName} начнёт`}
                     {[0, 1, 2].map((i) => (
                       <m.span key={i} animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}>
                         .

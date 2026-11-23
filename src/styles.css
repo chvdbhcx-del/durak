@@ -3176,3 +3176,137 @@ small,
   display: block;
   box-shadow: 0 2px 6px var(--shadow);
 }
+
+/* ---- Online rooms: honest link states, errors with a next step, a compact lobby ---- */
+.reconnecting .link-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.reconnecting {
+  max-width: calc(100vw - 32px);
+}
+.link-leave {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 2px 4px;
+}
+.room-note {
+  justify-self: center;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--raise);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+.error-actions {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  max-width: 320px;
+}
+.muted.small {
+  font-size: 12px;
+}
+.refund-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--good) 14%, transparent);
+  font-size: 14px;
+  font-weight: 600;
+}
+.confirm-text {
+  margin: 0 0 14px;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.setup-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+}
+.setup-summary span:last-child {
+  font-size: 20px;
+  color: var(--muted);
+}
+button.code-display {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  cursor: copy;
+}
+.seat-tag.me {
+  color: var(--accent);
+  font-weight: 700;
+}
+.invite-preview {
+  margin: 0 0 4px;
+  max-width: 360px;
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: center;
+  overflow: hidden;
+}
+.handoff-line {
+  text-align: center;
+  max-width: 360px;
+}
+.handoff-line .link {
+  font-size: inherit;
+}
+/* A seat whose player has no line (or put the app away): grey, with a word on why */
+.seat.unlinked .avatar {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+.seat-off {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+  white-space: nowrap;
+}
+/* While the line to the host is down the hand waits, instead of swallowing a move */
+.me.locked .hand,
+.me.locked .buttons {
+  opacity: 0.45;
+  pointer-events: none;
+  filter: saturate(0.4);
+}
+.me.hurry .status {
+  color: var(--danger);
+  animation: hurry-pulse 1s ease-in-out infinite;
+}
+.me.hurry .turn-clock {
+  background: var(--danger);
+}
+@keyframes hurry-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+.result-actions.three {
+  flex-wrap: wrap;
+}
