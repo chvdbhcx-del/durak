@@ -8,6 +8,10 @@ import { sheetItem } from './Sheet'
 import { SuitIcon } from './SuitIcon'
 
 export const BOT_NAMES = ['Лиса', 'Мишка', 'Сова', 'Ёж', 'Волк']
+/** Bots with a feminine name, so a sentence about them agrees: «Лиса заметила». */
+const FEM_BOTS = new Set(['Лиса', 'Сова'])
+/** Past-tense verb agreeing with a player's name: past('Лиса', 'заметил', 'заметила'). People online get the masculine form. */
+export const past = (name: string, masc: string, fem: string) => (FEM_BOTS.has(name) ? fem : masc)
 
 export function plural(n: number, one: string, few: string, many: string) {
   const m10 = n % 10
@@ -254,6 +258,11 @@ export function IconToggle({ label, value, onChange, icon }: { label: string; va
     </m.button>
   )
 }
+export const BIG_ICON = (
+  <svg viewBox="0 0 24 24" width="22" height="22">
+    <path fill="currentColor" d="M9.2 4h2.1l5.4 15h-2.4l-1.4-4H6.6l-1.4 4H2.8L9.2 4zm-1.9 9h5.2l-2.6-7.4L7.3 13zm11.2-9H20v3h3v1.6h-3v3h-1.5v-3h-3V7h3V4z" />
+  </svg>
+)
 
 export const SOUND_ICON = (
   <svg viewBox="0 0 24 24" width="22" height="22">

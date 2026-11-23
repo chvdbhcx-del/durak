@@ -7,17 +7,81 @@ import { formatCoins, neverStaked, type Wallet } from './wallet'
 import { AvatarPicker, plural } from './pickers'
 import { Sheet, sheetItem } from './Sheet'
 import { SuitIcon } from './SuitIcon'
+import { ClassicFace } from './CardView'
 
-const RULES: { suit: Suit; title: string; text: string }[] = [
+type Mini = [suit: Suit, rank: number]
+
+/** A tiny table moment drawn with real card faces: attacks on the bottom, covers on top, a card flying in. */
+interface Scene {
+  trump: Suit
+  /** pairs on the table: an attack and maybe its cover */
+  pairs: [Mini, Mini?][]
+  /** a card that arrives on the table after the rest: a throw-in or a transfer */
+  incoming?: Mini
+  /** the cover is a trick: it doesn't beat */
+  trick?: boolean
+  /** a row of overlapping cards instead of pairs, e.g. the five of the first round */
+  row?: Mini[]
+}
+
+const RULES: { suit: Suit; title: string; text: string; scene?: Scene }[] = [
   { suit: 'S', title: 'Цель', text: 'Избавиться от всех карт. Кто остался с картами последним, тот дурак.' },
-  { suit: 'H', title: 'Козырь', text: 'Масть открытой карты под колодой. Козырь бьёт любую карту другой масти.' },
-  { suit: 'D', title: 'Атака', text: 'Ходящий кладёт любую карту. Первым ходит тот, у кого самый младший козырь.' },
-  { suit: 'C', title: 'Защита', text: 'Покрыть можно старшей картой той же масти или козырем. Не можете — берите.' },
-  { suit: 'H', title: 'Подкидывание', text: 'Остальные подкидывают карты того же достоинства, что уже лежат на столе, в любой момент, даже пока защитник ещё отбивается. Не больше, чем карт у защитника, и максимум шесть.' },
-  { suit: 'S', title: 'Перевод', text: 'В переводном, пока ничего не покрыто, можно положить карту того же достоинства и передать атаку следующему.' },
+  { suit: 'H', title: 'Козырь', text: 'Масть открытой карты под колодой. Козырь бьёт любую карту другой масти.', scene: { trump: 'S', pairs: [[['H', 14], ['S', 6]]] } },
+  { suit: 'D', title: 'Атака', text: 'Ходящий кладёт любую карту. Первым ходит тот, у кого самый младший козырь.', scene: { trump: 'S', pairs: [], incoming: ['C', 8] } },
+  { suit: 'C', title: 'Защита', text: 'Покрыть можно старшей картой той же масти или козырем. Не можете — берите.', scene: { trump: 'S', pairs: [[['H', 9], ['H', 12]]] } },
+  { suit: 'H', title: 'Подкидывание', text: 'Другие подкидывают карты того же достоинства, что уже на столе. Всего не больше шести.', scene: { trump: 'S', pairs: [[['H', 9], ['H', 12]]], incoming: ['C', 9] } },
+  { suit: 'S', title: 'Перевод', text: 'В переводном, пока ничего не покрыто, положите карту того же достоинства: отбивается следующий.', scene: { trump: 'S', pairs: [[['D', 7]]], incoming: ['C', 7] } },
   { suit: 'D', title: 'Бито и добор', text: 'Отбился — карты уходят в бито, и ходите вы. После хода все добирают до шести.' },
   { suit: 'C', title: 'Конец игры', text: 'Когда колода кончилась, игроки без карт выходят. Если последние карты ушли одновременно, это ничья.' },
+  { suit: 'H', title: 'Шулер', text: 'Можно покрыть любой картой. Заметили обман — нажмите на карту, и обманщик берёт.', scene: { trump: 'S', pairs: [[['C', 10], ['H', 6]]], trick: true } },
+  { suit: 'S', title: 'Первый отбой', text: 'Если включено, в первом раунде на стол идёт не больше пяти карт.', scene: { trump: 'S', pairs: [], row: [['S', 9], ['H', 9], ['C', 11], ['D', 11], ['C', 9]] } },
 ]
+
+function MiniCard({ c, trump, className = '' }: { c: Mini; trump: Suit; className?: string }) {
+  return (
+    <span className={`card full sample ${className}`}>
+      <ClassicFace card={{ id: `rule-${c[0]}${c[1]}`, suit: c[0], rank: c[1] }} trump={trump} />
+    </span>
+  )
+}
+
+function RuleScene({ scene }: { scene: Scene }) {
+  const fly = { initial: { opacity: 0, y: 26, rotate: -8 }, whileInView: { opacity: 1, y: 0, rotate: 0 }, viewport: { once: true, amount: 0.6 } }
+  if (scene.row)
+    return (
+      <span className="rule-scene row" aria-hidden="true">
+        {scene.row.map((c, i) => (
+          <m.span key={i} className="rule-row" {...fly} transition={{ delay: 0.2 + i * 0.08, type: 'spring', stiffness: 300, damping: 24 }}>
+            <MiniCard c={c} trump={scene.trump} />
+          </m.span>
+        ))}
+      </span>
+    )
+  return (
+    <span className="rule-scene" aria-hidden="true">
+      {scene.pairs.map(([attack, cover], i) => (
+        <span key={i} className="rule-pair">
+          <MiniCard c={attack} trump={scene.trump} />
+          {cover && (
+            <m.span className="rule-cover" initial={{ opacity: 0, x: 18, y: 14, rotate: 0 }} whileInView={{ opacity: 1, x: 0, y: 0, rotate: 8 }} viewport={{ once: true, amount: 0.6 }} transition={{ delay: 0.35, type: 'spring', stiffness: 260, damping: 22 }}>
+              <MiniCard c={cover} trump={scene.trump} />
+              {scene.trick && (
+                <m.b className="rule-trick" initial={{ scale: 0 }} whileInView={{ scale: 1 }} viewport={{ once: true }} transition={{ delay: 0.9, type: 'spring', stiffness: 500, damping: 18 }}>
+                  ?
+                </m.b>
+              )}
+            </m.span>
+          )}
+        </span>
+      ))}
+      {scene.incoming && (
+        <m.span className="rule-pair" {...fly} transition={{ delay: scene.pairs.length ? 0.8 : 0.3, type: 'spring', stiffness: 280, damping: 22 }}>
+          <MiniCard c={scene.incoming} trump={scene.trump} />
+        </m.span>
+      )}
+    </span>
+  )
+}
 
 export function RulesPanel({ onClose }: { onClose: () => void }) {
   return (
@@ -30,6 +94,7 @@ export function RulesPanel({ onClose }: { onClose: () => void }) {
             </span>
             <span className="rule-step">{i + 1}</span>
             <h3>{r.title}</h3>
+            {r.scene && <RuleScene scene={r.scene} />}
             <p>{r.text}</p>
           </m.article>
         ))}

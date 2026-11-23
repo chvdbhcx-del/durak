@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Launch screen background (Android 12+ draws it behind the icon); matches the light theme. -->
+    <color name="splash_bg">#E8ECE9</color>
+</resources>

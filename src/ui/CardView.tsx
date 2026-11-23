@@ -1,6 +1,6 @@
 import { m, type MotionStyle, type TargetAndTransition } from 'framer-motion'
 import { useEffect, useState, useSyncExternalStore, type MouseEventHandler, type ReactNode } from 'react'
-import { Card, isRed, rankLabel, Suit, SUIT_NAME } from '../engine/cards'
+import { Card, isRed, rankLabel, spokenCard, Suit } from '../engine/cards'
 import { getCardFace, watchCardFace } from './settings'
 import { SuitIcon } from './SuitIcon'
 
@@ -55,7 +55,7 @@ const lastFace = new Map<string, boolean>()
 
 export function CardView({ card, faceUp, trump, size = 'full', className = '', style, animate, onClick, disabled, label, flight, wrap }: Props) {
   const transition = flight ? { type: 'tween' as const, ...FLIGHT[flight.kind], delay: flight.delay } : cardSpring
-  const name = `${rankLabel(card.rank)} ${SUIT_NAME[card.suit]}`
+  const name = card.suit === trump && card.rank > 0 ? `${spokenCard(card)}, козырь` : spokenCard(card)
   const was = lastFace.get(card.id) ?? faceUp
   useEffect(() => {
     lastFace.set(card.id, faceUp)
@@ -121,8 +121,9 @@ export function CardView({ card, faceUp, trump, size = 'full', className = '', s
         style={style}
         animate={animate}
         whileTap={disabled ? undefined : { scale: 0.94 }}
-        onClick={onClick}
-        disabled={disabled}
+        // aria-disabled, not disabled: an unplayable card stays focusable, so it can still be read out while others move
+        onClick={disabled ? undefined : onClick}
+        aria-disabled={disabled || undefined}
         aria-label={label ?? name}
       >
         {inner}

@@ -2,18 +2,19 @@ import { AnimatePresence, LayoutGroup, m, useDragControls, type DragControls, ty
 import { Coin, Payout } from './Money'
 import { formatCoins, type PayoutInfo, type Wager } from './wallet'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { beats, Card, isRed, rankLabel, sortHand, SUIT_NAME } from '../engine/cards'
+import { beats, Card, isRed, sortHand, spokenCard, SUIT_NAME } from '../engine/cards'
 import { EMOTES, type Emote } from '../engine/emotes'
 import type { Friends } from '../net/useFriends'
 import { Action, canThrow, currentActor, gameIdOf, GameState, HAND_SIZE, legalActions, previewAction } from '../engine/game'
 import { CardView, flightEnd, type Flight } from './CardView'
 import { notify, tap } from './native'
 import { playCard, playDeal, playSweep } from './sfx'
-import { BOT_NAMES } from './pickers'
+import { BOT_NAMES, past } from './pickers'
 import { AVATARS } from './settings'
 import { type LinkState, RoomLink } from './RoomStatus'
 import { SuitIcon } from './SuitIcon'
 import { fanLayout } from './fan'
+import { Coach } from './Coach'
 
 const DEAL_STEP_MS = 120
 
@@ -68,6 +69,8 @@ interface Props {
   /** an online host: back from the finished game to the room, to change the setup */
   onToLobby?: () => void
   room?: { code: string; notice: string | null; reconnecting?: boolean; roster?: { seat: number; name: string; fid?: string; off?: boolean; away?: boolean }[]; turnMs?: number; link?: LinkState }
+  /** a newcomer's first games: wordless tips show the first moves */
+  coach?: boolean
 }
 
 /** The current width of an element, kept up to date as it resizes. */
@@ -94,8 +97,10 @@ function useCardSizes() {
     const flat = w > h && h < 560
     // Wide screens (laptops, tablets on their side) have room to spare: bigger cards instead of empty felt.
     const wide = !flat && w >= 900
-    const table = Math.round(flat ? Math.max(46, h * 0.15) : wide ? Math.max(84, Math.min(150, h * 0.125)) : Math.max(52, Math.min(128, Math.min(w * 0.185, h * 0.105))))
-    const hand = Math.round(flat ? Math.max(54, h * 0.17) : wide ? Math.max(96, Math.min(170, h * 0.155)) : Math.max(62, Math.min(130, Math.min(w * 0.232, h * 0.122))))
+    // «Крупно» makes cards about a tenth bigger; the hand's fan still fits the width it has.
+    const k = document.documentElement.hasAttribute('data-big') ? 1.1 : 1
+    const table = Math.round(k * (flat ? Math.max(46, h * 0.15) : wide ? Math.max(84, Math.min(150, h * 0.125)) : Math.max(52, Math.min(128, Math.min(w * 0.185, h * 0.105)))))
+    const hand = Math.round(k * (flat ? Math.max(54, h * 0.17) : wide ? Math.max(96, Math.min(170, h * 0.155)) : Math.max(62, Math.min(130, Math.min(w * 0.232, h * 0.122)))))
     return { table, hand, flat }
   }
   const [s, setS] = useState(calc)
@@ -177,7 +182,7 @@ function rememberAccuse() {
   }
 }
 
-export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotThrow, onFinished, series, wager, payout, onRefill, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, onToLobby, room }: Props) {
+export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotThrow, onFinished, series, wager, payout, onRefill, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, onToLobby, room, coach }: Props) {
   /** a guest whose line to the host is down: moves can't go out, so the hand waits */
   const unlinked = !!room?.link?.guest && !!room.reconnecting
   const { table: cw, hand: hw, flat } = useCardSizes()
@@ -352,9 +357,13 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
     const show = (text: string, tone: Banner['tone']) => setBanner({ key: Date.now(), text, tone })
     const c = game.lastCaught
     if (c && JSON.stringify(c) !== JSON.stringify(before.lastCaught)) {
-      show(c.player === me ? `${game.players[c.by].name} заметил обман! Вы берёте и больше не мухлюете` : c.by === me ? `Поймали! ${game.players[c.player].name} берёт и больше не мухлюет` : `${game.players[c.by].name} поймал ${game.players[c.player].name} на обмане`, c.player === me ? 'bad' : 'good')
+      const by = game.players[c.by].name
+      show(c.player === me ? `${by} ${past(by, 'заметил', 'заметила')} обман! Вы берёте и больше не мухлюете` : c.by === me ? `Поймали! ${game.players[c.player].name} берёт и больше не мухлюет` : `${by} ${past(by, 'поймал', 'поймала')} ${game.players[c.player].name} на обмане`, c.player === me ? 'bad' : 'good')
     }
-    if (game.falseAlarm && JSON.stringify(game.falseAlarm) !== JSON.stringify(before.falseAlarm)) show(game.falseAlarm.by === me ? 'Всё честно' : `${game.players[game.falseAlarm.by].name} ошибся, всё честно`, 'info')
+    if (game.falseAlarm && JSON.stringify(game.falseAlarm) !== JSON.stringify(before.falseAlarm)) {
+      const by = game.players[game.falseAlarm.by].name
+      show(game.falseAlarm.by === me ? 'Всё честно' : `${by} ${past(by, 'ошибся', 'ошиблась')}, всё честно`, 'info')
+    }
     const a = game.lastAction
     if (a && JSON.stringify(a) !== JSON.stringify(before.lastAction)) {
       // A throw of my own already made its sound when the cards were put down.
@@ -373,7 +382,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
     // The same news for screen readers, which can't watch the cards fly.
     const said: string[] = []
     if (a && JSON.stringify(a) !== JSON.stringify(before.lastAction)) said.push(describeMove(game, before, a.player, a.action, me))
-    if (before.table.length > 0 && game.table.length === 0 && game.lastRound) said.push(game.lastRound.end === 'beaten' ? 'Бито' : `${game.lastRound.defender === me ? 'Вы забрали' : `${game.players[game.lastRound.defender].name} забрал`} карты`)
+    if (before.table.length > 0 && game.table.length === 0 && game.lastRound) said.push(game.lastRound.end === 'beaten' ? 'Бито' : game.lastRound.defender === me ? 'Вы забрали карты' : `${game.players[game.lastRound.defender].name} ${past(game.players[game.lastRound.defender].name, 'забрал', 'забрала')} карты`)
     if (game.over) said.push(game.loser === me ? 'Вы остались дураком' : game.loser === null ? 'Ничья' : `Дурак: ${game.players[game.loser].name}`)
     else if (currentActor(game) === me && currentActor(before) !== me) said.push('Ваш ход')
     if (said.length) setAnnounce(said.filter(Boolean).join('. '))
@@ -382,6 +391,13 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
   }, [game, me])
 
   const [announce, setAnnounce] = useState('')
+  const readTable = () => {
+    // cleared first, so the same summary asked for twice is read out twice
+    setAnnounce('')
+    setTimeout(() => setAnnounce(tableSummary(gameRef.current, me)), 60)
+  }
+  const gameRef = useRef(game)
+  gameRef.current = game
 
   // Emotes from anyone stay on screen for a couple of seconds.
   const [liveEmote, setLiveEmote] = useState<Emote | null>(null)
@@ -559,9 +575,9 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
             ? { label: passLabel, tone: 'primary', onClick: () => play(pass) }
             : { label: myTurn ? 'Ваш ход' : game.over ? 'Конец' : 'Ждём', tone: 'primary' }
 
-  // Keyboard play: 1–9 the playable cards in hand order, Enter or Space the main button, T to take, Esc to undo a choice.
-  const keys = useRef({ hand, playable, onCard, main, take, play })
-  keys.current = { hand, playable, onCard, main, take, play }
+  // Keyboard play: 1–9 the playable cards in hand order, Enter or Space the main button, T to take, R reads the table out, Esc to undo a choice.
+  const keys = useRef({ hand, playable, onCard, main, take, play, readTable })
+  keys.current = { hand, playable, onCard, main, take, play, readTable }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return
@@ -578,6 +594,9 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
       } else if ((e.code === 'Enter' || e.code === 'Space') && (!t || t === document.body) && k.main.onClick) {
         e.preventDefault()
         k.main.onClick()
+      } else if (e.code === 'KeyR') {
+        e.preventDefault()
+        k.readTable()
       } else if (e.code === 'KeyT' && k.take) {
         e.preventDefault()
         k.play(k.take)
@@ -622,7 +641,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
   const resultTitle = game.loser === null ? 'Ничья' : game.loser === me ? 'Вы дурак' : 'Вы не дурак'
 
   return (
-    <m.div
+    <m.main
       className={`app ${dragging ? 'is-dragging' : ''}`}
       style={{ ['--cw' as string]: `${cw}px`, ['--hw' as string]: `${hw}px`, ['--mini' as string]: `${miniW}px`, ['--zone-cw' as string]: `${Math.round(cw * 0.74)}px` }}
       initial={{ opacity: 0, y: 12 }}
@@ -666,6 +685,10 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {announce}
       </p>
+      {/* For screen readers and keyboards (also the R key): the whole table in words. Hidden until focused. */}
+      <button type="button" className="sr-only read-table" onClick={readTable}>
+        Прочитать стол
+      </button>
       {series && !game.over && (
         <m.div className="series-strip" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} aria-label="Счёт турнира">
           <span>
@@ -744,7 +767,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                     </AnimatePresence>
                     <AnimatePresence>
                       {botThinking && actor === p.id && (
-                        <m.span key="think" className="thinking" aria-label="думает" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }}>
+                        <m.span key="think" className="thinking" role="img" aria-label="думает" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }}>
                           {[0, 1, 2].map((i) => (
                             <m.i key={i} animate={{ y: [0, -3, 0], opacity: [0.35, 1, 0.35] }} transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }} />
                           ))}
@@ -789,7 +812,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
               })}
               <AnimatePresence>
                 {game.deck.length === 0 && !dealing && (
-                  <m.span className="trump-ghost" aria-label={`Козырь: ${SUIT_NAME[game.trump]}`} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 0.35, scale: 1 }} exit={{ opacity: 0 }}>
+                  <m.span className="trump-ghost" role="img" aria-label={`Козырь: ${SUIT_NAME[game.trump]}`} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 0.35, scale: 1 }} exit={{ opacity: 0 }}>
                     <SuitIcon suit={game.trump} size="100%" />
                   </m.span>
                 )}
@@ -820,7 +843,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                   onClick={onPair}
                   role={onPair ? 'button' : undefined}
                   tabIndex={onPair ? 0 : undefined}
-                  aria-label={target ? `Покрыть ${rankLabel(pair.attack.rank)} ${SUIT_NAME[pair.attack.suit]}` : accusable ? 'Обвинить в обмане' : onPair ? 'Вернуть карту в руку' : undefined}
+                  aria-label={target ? `Покрыть: ${spokenCard(pair.attack, 'acc')}` : accusable ? 'Обвинить в обмане' : onPair ? 'Вернуть карту в руку' : undefined}
                   onKeyDown={onPair ? (e) => (e.key === 'Enter' || e.key === ' ') && onPair() : undefined}
                   animate={target && !dragging ? { y: [0, -4, 0] } : { y: 0, scale: target && hot === `pair-${i}` ? 1.06 : 1 }}
                   transition={target && !dragging ? { duration: 1, repeat: Infinity, ease: 'easeInOut' } : { type: 'spring', stiffness: 400, damping: 30 }}
@@ -1063,6 +1086,8 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
         )}
       </AnimatePresence>
 
+      {coach && <Coach game={game} me={me} ready={!waiting && !paused && staged.length === 0} />}
+
       <AnimatePresence>
         {game.over && (
           <m.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ delay: 0.5 }}>
@@ -1119,7 +1144,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
           </m.div>
         )}
       </AnimatePresence>
-    </m.div>
+    </m.main>
   )
 }
 
@@ -1269,27 +1294,46 @@ function statusText(g: GameState, actor: number | null, me: number): string {
   return ''
 }
 
-const cardName = (c: Card | undefined) => (c ? `${rankLabel(c.rank)} ${SUIT_NAME[c.suit]}` : '')
+const cardName = (c: Card | undefined, grammaticalCase: 'nom' | 'acc' | 'ins' = 'acc') => (c ? spokenCard(c, grammaticalCase) : 'карту')
 
-/** One move in words, for screen readers. */
+/** One move in words, for screen readers: «Лиса кроет восьмёрку пик тузом пик». */
 function describeMove(g: GameState, before: GameState, player: number, a: Action, me: number): string {
-  const who = player === me ? 'Вы' : g.players[player].name
+  const you = player === me
+  const who = you ? 'Вы' : g.players[player].name
+  const verb = (one: string, yours: string) => `${who} ${you ? yours : one}`
   const find = (id: string) => before.players[player].hand.find((c) => c.id === id)
   switch (a.type) {
     case 'attack':
-      return `${who}: ${before.table.length === 0 ? 'ход' : 'подкидывает'} ${cardName(find(a.cardId))}`
+      return before.table.length === 0 ? `${verb('ходит', 'ходите')} ${cardName(find(a.cardId), 'ins')}` : `${verb('подкидывает', 'подкидываете')} ${cardName(find(a.cardId))}`
     case 'throw':
-      return `${who}: ${a.cardIds.map((id) => cardName(find(id))).join(', ')}`
+      return `${verb(before.table.length === 0 ? 'ходит' : 'подкидывает', before.table.length === 0 ? 'ходите' : 'подкидываете')}: ${a.cardIds.map((id) => cardName(find(id), 'nom')).join(', ')}`
     case 'defend':
     case 'bluff':
-      return `${who}: кроет ${cardName(before.table[a.pair]?.attack)} картой ${cardName(find(a.cardId))}`
+      return `${verb('кроет', 'кроете')} ${cardName(before.table[a.pair]?.attack)} ${cardName(find(a.cardId), 'ins')}`
     case 'transfer':
-      return `${who}: переводит ${cardName(find(a.cardId))}`
+      return `${verb('переводит', 'переводите')} ${cardName(find(a.cardId), 'ins')}`
     case 'take':
-      return `${who}: беру`
+      return verb('берёт', 'берёте')
     case 'pass':
-      return `${who}: пас`
+      return `${who}: ${before.table.length > 0 && before.table.every((p) => p.defense) && player === before.attacker ? 'бито' : 'пас'}`
     case 'accuse':
-      return `${who}: обвиняет в обмане`
+      return verb('обвиняет в обмане', 'обвиняете в обмане')
   }
+}
+
+/** Everything on the table in words, for the «Прочитать стол» button. */
+export function tableSummary(g: GameState, me: number): string {
+  const n = (k: number, one: string, few: string, many: string) => `${k} ${k % 10 === 1 && k % 100 !== 11 ? one : k % 10 >= 2 && k % 10 <= 4 && (k % 100 < 12 || k % 100 > 14) ? few : many}`
+  const parts = [`Козырь: ${SUIT_NAME[g.trump]}`]
+  parts.push(g.deck.length ? `в колоде ${n(g.deck.length, 'карта', 'карты', 'карт')}, внизу ${spokenCard(g.deck[0])}` : 'колода кончилась')
+  if (g.table.length === 0) parts.push('стол пуст')
+  else parts.push(`на столе: ${g.table.map((p) => (p.defense ? `${spokenCard(p.attack)} под ${spokenCard(p.defense, 'ins')}` : `${spokenCard(p.attack)} без защиты`)).join('; ')}`)
+  const mine = sortHand(g.players[me].hand, g.trump)
+  parts.push(mine.length ? `у вас: ${mine.map((c) => spokenCard(c)).join(', ')}` : 'у вас нет карт')
+  g.players.forEach((p, i) => {
+    if (i !== me) parts.push(`${p.name}: ${p.out ? past(p.name, 'вышел', 'вышла') : n(p.hand.length, 'карта', 'карты', 'карт')}${i === g.defender ? ', отбивается' : i === g.attacker ? ', атакует' : ''}`)
+  })
+  if (g.discard.length) parts.push(`в бито ${n(g.discard.length, 'карта', 'карты', 'карт')}`)
+  if (!g.over && !g.players[me].out) parts.push(me === g.defender ? 'вы отбиваетесь' : me === g.attacker ? 'вы атакуете' : 'вы можете подкидывать')
+  return parts.map((t) => t[0].toUpperCase() + t.slice(1)).join('. ') + '.'
 }

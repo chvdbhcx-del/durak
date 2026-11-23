@@ -9,7 +9,7 @@
   "display": "standalone",
   "launch_handler": { "client_mode": ["navigate-existing", "auto"] },
   "handle_links": "preferred",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#0d1112",
   "theme_color": "#0d1112",
   "icons": [

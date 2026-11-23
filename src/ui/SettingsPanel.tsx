@@ -4,7 +4,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { maxPlayers } from '../engine/game'
 import { parseServer } from '../net/room'
 import { hasHaptics, isNative } from './native'
-import { Group, HAPTICS_ICON, IconToggle, LookPicker, SOUND_ICON, SpeedPicker, ThemePicker } from './pickers'
+import { BIG_ICON, Group, HAPTICS_ICON, IconToggle, LookPicker, SOUND_ICON, SpeedPicker, ThemePicker } from './pickers'
 import type { Settings } from './settings'
 import { AutoHeight, Sheet, sheetItem } from './Sheet'
 import { type UpdateLog, watchUpdateLog, WEB_VERSION } from './updates'
@@ -191,11 +191,12 @@ function StartOver({ onStartOver }: { onStartOver: () => void }) {
 }
 
 /** Sound and vibration as two icon buttons in one row; vibration only where the device can vibrate. */
-function QuickToggles({ settings, set }: { settings: Settings; set: (p: Partial<Settings>) => void }) {
+function QuickToggles({ settings, set, big }: { settings: Settings; set: (p: Partial<Settings>) => void; big?: boolean }) {
   return (
     <m.div className="quick-toggles" variants={sheetItem}>
       <IconToggle label="Звук" icon={SOUND_ICON} value={settings.sound} onChange={(sound) => set({ sound })} />
       {hasHaptics && <IconToggle label="Вибрация" icon={HAPTICS_ICON} value={settings.haptics} onChange={(haptics) => set({ haptics })} />}
+      {big && <IconToggle label="Крупно" icon={BIG_ICON} value={settings.big} onChange={(big) => set({ big })} />}
     </m.div>
   )
 }
@@ -208,7 +209,7 @@ export function SettingsPanel({ settings, onChange, onClose, onStartOver }: { se
   const set = (patch: Partial<Settings>) => onChange({ ...settings, ...patch })
   return (
     <Sheet title="Настройки" onClose={onClose}>
-      <QuickToggles settings={settings} set={set} />
+      <QuickToggles settings={settings} set={set} big />
       <ThemePicker value={settings.theme} onChange={(theme) => set({ theme })} />
       <LookPicker back={settings.cardBack} table={settings.tableStyle} face={settings.cardFace} onBack={(cardBack) => set({ cardBack })} onTable={(tableStyle) => set({ tableStyle })} onFace={(cardFace) => set({ cardFace })} />
       <SpeedPicker value={settings.speed} onChange={(speed) => set({ speed })} />
