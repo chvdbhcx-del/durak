@@ -159,3 +159,16 @@ export function saveWallet(w: Wallet) {
 }
 
 export const formatCoins = (n: number) => Math.round(n).toLocaleString('ru-RU')
+
+/** Leaving a room game midway counts as losing it: the held stake is gone, and it is settled now, not at the next game. */
+export function forfeitRoom(w: Wallet, seed: number): Wallet {
+  const g = w.roomWager
+  return g && g.seed === seed ? { ...w, lost: w.lost + g.held, roomWager: null } : w
+}
+
+/** A room game cut off through no fault of this player (the host closed it, the line was lost) gives the stake back. */
+export function refundRoom(w: Wallet, seed: number): { wallet: Wallet; back: number } {
+  const g = w.roomWager
+  if (!g || g.seed !== seed) return { wallet: w, back: 0 }
+  return { wallet: { ...w, balance: w.balance + g.held, roomWager: null }, back: g.held }
+}
