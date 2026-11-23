@@ -11,6 +11,9 @@ export const isIOS =
  */
 export function setupPlatform() {
   const root = document.documentElement
+  // Weak phones (few cores or little memory) get a lighter look: no blur behind dialogs, no shadows on flying cards.
+  const nav = navigator as Navigator & { deviceMemory?: number }
+  if ((navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) || (nav.deviceMemory && nav.deviceMemory <= 2)) root.classList.add('lite')
   if (!isIOS) return
   root.classList.add('ios')
   const apply = () => root.style.setProperty('--app-h', `${Math.round(window.visualViewport?.height ?? window.innerHeight)}px`)

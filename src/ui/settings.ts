@@ -39,6 +39,8 @@ export interface Settings {
   series: number
   /** coins at stake in bot games, one of STAKES */
   stake: number
+  /** «Крупно»: bigger text, cards and buttons */
+  big: boolean
 }
 
 export interface HistoryEntry {
@@ -121,6 +123,7 @@ export const DEFAULT_SETTINGS: Settings = {
   server: '',
   series: 1,
   stake: 100,
+  big: false,
 }
 /** How long a bot "thinks" before a move, in ms. Each move varies around this. */
 export const BOT_DELAY: Record<Speed, number> = { calm: 2600, normal: 1800, fast: 1000 }
