@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fanLayout } from './fan'
+import { COMFY_STEP, fanLayout, handLayout } from './fan'
 
 describe('fanLayout', () => {
   it('is symmetric around the middle card', () => {
@@ -35,5 +35,36 @@ describe('fanLayout', () => {
     expect(f.angle(0)).toBe(0)
     expect(f.drop(0)).toBe(0)
     expect(f.width).toBe(90)
+  })
+})
+
+describe('handLayout', () => {
+  it('keeps one row while the cards are wide enough to hit', () => {
+    const h = handLayout(12, 83, 328)
+    expect(h.rows).toBe(1)
+    expect(h.lift).toBe(0)
+  })
+
+  it('splits a big hand on a narrow screen into two rows with a comfortable step', () => {
+    const h = handLayout(18, 83, 328)
+    expect(h.rows).toBe(2)
+    const front = [...Array(18).keys()].filter((i) => h.spot(i).row === 1)
+    expect(front.length).toBe(9)
+    expect(h.spot(1).left - h.spot(0).left).toBeGreaterThanOrEqual(COMFY_STEP)
+    expect(h.width + 2 * h.pad).toBeLessThanOrEqual(328.001)
+  })
+
+  it('picks the card under a point in either row', () => {
+    const h = handLayout(18, 83, 328)
+    for (let i = 0; i < 18; i++) {
+      const s = h.spot(i)
+      expect(h.pick(s.left + 83 / 2, s.top + 4)).toBe(i)
+    }
+    expect(h.sameRow(0, 8)).toBe(true)
+    expect(h.sameRow(8, 9)).toBe(false)
+  })
+
+  it('stays one row on a wide screen', () => {
+    expect(handLayout(18, 120, 860).rows).toBe(1)
   })
 })

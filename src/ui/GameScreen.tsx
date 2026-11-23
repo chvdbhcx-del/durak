@@ -8,12 +8,12 @@ import type { Friends } from '../net/useFriends'
 import { Action, canThrow, currentActor, gameIdOf, GameState, HAND_SIZE, legalActions, previewAction } from '../engine/game'
 import { CardView, flightEnd, type Flight } from './CardView'
 import { notify, tap } from './native'
-import { playCard, playDeal, playSweep } from './sfx'
+import { playCard, playDeal, playSweep, playTick } from './sfx'
 import { BOT_NAMES, past } from './pickers'
 import { AVATARS } from './settings'
 import { type LinkState, RoomLink } from './RoomStatus'
 import { SuitIcon } from './SuitIcon'
-import { fanLayout } from './fan'
+import { handLayout } from './fan'
 import { Coach } from './Coach'
 
 const DEAL_STEP_MS = 120
@@ -69,6 +69,10 @@ interface Props {
   /** an online host: back from the finished game to the room, to change the setup */
   onToLobby?: () => void
   room?: { code: string; notice: string | null; reconnecting?: boolean; roster?: { seat: number; name: string; fid?: string; off?: boolean; away?: boolean }[]; turnMs?: number; link?: LinkState }
+  /** bot games: takes back the player's last move while the bots haven't answered it yet */
+  onUndo?: () => void
+  /** coins the next game would put at stake, shown on the "play again" button */
+  nextStake?: number
   /** a newcomer's first games: wordless tips show the first moves */
   coach?: boolean
 }
@@ -101,7 +105,7 @@ function useCardSizes() {
     const k = document.documentElement.hasAttribute('data-big') ? 1.1 : 1
     const table = Math.round(k * (flat ? Math.max(46, h * 0.15) : wide ? Math.max(84, Math.min(150, h * 0.125)) : Math.max(52, Math.min(128, Math.min(w * 0.185, h * 0.105)))))
     const hand = Math.round(k * (flat ? Math.max(54, h * 0.17) : wide ? Math.max(96, Math.min(170, h * 0.155)) : Math.max(62, Math.min(130, Math.min(w * 0.232, h * 0.122)))))
-    return { table, hand, flat }
+    return { table, hand, flat, tall: !flat && h >= 680 }
   }
   const [s, setS] = useState(calc)
   useEffect(() => {
@@ -131,7 +135,7 @@ const DEAL_FLIGHT: Flight = { kind: 'draw', delay: 0 }
 const FAN_SPRING = { type: 'spring', stiffness: 320, damping: 30 } as const
 
 /** Deals the opening hands one card at a time, round-robin, whenever a new game starts. */
-function useDealing(game: GameState) {
+function useDealing(game: GameState, stepMs: number) {
   const seed = gameIdOf(game)
   const total = game.players.length * HAND_SIZE
   // One step past the last card: the deal lasts until the last card has landed, so it flies like the others.
@@ -142,10 +146,10 @@ function useDealing(game: GameState) {
   const dealing = step < done
   useEffect(() => {
     if (!dealing) return
-    const wait = step === 0 ? 450 : step === total ? flightEnd(DEAL_FLIGHT) * 1000 : DEAL_STEP_MS
+    const wait = step === 0 ? 450 : step === total ? flightEnd(DEAL_FLIGHT) * 1000 : stepMs
     const t = setTimeout(() => setState({ seed, dealt: step + 1 }), wait)
     return () => clearTimeout(t)
-  }, [step, dealing, seed, total])
+  }, [step, dealing, seed, total, stepMs])
   return { dealt: Math.min(step, total), dealing }
 }
 
@@ -182,20 +186,28 @@ function rememberAccuse() {
   }
 }
 
-export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotThrow, onFinished, series, wager, payout, onRefill, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, onToLobby, room, coach }: Props) {
+export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTurn, onBotThrow, onFinished, series, wager, payout, onRefill, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, onToLobby, room, onUndo, nextStake, coach }: Props) {
   /** a guest whose line to the host is down: moves can't go out, so the hand waits */
   const unlinked = !!room?.link?.guest && !!room.reconnecting
-  const { table: cw, hand: hw, flat } = useCardSizes()
+  const { table: baseCw, hand: hw, flat, tall } = useCardSizes()
+  // Once the player is out, only the others are left to finish: bots then play four times faster.
+  const botDelay = game.players[me]?.out && !game.over ? Math.round(baseDelay / 4) : baseDelay
+  const cw = baseCw
   const [stripRef, stripW] = useWidth<HTMLElement>()
   const [meRef, meW] = useWidth<HTMLElement>()
   const [controlsRef, controlsW] = useWidth<HTMLDivElement>()
-  const { dealt, dealing } = useDealing(game)
+  // The deal is quicker on the fast bot speed and from the second game of a tournament on.
+  const { dealt, dealing } = useDealing(game, baseDelay <= 1000 || (series?.played ?? 0) > 0 ? DEAL_STEP_MS / 2 : DEAL_STEP_MS)
   const zones = useMemo(() => zoneMap(game), [game])
   const prevZones = useRef(zones)
   const gameId = gameIdOf(game)
   const prevSeed = useRef(gameId)
-  /** a card waiting for the player to pick which attack it covers */
+  /** a card waiting for the player to pick which attack it covers, or whether it covers or transfers */
   const [selected, setSelected] = useState<string | null>(null)
+  /** the transfer slot was tapped with several cards that could go: the player picks one in the hand */
+  const [transferPick, setTransferPick] = useState(false)
+  /** a card picked with the arrow keys */
+  const [keyCard, setKeyCard] = useState<number | null>(null)
   /** moves lined up on the table, made only when the player confirms */
   const [plan, setPlan] = useState<Action[]>([])
   const [banner, setBanner] = useState<Banner | null>(null)
@@ -370,7 +382,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
       if (['attack', 'defend', 'bluff', 'transfer', 'throw'].includes(a.action.type) && !(a.player === me && a.action.type === 'throw')) playCard()
       const who = game.players[a.player]
       if (a.action.type === 'transfer') show(a.player === me ? 'Вы перевели' : `${who.name} переводит`, 'info')
-      else if (a.action.type === 'take') show(a.player === me ? 'Вы берёте' : `${who.name} берёт`, a.player === me ? 'bad' : 'good')
+      // Someone else taking already shows in their bubble and role, so it gets no banner of its own.
     }
     if (before.table.length > 0 && game.table.length === 0 && game.lastRound?.end === 'beaten') show('Бито', 'info')
     // A short speech bubble over the seat that just spoke, as at a real table.
@@ -387,6 +399,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
     else if (currentActor(game) === me && currentActor(before) !== me) said.push('Ваш ход')
     if (said.length) setAnnounce(said.filter(Boolean).join('. '))
     setSelected(null)
+    setTransferPick(false)
     setPlan([])
   }, [game, me])
 
@@ -434,6 +447,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
     const t = setTimeout(() => {
       setHurry(true)
       tap('medium')
+      playTick()
     }, Math.max(0, timed - 10_000))
     return () => clearTimeout(t)
   }, [myClock, timed, turnTick.current.n])
@@ -450,6 +464,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
   const play = (action: Action) => {
     if (unlinked) return
     setSelected(null)
+    setTransferPick(false)
     setPlan([])
     tap(action.type === 'take' ? 'medium' : 'light')
     act(action)
@@ -480,6 +495,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
     if (move.type === 'defend' || move.type === 'throw') return play(move)
     tap('light')
     setSelected(null)
+    setTransferPick(false)
     setPlan([...staged, move])
   }
 
@@ -499,8 +515,9 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
     else if (zone === `seat-${transferSeat}` || zone === 'transfer') move = transfer
     else if (zone === 'table') move = transfer ?? (defends.length === 1 ? defends[0] : undefined)
     else if (!zone) {
-      if (defends.length === 1) move = defends[0]
-      else if (defends.length > 1) {
+      // A card that could cover as well as transfer is only picked up: the player then taps the pair or the transfer slot.
+      if (defends.length === 1 && !transfer) move = defends[0]
+      else if (defends.length > 1 || (defends.length === 1 && transfer)) {
         tap('light')
         setSelected((s) => (s === cardId ? null : cardId))
         return true
@@ -523,22 +540,33 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
     }
   }
 
-  const playable = new Set(hand.filter((c) => canStage(c.id)).map((c) => c.id))
   const focus = dragging ?? selected
   const focusOptions = focus ? optionsFor(focus) : []
   const targetPairs = new Set(focusOptions.flatMap((a) => (a.type === 'defend' ? [a.pair] : [])))
   const focusTransfers = focusOptions.some((a) => a.type === 'transfer')
   // The dashed "+" slot that says a card of this rank can be passed on to the next player.
   const transferCards = staged.length === 0 ? hand.filter((c) => viewLegal.some((a) => a.type === 'transfer' && a.cardId === c.id)) : []
+  const transferIds = new Set(transferCards.map((c) => c.id))
+  const playable = transferPick ? transferIds : new Set(hand.filter((c) => canStage(c.id)).map((c) => c.id))
+  // The slot never picks a card for the player: with one card that can go it goes, with several the player chooses.
   const useTransferSlot = () => {
-    const pick = (selected && transferCards.find((c) => c.id === selected)) || transferCards.slice().sort((a, b) => Number(a.suit === game.trump) - Number(b.suit === game.trump) || a.rank - b.rank)[0]
-    if (pick) place(pick.id, 'transfer')
+    const chosen = selected && transferCards.find((c) => c.id === selected)
+    if (chosen) return place(chosen.id, 'transfer')
+    if (transferCards.length === 1) return place(transferCards[0].id, 'transfer')
+    tap('light')
+    setSelected(null)
+    setTransferPick((v) => !v)
   }
   const tableTarget = !!dragging && (!!throwWith(dragging) || focusTransfers || targetPairs.size === 1)
 
   const onCard = (card: Card) => {
     if (Date.now() - lastDragEnd.current < 300) return
     if (selected === card.id) return setSelected(null)
+    if (transferPick) {
+      if (transferIds.has(card.id)) place(card.id, 'transfer')
+      else setTransferPick(false)
+      return
+    }
     place(card.id)
   }
 
@@ -566,25 +594,64 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
   const pass = legal.find((a) => a.type === 'pass')
   const passLabel = game.taking ? 'Пусть берёт' : me === game.attacker ? 'Бито' : 'Пас'
   const myTurn = actor === me && !game.over
-  const main: { label: string; tone: 'primary' | 'danger'; onClick?: () => void } =
+  // "Беру" is only the loud red button when there is nothing to cover with; otherwise it is a quiet outline.
+  const canCover = legal.some((a) => a.type === 'defend' || a.type === 'transfer')
+  // Nothing to throw in and no choice to make: "Бито" or "Пусть берёт" goes by itself after a moment.
+  const canAccuse = !!game.options.cheat && me !== game.defender && !game.taking && game.table.some((p) => p.defense)
+  const autoPass = !!pass && myTurn && !thrower && staged.length === 0 && !paused
+  const autoMs = canAccuse ? 2200 : 800
+  const main: { label: string; tone: 'primary' | 'danger' | 'quiet'; onClick?: () => void } =
     staged[0]?.type === 'transfer'
       ? { label: 'Перевести', tone: 'primary', onClick: confirm }
       : take && myTurn
-          ? { label: 'Беру', tone: 'danger', onClick: () => play(take) }
+          ? { label: 'Беру', tone: canCover ? 'quiet' : 'danger', onClick: () => play(take) }
           : pass && myTurn
             ? { label: passLabel, tone: 'primary', onClick: () => play(pass) }
             : { label: myTurn ? 'Ваш ход' : game.over ? 'Конец' : 'Ждём', tone: 'primary' }
+  const autoRef = useRef(main.onClick)
+  autoRef.current = main.onClick
+  useEffect(() => {
+    if (!autoPass) return
+    const t = setTimeout(() => autoRef.current?.(), autoMs)
+    return () => clearTimeout(t)
+  }, [autoPass, autoMs, game])
 
-  // Keyboard play: 1–9 the playable cards in hand order, Enter or Space the main button, T to take, R reads the table out, Esc to undo a choice.
-  const keys = useRef({ hand, playable, onCard, main, take, play, readTable })
-  keys.current = { hand, playable, onCard, main, take, play, readTable }
+  // Bot games: the last move can be taken back for a moment, while the bots are still thinking it over.
+  const [undoShown, setUndoShown] = useState(false)
+  useEffect(() => {
+    setUndoShown(!!onUndo)
+    if (!onUndo) return
+    const t = setTimeout(() => setUndoShown(false), 2000)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game, !!onUndo])
+
+  const clockKey = turnTick.current.n
+
+  // Keyboard play: ←/→ pick a playable card and Enter plays it, 1–9 play the playable cards in hand order,
+  // Enter or Space press the main button, T takes, R reads the table out, Esc drops a choice.
+  const keys = useRef({ hand, playable, onCard, main, take, play, keyCard, readTable })
+  keys.current = { hand, playable, onCard, main, take, play, keyCard, readTable }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.closest('[role="dialog"]'))) return
       const k = keys.current
-      if (/^Digit[1-9]$/.test(e.code)) {
+      if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+        const cards = k.hand.map((c, i) => (k.playable.has(c.id) ? i : -1)).filter((i) => i >= 0)
+        if (!cards.length) return
+        e.preventDefault()
+        const at = k.keyCard === null ? -1 : cards.indexOf(k.keyCard)
+        const next = at < 0 ? (e.code === 'ArrowRight' ? 0 : cards.length - 1) : (at + (e.code === 'ArrowRight' ? 1 : -1) + cards.length) % cards.length
+        setKeyCard(cards[next])
+        setFan(cards[next])
+      } else if (e.code === 'Enter' && k.keyCard !== null && k.hand[k.keyCard] && k.playable.has(k.hand[k.keyCard].id) && (!t || t === document.body)) {
+        e.preventDefault()
+        k.onCard(k.hand[k.keyCard])
+        setKeyCard(null)
+        setFan(null)
+      } else if (/^Digit[1-9]$/.test(e.code)) {
         const cards = k.hand.filter((c) => k.playable.has(c.id))
         const c = cards[Number(e.code.slice(5)) - 1]
         if (c) {
@@ -602,6 +669,9 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
         k.play(k.take)
       } else if (e.code === 'Escape') {
         setSelected(null)
+        setTransferPick(false)
+        setKeyCard(null)
+        setFan(null)
         setPlan([])
       }
     }
@@ -613,14 +683,13 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
   const opponents = Array.from({ length: n - 1 }, (_, k) => game.players[(me + 1 + k) % n])
   // The fan gets the width of its own row (beside the buttons on a phone lying on its side).
   const handRoom = Math.min(860, meW ? meW - (flat ? controlsW + 12 : 0) : window.innerWidth - 32 - (flat ? 240 : 0))
-  const fanGeo = fanLayout(hand.length, hw, handRoom)
-  const handStep = fanGeo.step
+  const fanGeo = handLayout(hand.length, hw, handRoom)
   handIds.current = hand.map((c) => c.id)
   const fanAt = (e: React.PointerEvent) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
     if (hand.length === 0) return
-    const i = hand.length > 1 ? Math.round((e.clientX - r.left - hw / 2) / handStep) : 0
-    setFan(Math.max(0, Math.min(hand.length - 1, i)))
+    // the cards start 16 px below the top of the hand box
+    setFan(fanGeo.pick(e.clientX - r.left, e.clientY - r.top - 16))
   }
   const miniW = Math.round(cw * 0.42)
   // Every opponent gets a slot of the same fixed width, so a big hand never pushes its neighbours aside
@@ -633,7 +702,28 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
   const fanMax = Math.max(16, slotW - (compactSeats ? 8 : 24))
   const seatMini = Math.min(miniW, Math.round(fanMax * 0.62))
   const deckCards = [...game.deck.slice(1), ...undealt]
-  const status = unlinked ? 'Ждём связь…' : hurry && actor === me ? 'Ход за вас через 10 с' : dealing ? 'Раздача…' : staged.length ? planText(staged, game) : selected ? 'Выберите карту на столе' : statusText(game, actor, me)
+  const status = unlinked
+    ? 'Ждём связь…'
+    : hurry && actor === me
+      ? 'Ход за вас через 10 с'
+      : dealing
+    ? 'Раздача…'
+    : staged.length
+      ? planText(staged, game)
+      : transferPick
+        ? 'Какой картой перевести?'
+        : selected
+          ? focusTransfers && targetPairs.size > 0
+            ? 'Покрыть или перевести?'
+            : 'Выберите карту на столе'
+          : autoPass
+            ? passLabel
+            : statusText(game, actor, me)
+  // The player's own role this round colours the line over the hand: gold to attack, red to defend.
+  const myRole = game.over || dealing || mine.out ? '' : me === game.defender ? 'defending' : thrower || me === game.attacker ? 'attacking' : ''
+  // Table cards grow when there are only a few pairs, so the felt doesn't sit empty; never past the hand's size.
+  const pairs = view.table.length
+  const battleCw = Math.round(Math.min(hw, cw * (flat ? 1 : pairs <= 2 ? (tall ? 1.3 : 1.15) : pairs === 3 ? (tall ? 1.15 : 1.05) : 1)))
   const seriesDone = !!series && series.played >= series.total
   const worst = series ? Math.max(...series.fools) : 0
   const losers = series ? game.players.filter((_, i) => series.fools[i] === worst) : []
@@ -651,11 +741,12 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
     >
       <m.header className="bar" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
         <span className="chips" title={`${game.options.deckSize} карт`}>
-          <AnimatePresence mode="popLayout" initial={false}>
-            <m.span key={game.options.mode} className="chip" {...fade}>
-              {game.options.mode === 'podkidnoy' ? 'Подкидной' : 'Переводной'}
+          {/* the usual game needs no chip; only the transfer rules are worth a reminder */}
+          {game.options.mode === 'perevodnoy' && (
+            <m.span className="chip" {...fade}>
+              Переводной
             </m.span>
-          </AnimatePresence>
+          )}
           <span className={`chip trump-chip ${isRed(game.trump) ? 'red' : ''}`} role="img" aria-label={`Козырь: ${SUIT_NAME[game.trump]}`}>
             <SuitIcon suit={game.trump} size={14} />
           </span>
@@ -676,11 +767,20 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
             </span>
           )}
         </span>
+        <span className="bar-buttons">
+        {onEmote && (
+          <m.button type="button" className="icon" aria-label="Смайлики" aria-expanded={emoteOpen} whileTap={{ scale: 0.9 }} onClick={() => setEmoteOpen((o) => !o)}>
+            <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>
+              🙂
+            </span>
+          </m.button>
+        )}
         <m.button type="button" className="icon" aria-label="Меню" whileTap={{ scale: 0.9 }} onClick={onOpenSettings}>
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
             <path fill="currentColor" d="M4 6.5h16a1 1 0 1 1 0 2H4a1 1 0 0 1 0-2zm0 4.5h16a1 1 0 1 1 0 2H4a1 1 0 0 1 0-2zm0 4.5h16a1 1 0 1 1 0 2H4a1 1 0 0 1 0-2z" />
           </svg>
         </m.button>
+        </span>
       </m.header>
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {announce}
@@ -783,9 +883,17 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                       <CardView key={c.id} card={c} faceUp={false} trump={game.trump} size="mini" style={{ left: i * step }} flight={flightOf(c.id)} />
                     ))}
                   </m.div>
+                  {/* Only a seat that is doing something gets a word; the rest stay quiet. */}
                   <AnimatePresence mode="wait" initial={false}>
-                    <m.span key={isTransferTarget ? 'transfer' : role ?? 'wait'} className={`role ${role || isTransferTarget ? '' : 'empty'}`} {...fade}>
-                      {isTransferTarget ? (compactSeats ? 'Сюда' : 'Перевести сюда') : role ?? 'Ждёт'}
+                    <m.span key={isTransferTarget ? 'transfer' : role ?? 'wait'} className={`role ${role || isTransferTarget ? '' : 'empty'} ${roleKind(role)}`} title={role ?? undefined} {...fade}>
+                      {isTransferTarget ? (
+                        compactSeats ? 'Сюда' : 'Перевести сюда'
+                      ) : role ? (
+                        <>
+                          <RoleIcon role={role} />
+                          <span className="role-text">{role}</span>
+                        </>
+                      ) : null}
                     </m.span>
                   </AnimatePresence>
                 </m.div>
@@ -825,7 +933,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
             )}
           </div>
 
-          <div className="battle">
+          <div className="battle" style={{ ['--cw' as string]: `${battleCw}px` }}>
             {view.table.map((pair, i) => {
               const target = targetPairs.has(i)
               const attackPending = pending.has(pair.attack.id)
@@ -861,7 +969,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                   type="button"
                   layout
                   data-drop="transfer"
-                  className={`transfer-slot ${focusTransfers && dragging ? 'target' : ''} ${hot === 'transfer' ? 'drop-hot' : ''}`}
+                  className={`transfer-slot ${(focusTransfers && (dragging || selected)) || transferPick ? 'target' : ''} ${hot === 'transfer' ? 'drop-hot' : ''}`}
                   aria-label="Перевести: положите карту того же достоинства"
                   onClick={useTransferSlot}
                   initial={{ opacity: 0, scale: 0.85 }}
@@ -885,12 +993,16 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
 
           <div className="discard-zone">
             <div className="discard">
+              {game.discard.length === 0 && (
+                <svg className="discard-mark" viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" d="M7 5.5 12.5 4l3 11.2-5.5 1.5zM10.5 6.5l5-1.8 3.8 10.6-5 1.8" />
+                </svg>
+              )}
               {game.discard.slice(-Math.max(PILE_SHOWN, game.discard.filter((c) => flights.has(c.id)).length)).map((c) => {
                 const t = hashTilt(c.id)
                 return <CardView key={c.id} card={c} faceUp={false} trump={game.trump} className="stacked" style={{ rotate: (t - 0.5) * 50, x: (t - 0.5) * 10, y: (0.5 - t) * 8 }} flight={flightOf(c.id)} />
               })}
             </div>
-            {game.discard.length > 0 && <span className="zone-label">{game.discard.length}</span>}
           </div>
 
           <AnimatePresence>
@@ -909,7 +1021,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
           </AnimatePresence>
         </m.section>
 
-        <section ref={meRef} className={`me ${unlinked ? 'locked' : ''} ${hurry && actor === me ? 'hurry' : ''}`} aria-label="Ваши карты" aria-busy={unlinked}>
+        <section ref={meRef} className={`me ${myTurn ? 'turn' : ''} ${myRole} ${unlinked ? 'locked' : ''} ${hurry && actor === me ? 'hurry' : ''}`} aria-label="Ваши карты" aria-busy={unlinked}>
           <div ref={controlsRef} className="controls">
             {clock(me)}
             <AnimatePresence mode="wait" initial={false}>
@@ -918,45 +1030,41 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
               </m.p>
             </AnimatePresence>
             <div className="buttons">
-              {onEmote && (
-                <m.button type="button" className="icon" aria-label="Смайлики" aria-expanded={emoteOpen} whileTap={{ scale: 0.9 }} onClick={() => setEmoteOpen((o) => !o)}>
-                  <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>
-                    🙂
-                  </span>
-                </m.button>
-              )}
               <AnimatePresence>
-                {staged.length > 0 && (
+                {staged.length > 0 ? (
                   <m.button key="cancel" type="button" className="icon cancel" aria-label="Вернуть карты в руку" whileTap={{ scale: 0.9 }} onClick={() => setPlan([])} {...pop}>
                     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
                       <path fill="currentColor" d="M6.3 6.3a1 1 0 0 1 1.4 0L12 10.6l4.3-4.3a1 1 0 1 1 1.4 1.4L13.4 12l4.3 4.3a1 1 0 0 1-1.4 1.4L12 13.4l-4.3 4.3a1 1 0 0 1-1.4-1.4l4.3-4.3-4.3-4.3a1 1 0 0 1 0-1.4z" />
                     </svg>
                   </m.button>
-                )}
+                ) : undoShown && onUndo ? (
+                  <m.button key="undo" type="button" className="icon cancel undo" aria-label="Отменить ход" whileTap={{ scale: 0.9 }} onClick={() => (tap('light'), setUndoShown(false), onUndo())} {...pop}>
+                    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                      <path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M9 7 5 11l4 4M5 11h9a5 5 0 0 1 0 10h-2" />
+                    </svg>
+                  </m.button>
+                ) : null}
               </AnimatePresence>
-              <AnimatePresence initial={false}>
-                {main.onClick && (
-                <m.button
-                  key="main"
-                  {...pop}
+              {/* The main button never leaves its spot: with nothing to press it stays as a quiet plate. */}
+              <m.button
                 type="button"
-                className={`main-action ${main.tone} ready`}
-                whileTap={{ scale: 0.95 }}
+                className={`main-action ${main.tone} ${main.onClick ? 'ready' : ''} ${hurry && main.onClick ? 'hurry' : ''}`}
+                whileTap={main.onClick ? { scale: 0.95 } : undefined}
+                disabled={!main.onClick}
                 onClick={main.onClick}
               >
+                {autoPass && <m.i key={`auto-${clockKey}`} className="auto-fill" aria-hidden="true" initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: autoMs / 1000, ease: 'linear' }} />}
                 <AnimatePresence mode="popLayout" initial={false}>
                   <m.span key={main.label} initial={{ y: 14, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -14, opacity: 0 }} transition={{ type: 'spring', stiffness: 520, damping: 34 }}>
                     {main.label}
                   </m.span>
                 </AnimatePresence>
               </m.button>
-                )}
-              </AnimatePresence>
             </div>
           </div>
           <div
             className="hand"
-            style={{ width: fanGeo.width, marginInline: fanGeo.pad, marginBottom: fanGeo.below }}
+            style={{ width: fanGeo.width, marginInline: fanGeo.pad, marginBottom: fanGeo.below, ['--lift' as string]: `${fanGeo.lift}px` }}
             onPointerDown={(e) => {
               const id = (e.target as HTMLElement).closest<HTMLElement>('[data-card]')?.dataset.card ?? null
               press.current = { x: e.clientX, y: e.clientY, id, mode: 'wait' }
@@ -995,12 +1103,14 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
               const isSel = selected === c.id
               const isDrag = dragging === c.id
               const hint = defenseHint(view, c, can, me)
+              const spot = fanGeo.spot(i)
+              const dim = !can && actor === me
               return (
                 // The slot only places the card in the hand; when its place changes the card glides there on its
                 // own layout animation. What moves all the time under a pointer (the fan's push, lift and zoom)
                 // happens on a layer inside the card, so it neither re-renders the table nor upsets the card's
                 // measurements: transforms on the boxes around a card made flights in and out of the hand jump.
-                <FanSlot key={`${c.id}:${resetKey}`} store={fanStore} index={i} left={i * handStep} lifted={isDrag}>
+                <FanSlot key={`${c.id}:${resetKey}`} store={fanStore} index={i} left={spot.left} top={spot.top} row={spot.row} lifted={isDrag}>
                 <HandSlot
                   id={c.id}
                   registry={slotControls}
@@ -1039,11 +1149,11 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                     card={c}
                     faceUp
                     trump={game.trump}
-                    className={`${can ? 'playable' : actor === me ? 'dim' : ''} ${isSel ? 'selected' : ''} ${hint ? 'beats' : ''}`}
+                    className={`${can ? 'playable' : dim ? 'dim' : ''} ${isSel ? 'selected' : ''} ${hint ? 'beats' : ''} ${keyCard === i ? 'keyed' : ''}`}
                     flight={flightOf(c.id)}
-                    animate={{ rotate: isDrag ? 0 : fanGeo.angle(i), y: isDrag ? 0 : fanGeo.drop(i) + (isSel ? -hw * 0.2 : 0) }}
+                    animate={{ rotate: isDrag ? 0 : spot.angle, y: isDrag ? 0 : spot.drop + (isSel ? -hw * 0.2 : 0) + (dim ? 5 : 0) }}
                     wrap={(inner) => (
-                      <FanPose store={fanStore} index={i} still={isDrag} hw={hw} left={i * handStep} maxLeft={fanGeo.width - hw}>
+                      <FanPose store={fanStore} index={i} still={isDrag} hw={hw} left={spot.left} minLeft={spot.minLeft} maxLeft={spot.maxLeft} sameRow={fanGeo.sameRow}>
                         {inner}
                       </FanPose>
                     )}
@@ -1064,6 +1174,7 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
             {liveEmote.emoji}
           </m.div>
         )}
+        {emoteOpen && onEmote && <div key="emote-catch" className="emote-catch" onPointerDown={() => setEmoteOpen(false)} />}
         {emoteOpen && onEmote && (
           <m.div key="emote-picker" className="emote-picker" role="menu" initial={{ opacity: 0, y: 8, scale: 0.92 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.92 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
             {EMOTES.map((e) => (
@@ -1123,6 +1234,19 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                   </ul>
                 )}
                 <div className={`result-actions ${onToLobby ? 'three' : ''}`}>
+                  {onPlayAgain ? (
+                    <m.button type="button" className="primary" whileTap={{ scale: 0.95 }} autoFocus onClick={onPlayAgain}>
+                      {series ? (seriesDone ? 'Новый турнир' : 'Следующая партия') : 'Ещё партию'}
+                      {!!nextStake && (
+                        <span className="again-stake">
+                          · <Coin size={14} />
+                          {formatCoins(nextStake)}
+                        </span>
+                      )}
+                    </m.button>
+                  ) : (
+                    <span className="muted">Ждём, когда хост начнёт новую партию</span>
+                  )}
                   <m.button type="button" className="ghost" whileTap={{ scale: 0.95 }} onClick={onExit}>
                     {onToLobby ? 'Выйти' : 'В меню'}
                   </m.button>
@@ -1130,13 +1254,6 @@ export function GameScreen({ game, me, act, paused, botDelay, onBotTurn, onBotTh
                     <m.button type="button" className="ghost" whileTap={{ scale: 0.95 }} onClick={onToLobby}>
                       В комнату
                     </m.button>
-                  )}
-                  {onPlayAgain ? (
-                    <m.button type="button" className="primary" whileTap={{ scale: 0.95 }} autoFocus onClick={onPlayAgain}>
-                      {series ? (seriesDone ? 'Новый турнир' : 'Следующая партия') : 'Ещё партию'}
-                    </m.button>
-                  ) : (
-                    <span className="muted">Ждём, когда хост начнёт новую партию</span>
                   )}
                 </div>
               </Stagger>
@@ -1211,25 +1328,28 @@ function useFanStore() {
 }
 
 /** A hand card's place in the fan; the card under the pointer is drawn on top. */
-function FanSlot({ store, index, left, lifted, children }: { store: FanStore; index: number; left: number; lifted: boolean; children: ReactNode }) {
+function FanSlot({ store, index, left, top, row, lifted, children }: { store: FanStore; index: number; left: number; top: number; row: number; lifted: boolean; children: ReactNode }) {
   const fan = useSyncExternalStore(store.subscribe, store.get)
+  // in a two-row hand the front row lies over the back one
   return (
-    <div className="hand-pos" style={{ left, zIndex: lifted ? 200 : fan === index ? 100 : index + 1 }}>
+    <div className="hand-pos" style={{ left, top: 16 + top, zIndex: lifted ? 400 : fan === index ? 300 : row * 100 + index + 1 }}>
       {children}
     </div>
   )
 }
 
 /** The face of a hand card rising under the pointer while its neighbours part. */
-function FanPose({ store, index, still, hw, left, maxLeft, children }: { store: FanStore; index: number; still: boolean; hw: number; left: number; maxLeft: number; children: ReactNode }) {
+function FanPose({ store, index, still, hw, left, minLeft, maxLeft, sameRow, children }: { store: FanStore; index: number; still: boolean; hw: number; left: number; minLeft: number; maxLeft: number; sameRow: (i: number, j: number) => boolean; children: ReactNode }) {
   const fan = useSyncExternalStore(store.subscribe, store.get)
-  const dist = fan === null || still ? 9 : Math.abs(index - fan)
+  // only the cards in the same row part around the raised one
+  const dist = fan === null || still || !sameRow(index, fan) ? 9 : Math.abs(index - fan)
   const k = Math.max(0, 1 - dist / 2.4)
   const part = fan === null || dist === 0 ? 0 : Math.sign(index - fan) * hw * 0.3 * Math.min(1, k * 1.7)
   // neighbours part inside the fan; the edge cards don't get shoved past its ends
-  const push = Math.max(0, Math.min(maxLeft, left + part)) - left
+  const push = Math.max(minLeft, Math.min(maxLeft, left + part)) - left
+  // The raised card grows a little less than it used to, so it no longer covers the status and the main button.
   return (
-    <m.span className="pose" style={{ originY: 1 }} initial={false} animate={{ x: push, y: -hw * 0.3 * k, scale: 1 + 0.2 * k }} transition={FAN_SPRING}>
+    <m.span className="pose" style={{ originY: 1 }} initial={false} animate={{ x: push, y: -hw * 0.24 * k, scale: 1 + 0.15 * k }} transition={FAN_SPRING}>
       {children}
     </m.span>
   )
@@ -1319,6 +1439,27 @@ function describeMove(g: GameState, before: GameState, player: number, a: Action
     case 'accuse':
       return verb('обвиняет в обмане', 'обвиняете в обмане')
   }
+}
+
+function roleKind(role: string | null): string {
+  return role === 'Атакует' ? 'attack' : role === 'Отбивается' ? 'defend' : role === 'Берёт' ? 'take' : role === 'Вышел' ? 'gone' : ''
+}
+
+/** A small mark for a seat's role, which still shows where the word doesn't fit (a phone on its side, six players). */
+function RoleIcon({ role }: { role: string }) {
+  const d =
+    role === 'Атакует'
+      ? 'M14.5 4H20v5.5L10 19.5 7.5 17l-2 2L4 17.5l2-2L3.5 13zM6 14l4 4'
+      : role === 'Отбивается'
+        ? 'M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z'
+        : role === 'Берёт'
+          ? 'M12 4v12m-5-5 5 5 5-5M5 20h14'
+          : 'M5 12.5 10 17 19 7'
+  return (
+    <svg className="role-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" d={d} />
+    </svg>
+  )
 }
 
 /** Everything on the table in words, for the «Прочитать стол» button. */
