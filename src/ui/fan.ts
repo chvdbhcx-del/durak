@@ -55,3 +55,79 @@ export function fanLayout(n: number, cw: number, room: number): FanLayout {
   const below = radius * (1 - Math.cos(half)) + (cw / 2) * Math.sin(half)
   return { step, width: cw + step * (n - 1), pad, below, angle, drop }
 }
+
+/** below this step (px) a card in one row is too thin a strip to hit with a thumb */
+export const COMFY_STEP = 22
+/** a big hand splits into two rows only from this many cards */
+const TWO_ROWS_FROM = 13
+
+export interface HandSpot {
+  row: 0 | 1
+  /** index of the card within its row */
+  col: number
+  left: number
+  top: number
+  angle: number
+  drop: number
+  /** how far the card may be pushed sideways inside its row */
+  minLeft: number
+  maxLeft: number
+}
+
+export interface HandLayout {
+  rows: 1 | 2
+  /** width of the cards' unrotated boxes, the wider row, px */
+  width: number
+  pad: number
+  below: number
+  /** extra height the back row takes above the front row, px */
+  lift: number
+  spot: (i: number) => HandSpot
+  /** the card under a point given relative to the hand box (x from its left, y from the top of the cards) */
+  pick: (x: number, y: number) => number
+  /** whether cards i and j sit in the same row */
+  sameRow: (i: number, j: number) => boolean
+}
+
+/**
+ * The player's hand: one fan, or for a big hand on a narrow screen two fans, the back row raised
+ * so that only its top with the indices shows above the front row. The back row holds the later
+ * cards of the sorted hand: the higher ranks and the trumps.
+ */
+export function handLayout(n: number, cw: number, room: number): HandLayout {
+  const one = fanLayout(n, cw, room)
+  if (n < TWO_ROWS_FROM || one.step >= COMFY_STEP) {
+    const spot = (i: number): HandSpot => ({ row: 0, col: i, left: i * one.step, top: 0, angle: one.angle(i), drop: one.drop(i), minLeft: 0, maxLeft: one.width - cw })
+    return {
+      rows: 1,
+      width: one.width,
+      pad: one.pad,
+      below: one.below,
+      lift: 0,
+      spot,
+      pick: (x) => (n > 1 ? Math.max(0, Math.min(n - 1, Math.round((x - cw / 2) / one.step))) : 0),
+      sameRow: () => true,
+    }
+  }
+  const front = Math.ceil(n / 2)
+  const back = n - front
+  const fl = fanLayout(front, cw, room)
+  const bl = fanLayout(back, cw, room)
+  const width = Math.max(fl.width, bl.width)
+  const lift = Math.round(cw * 1.4 * 0.42)
+  const offF = (width - fl.width) / 2
+  const offB = (width - bl.width) / 2
+  const spot = (i: number): HandSpot => {
+    if (i < front) return { row: 1, col: i, left: offF + i * fl.step, top: lift, angle: fl.angle(i), drop: fl.drop(i), minLeft: offF, maxLeft: offF + fl.width - cw }
+    const c = i - front
+    return { row: 0, col: c, left: offB + c * bl.step, top: 0, angle: bl.angle(c), drop: bl.drop(c), minLeft: offB, maxLeft: offB + bl.width - cw }
+  }
+  const pick = (x: number, y: number) => {
+    if (y < lift) {
+      const c = back > 1 ? Math.max(0, Math.min(back - 1, Math.round((x - offB - cw / 2) / bl.step))) : 0
+      return front + c
+    }
+    return front > 1 ? Math.max(0, Math.min(front - 1, Math.round((x - offF - cw / 2) / fl.step))) : 0
+  }
+  return { rows: 2, width, pad: Math.max(fl.pad, bl.pad), below: fl.below, lift, spot, pick, sameRow: (i, j) => i < front === j < front }
+}

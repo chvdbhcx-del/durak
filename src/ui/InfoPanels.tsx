@@ -37,6 +37,10 @@ const RULES: { suit: Suit; title: string; text: string; scene?: Scene }[] = [
   { suit: 'S', title: 'Первый отбой', text: 'Если включено, в первом раунде на стол идёт не больше пяти карт.', scene: { trump: 'S', pairs: [], row: [['S', 9], ['H', 9], ['C', 11], ['D', 11], ['C', 9]] } },
 ]
 
+// Shown only where there is a keyboard and a mouse: phones don't need it.
+const KEYS_RULE: { suit: Suit; title: string; text: string; scene?: Scene } = { suit: 'S', title: 'Клавиши', text: '← → выбрать карту, Enter положить. 1–9 сразу кладут карту, Пробел жмёт главную кнопку, T — беру, R — прочитать стол, Esc — отмена.' }
+const hasKeyboard = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches
+
 function MiniCard({ c, trump, className = '' }: { c: Mini; trump: Suit; className?: string }) {
   return (
     <span className={`card full sample ${className}`}>
@@ -84,10 +88,11 @@ function RuleScene({ scene }: { scene: Scene }) {
 }
 
 export function RulesPanel({ onClose }: { onClose: () => void }) {
+  const rules = hasKeyboard() ? [...RULES, KEYS_RULE] : RULES
   return (
     <Sheet title="Правила" onClose={onClose} wide>
       <div className="rules">
-        {RULES.map((r, i) => (
+        {rules.map((r, i) => (
           <m.article key={r.title} className="rule" variants={sheetItem} whileHover={{ y: -3 }}>
             <span className={`rule-suit ${r.suit === 'H' || r.suit === 'D' ? 'red' : ''}`} aria-hidden="true">
               <SuitIcon suit={r.suit} size="100%" />
