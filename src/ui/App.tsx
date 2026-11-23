@@ -16,7 +16,9 @@ import { MainMenu } from './MainMenu'
 import { setHaptics, syncStatusBar, tap } from './native'
 import { OnlineScreen } from './OnlineScreen'
 import { BOT_NAMES } from './pickers'
-import { PlayScreen } from './PlayScreen'
+import { BotSetupSheet } from './PlayScreen'
+import { useBack, useSystemBack } from './back'
+import { Capacitor } from '@capacitor/core'
 import { GameMenu, SettingsPanel } from './SettingsPanel'
 import { addResult, applyLook, applyTheme, BOT_DELAY, deviceToken, EMPTY_STATS, loadSettings, loadStats, saveSettings, saveStats, Settings, Stats } from './settings'
 import { setSoundEnabled, unlockSound } from './sfx'
@@ -25,8 +27,8 @@ import { affordableStake, bonusReady, cancelWager, isBroke, LEVEL_BONUS, loadWal
 import { applyIfIdle, startUpdates, UpdateState } from './updates'
 
 const ME = 0
-type Screen = 'menu' | 'play' | 'online' | 'game'
-type Panel = 'settings' | 'game' | 'rules' | 'stats' | 'friends'
+type Screen = 'menu' | 'online' | 'game'
+type Panel = 'settings' | 'game' | 'rules' | 'stats' | 'friends' | 'setup'
 
 // The bot game is saved as it goes, so closing or reloading the app never loses a hand.
 const GAME_KEY = 'durak.game'
@@ -75,6 +77,8 @@ export function App() {
   const [series, setSeries] = useState<Series | null>(null)
   const [localEmote, setLocalEmote] = useState<Emote | null>(null)
   const [panel, setPanel] = useState<Panel | null>(null)
+  // Rules opened from the pause menu go back to it when closed.
+  const [rulesFrom, setRulesFrom] = useState<Panel | null>(null)
   const inviteCode = invite.code
   const [resumeRoom] = useState(() => !inviteCode && hasSavedRoom())
   const [screen, setScreen] = useState<Screen>(inviteCode || resumeRoom ? 'online' : 'menu')
@@ -297,14 +301,19 @@ export function App() {
     const stake = affordableStake(wallet, s.stake, playersFor(s))
     if (stake !== s.stake) setSettings((cur) => ({ ...cur, stake }))
     const g = startGame(s, stake)
-    const untouched = game && !game.over && !canContinue ? gameIdOf(game) : undefined
+    // a game nobody has moved in yet gives its stake back; one under way loses it
+    const untouched = game && !game.over && !started ? gameIdOf(game) : undefined
     setWallet((w) => placeWager(untouched !== undefined ? cancelWager(w, untouched) : w, gameIdOf(g), stake, g.players.length, LEVEL_BONUS[s.difficulty]))
     setGame(g)
     setSeries((cur) => (s.series > 1 ? (fresh || !cur || cur.played >= cur.total ? { total: s.series, played: 0, fools: g.players.map(() => 0) } : cur) : null))
+    setPanel(null)
     setScreen('game')
   }
 
-  const canContinue = !!game && !game.over && (game.discard.length > 0 || game.table.length > 0 || game.lastAction !== null)
+  // Any unfinished game can be gone back to, even one only just dealt.
+  const canContinue = !!game && !game.over
+  const started = !!game && !game.over && (game.discard.length > 0 || game.table.length > 0 || game.lastAction !== null)
+  const pendingStake = started && game && wallet.wager?.seed === gameIdOf(game) ? wallet.wager.held : 0
   const onlineGame = screen === 'online' && online.phase === 'playing' && online.game
 
   const panels = (
@@ -316,14 +325,35 @@ export function App() {
           settings={settings}
           onChange={setSettings}
           onClose={() => setPanel(null)}
-          onRules={() => setPanel('rules')}
+          onRules={() => {
+            setRulesFrom('game')
+            setPanel('rules')
+          }}
           onExit={() => (onlineGame ? online.leave() : setScreen('menu'))}
           online={!!onlineGame}
           botSpeed={onlineGame ? online.role === 'host' && onlineGame.players.some((p) => !p.human) : true}
         />
       )}
-      {panel === 'friends' && <FriendsPanel key="friends" friends={friends} onInvite={inviteFriend} onClose={() => setPanel(null)} />}
-      {panel === 'rules' && <RulesPanel key="rules" onClose={() => setPanel(null)} />}
+      {panel === 'friends' && <FriendsPanel
+          key="friends"
+          friends={friends}
+          onInvite={inviteFriend}
+          onPlayOnline={() => {
+            setPanel(null)
+            setScreen('online')
+          }}
+          onClose={() => setPanel(null)}
+        />}
+      {panel === 'rules' && (
+        <RulesPanel
+          key="rules"
+          onClose={() => {
+            setPanel(rulesFrom && (onlineGame || screen === 'game') ? rulesFrom : null)
+            setRulesFrom(null)
+          }}
+        />
+      )}
+      {panel === 'setup' && <BotSetupSheet key="setup" settings={settings} wallet={wallet} pendingStake={pendingStake} onChange={setSettings} onStart={() => newRound()} onClose={() => setPanel(null)} />}
       {panel === 'stats' && (
         <StatsPanel
           key="stats"
@@ -340,6 +370,14 @@ export function App() {
       )}
     </AnimatePresence>
   )
+
+  // System back: at the table it opens the menu (and closes it again); sheets and the online screen take their own steps first.
+  useBack(() => {
+    if (!(onlineGame || (screen === 'game' && game))) return false
+    setPanel((p) => (p === 'game' ? null : 'game'))
+    return true
+  })
+  useSystemBack(screen === 'menu' && panel === null, () => friends.say('Нажмите ещё раз, чтобы выйти'), (Capacitor.getPlatform() === 'ios' || iosHomeScreen()) && !inRound)
 
   let view
   if (onlineGame) {
@@ -404,23 +442,31 @@ export function App() {
         onInviteFriend={inviteFriend}
         onBack={() => {
           online.leave()
-          setScreen(inviteCode ? 'menu' : 'play')
+          setScreen('menu')
           setInvite({ code: '', server: '' })
         }}
       />
     )
-  } else if (screen === 'play') {
-    view = <PlayScreen key="play" settings={settings} wallet={wallet} pendingStake={canContinue ? (wallet.wager?.seed === (game ? gameIdOf(game) : undefined) ? (wallet.wager?.held ?? 0) : 0) : 0} onChange={setSettings} onBots={() => newRound()} onOnline={() => setScreen('online')} onBack={() => setScreen('menu')} />
   } else {
-    view = <MainMenu
+    view = (
+      <MainMenu
         key="menu"
         onPasteInvite={iosHomeScreen() ? pasteInvite : undefined}
-        stats={stats}
+        settings={settings}
         wallet={wallet}
         bonus={bonusReady(wallet)}
         broke={isBroke(wallet)}
         onBonus={() => setWallet(takeBonus)}
-        onRefill={() => setWallet(refill)} canContinue={canContinue} onContinue={() => setScreen('game')} onPlay={() => setScreen('play')} onQuick={() => newRound()} onOpen={setPanel} friendCount={friends.list.length} />
+        onRefill={() => setWallet(refill)}
+        canContinue={canContinue}
+        onContinue={() => setScreen('game')}
+        onSetup={() => setPanel('setup')}
+        onQuick={() => newRound()}
+        onFriendsGame={() => setScreen('online')}
+        onOpen={setPanel}
+        friendCount={friends.list.length}
+      />
+    )
   }
 
   return (

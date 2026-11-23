@@ -6,6 +6,8 @@ import { Sheet, sheetItem } from './Sheet'
 interface Props {
   friends: Friends
   onInvite: (fid: string) => void
+  /** from the empty list straight to the online screen, where friends are made */
+  onPlayOnline: () => void
   onClose: () => void
 }
 
@@ -16,7 +18,7 @@ export function presenceText(friends: Friends, id: string): string {
   return friends.here[id] === undefined ? 'проверяем…' : 'не в сети'
 }
 
-export function FriendsPanel({ friends, onInvite, onClose }: Props) {
+export function FriendsPanel({ friends, onInvite, onPlayOnline, onClose }: Props) {
   const [removing, setRemoving] = useState<string | null>(null)
   const { refresh } = friends
   useEffect(() => {
@@ -32,7 +34,10 @@ export function FriendsPanel({ friends, onInvite, onClose }: Props) {
           <span className="friends-empty-art" aria-hidden="true">
             🤝
           </span>
-          <p>Пока никого. Сыграйте онлайн и нажмите «+» рядом с именем игрока за столом или в комнате, и он появится здесь.</p>
+          <p>Добавляйте игроков «+» за столом</p>
+          <m.button type="button" className="primary" whileTap={{ scale: 0.96 }} onClick={onPlayOnline}>
+            Сыграть онлайн
+          </m.button>
         </m.div>
       ) : (
         <m.ul className="friends" variants={sheetItem}>
@@ -78,9 +83,6 @@ export function FriendsPanel({ friends, onInvite, onClose }: Props) {
           </AnimatePresence>
         </m.ul>
       )}
-      <m.p className="foot-note" variants={sheetItem}>
-        Приглашение приходит, пока у друга открыто приложение. Если друг не в сети, отправьте ему код или ссылку комнаты.
-      </m.p>
     </Sheet>
   )
 }

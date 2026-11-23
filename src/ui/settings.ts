@@ -102,8 +102,9 @@ export function addResult(s: Stats, entry: HistoryEntry): Stats {
   }
 }
 
+// A first game is one on one against an easy bot, for nothing: the stake is picked on purpose later.
 export const DEFAULT_SETTINGS: Settings = {
-  opponents: 2,
+  opponents: 1,
   deckSize: 36,
   mode: 'podkidnoy',
   theme: 'system',
@@ -113,14 +114,14 @@ export const DEFAULT_SETTINGS: Settings = {
   cheat: false,
   firstFive: false,
   avatar: Math.floor(Math.random() * AVATARS.length),
-  difficulty: 'normal',
+  difficulty: 'easy',
   haptics: true,
   cardBack: 'teal',
   tableStyle: 'forest',
   cardFace: 'classic',
   server: '',
   series: 1,
-  stake: 100,
+  stake: 0,
 }
 /** How long a bot "thinks" before a move, in ms. Each move varies around this. */
 export const BOT_DELAY: Record<Speed, number> = { calm: 2600, normal: 1800, fast: 1000 }
