@@ -1,7 +1,7 @@
 import { AnimatePresence, m } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { maxPlayers } from '../engine/game'
-import { Group, HAPTICS_ICON, LookPicker, SOUND_ICON, SpeedPicker, Switch, ThemePicker } from './pickers'
+import { BIG_ICON, Group, HAPTICS_ICON, LookPicker, SOUND_ICON, SpeedPicker, Switch, ThemePicker } from './pickers'
 import type { Settings } from './settings'
 import { AutoHeight, Sheet, sheetItem } from './Sheet'
 
@@ -77,6 +77,7 @@ export function SettingsPanel({ settings, onChange, onClose }: { settings: Setti
           {tab === 'look' && (
             <>
               <ThemePicker value={settings.theme} onChange={(theme) => set({ theme })} />
+              <Switch label="Крупно" icon={BIG_ICON} value={settings.big} onChange={(big) => set({ big })} />
               <LookPicker back={settings.cardBack} table={settings.tableStyle} face={settings.cardFace} onBack={(cardBack) => set({ cardBack })} onTable={(tableStyle) => set({ tableStyle })} onFace={(cardFace) => set({ cardFace })} />
             </>
           )}
