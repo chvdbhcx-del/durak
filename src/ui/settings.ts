@@ -11,6 +11,11 @@ export type CardFace = 'classic' | 'modern'
 
 export const AVATARS = ['🦊', '🐻', '🦉', '🦔', '🐺', '🐱', '🐸', '🦄']
 
+/** The player's name: trimmed, and an emptied field gives the old name back instead of saving nothing. */
+export function cleanName(next: string, prev: string) {
+  return next.trim().slice(0, 16) || prev.trim() || 'Игрок'
+}
+
 export interface Settings {
   opponents: number
   deckSize: DeckSize

@@ -3176,3 +3176,52 @@ small,
   display: block;
   box-shadow: 0 2px 6px var(--shadow);
 }
+
+/* Settings on one screen */
+.quick-toggles { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; }
+.icon-toggle {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 12px 8px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--raise);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+}
+.icon-toggle.on {
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, var(--raise));
+}
+.icon-toggle.on .icon-toggle-icon { color: var(--accent); }
+.icon-toggle-icon { position: relative; display: grid; place-items: center; }
+.icon-toggle-off { position: absolute; left: -2px; right: -2px; top: 50%; height: 2px; border-radius: 2px; background: currentColor; rotate: -40deg; }
+.server-row { display: flex; gap: 8px; }
+.server-row .profile-name { flex: 1; }
+.server-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 2px 0; font-size: 13px; color: var(--muted); }
+.server-note.good { color: var(--good); }
+.server-note.bad { color: var(--danger); }
+.about { display: grid; gap: 6px; font-size: 13px; line-height: 1.45; }
+.back-sample { --cw: 38px; }
+
+/* Stake terms as two numbers */
+.stake-terms { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.stake-terms .term { font-weight: 700; font-variant-numeric: tabular-nums; }
+.stake-terms .term-note { color: var(--muted); font-size: 12px; }
+.stake-refill { margin-top: 10px; justify-self: start; }
+
+/* Profile */
+button.profile-avatar { padding: 0; color: inherit; }
+button.wallet-pill { color: inherit; }
+.name-field { position: relative; display: block; min-width: 0; }
+.name-field .profile-name { padding-right: 40px; }
+.name-pencil { position: absolute; right: 14px; top: 50%; translate: 0 -50%; color: var(--muted); pointer-events: none; }
+.profile-empty { display: grid; justify-items: center; gap: 12px; padding: 18px 0 6px; color: var(--muted); font-size: var(--fs-md); }
+.score-line { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 2px 4px; margin: 0; font-family: var(--font-display); font-size: 22px; font-variant-numeric: tabular-nums; }
+.score-line .good { color: var(--good); }
+.score-line .bad { color: var(--danger); }
+.score-line small { flex-basis: 100%; text-align: center; font-family: var(--font-ui); font-size: 12px; }

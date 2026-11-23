@@ -1,7 +1,7 @@
 import { animate, AnimatePresence, m, useMotionValue } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { Group, plural, Tile } from './pickers'
-import { canAfford, formatCoins, STAKES, wagerTerms } from './wallet'
+import { canAfford, formatCoins, REFILL, STAKES, wagerTerms } from './wallet'
 import type { Wallet } from './wallet'
 
 /** A brass coin, drawn so it reads at 14px and at 40px. */
@@ -31,7 +31,11 @@ export function Coins({ value, from }: { value: number; from?: number }) {
 }
 
 /** The balance pill on the main menu, with the daily bonus or a refill when the player is broke. */
-export function WalletPill({ wallet, bonus, broke, onBonus, onRefill }: { wallet: Wallet; bonus: boolean; broke: boolean; onBonus: () => void; onRefill: () => void }) {
+/**
+ * `broke` means a refill is on offer right now (see canRefill). `onOpen`, when given, makes the
+ * balance itself a button, for instance to the profile with the wallet card.
+ */
+export function WalletPill({ wallet, bonus, broke, onBonus, onRefill, onOpen }: { wallet: Wallet; bonus: boolean; broke: boolean; onBonus: () => void; onRefill: () => void; onOpen?: () => void }) {
   const [burst, setBurst] = useState(0)
   const prev = useRef(wallet.balance)
   useEffect(() => {
@@ -40,12 +44,26 @@ export function WalletPill({ wallet, bonus, broke, onBonus, onRefill }: { wallet
   }, [wallet.balance])
   return (
     <m.div className="wallet-row" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, type: 'spring', stiffness: 380, damping: 30 }}>
-      <span className="wallet-pill" aria-label={`Баланс ${formatCoins(wallet.balance)} ${plural(wallet.balance, 'монета', 'монеты', 'монет')}`}>
-        <m.span key={burst} initial={burst ? { rotateY: 0, scale: 1.3 } : false} animate={{ rotateY: 360, scale: 1 }} transition={{ duration: 0.7 }} style={{ display: 'inline-grid' }}>
-          <Coin size={20} />
-        </m.span>
-        <Coins value={wallet.balance} />
-      </span>
+      {(() => {
+        const label = `Баланс ${formatCoins(wallet.balance)} ${plural(wallet.balance, 'монета', 'монеты', 'монет')}`
+        const inner = (
+          <>
+            <m.span key={burst} initial={burst ? { rotateY: 0, scale: 1.3 } : false} animate={{ rotateY: 360, scale: 1 }} transition={{ duration: 0.7 }} style={{ display: 'inline-grid' }}>
+              <Coin size={20} />
+            </m.span>
+            <Coins value={wallet.balance} />
+          </>
+        )
+        return onOpen ? (
+          <m.button type="button" className="wallet-pill" aria-label={`${label}. Открыть профиль`} whileTap={{ scale: 0.95 }} onClick={onOpen}>
+            {inner}
+          </m.button>
+        ) : (
+          <span className="wallet-pill" aria-label={label}>
+            {inner}
+          </span>
+        )
+      })()}
       <AnimatePresence>
         {(bonus || broke) && (
           <m.button
@@ -72,22 +90,43 @@ export function WalletPill({ wallet, bonus, broke, onBonus, onRefill }: { wallet
 const STAKE_NAMES: Record<number, { title: string; coins: number }> = {
   0: { title: 'Без денег', coins: 0 },
   100: { title: 'Мелкая', coins: 1 },
-  500: { title: 'Средняя', coins: 2 },
-  2500: { title: 'Крупная', coins: 3 },
+  250: { title: 'Средняя', coins: 2 },
+  1000: { title: 'Крупная', coins: 3 },
 }
 
-/** Stake tiles; a stake the balance can't cover is greyed out. `mult` is what a win pays per staked coin. */
-export function StakePicker({ value, onChange, wallet, players, mult, title = 'Ставка' }: { value: number; onChange: (n: number) => void; wallet: Wallet; players: number; mult: number; title?: string }) {
+interface StakeProps {
+  value: number
+  onChange: (n: number) => void
+  wallet: Wallet
+  players: number
+  /** what a win pays per staked coin */
+  mult: number
+  title?: string
+  /** the stake the player picked, when `value` had to drop below it: a short note says so */
+  wanted?: number
+  /** offered inside the block when not even the smallest stake fits and a refill is available */
+  onRefill?: () => void
+}
+
+/**
+ * Stake tiles. A stake the balance can't cover is greyed out and says how much it needs.
+ * Below them, what a win and a loss mean, as two numbers (the full sentence is the tiles' label for screen readers).
+ */
+export function StakePicker({ value, onChange, wallet, players, mult, title = 'Ставка', wanted, onRefill }: StakeProps) {
   const { held, prize } = wagerTerms(value, players, mult)
   const others = players - 1
+  const lowered = wanted !== undefined && wanted > value
+  const noneFits = !canAfford(wallet, STAKES[1], players)
   return (
     <Group title={title} value={`Баланс ${formatCoins(wallet.balance)}`}>
       <div className="tiles four">
         {STAKES.map((s) => {
-          const name = STAKE_NAMES[s]
+          const name = STAKE_NAMES[s] ?? { title: formatCoins(s), coins: 1 }
           const ok = canAfford(wallet, s, players)
+          const need = wagerTerms(s, players).held
+          const label = s ? (ok ? `${name.title} ставка ${formatCoins(s)}` : `${name.title} ставка ${formatCoins(s)}, нужно ${formatCoins(need)} монет`) : name.title
           return (
-            <Tile key={s} group="stake" on={value === s} disabled={!ok} onClick={() => onChange(s)} label={s ? `${name.title} ставка ${s}` : name.title}>
+            <Tile key={s} group="stake" on={value === s} disabled={!ok} onClick={() => onChange(s)} label={label}>
               <span className="stake-art" aria-hidden="true">
                 {name.coins === 0 ? (
                   <span className="stake-none">♡</span>
@@ -100,30 +139,50 @@ export function StakePicker({ value, onChange, wallet, players, mult, title = '�
                 )}
               </span>
               <span className="tile-title">{s ? formatCoins(s) : name.title}</span>
-              {s > 0 && <span className="tile-note">{name.title}</span>}
+              {s > 0 && <span className="tile-note">{ok ? name.title : `нужно ${formatCoins(need)}`}</span>}
             </Tile>
           )
         })}
       </div>
       <AnimatePresence mode="wait" initial={false}>
-        <m.p key={`${value}-${players}-${mult}`} className="stake-terms" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }} transition={{ duration: 0.18 }}>
+        <m.p
+          key={`${value}-${players}-${mult}-${lowered}`}
+          className="stake-terms"
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 4 }}
+          transition={{ duration: 0.18 }}
+          aria-label={value === 0 ? 'На интерес' : `Не дурак получает ${formatCoins(prize)}${mult !== 1 ? `, ×${mult} за силу ботов` : ''}. Дурак платит ${formatCoins(held)}${others > 1 ? `, по ${formatCoins(value)} каждому` : ''}.`}
+        >
           {value === 0 ? (
-            'Играем на интерес: баланс не меняется.'
+            <span className="muted">На интерес</span>
           ) : (
             <>
-              Не дурак: <b className="good">+{formatCoins(prize)}</b>
-              {mult !== 1 && <span className="muted"> (×{mult} за силу ботов)</span>}. Дурак платит <b className="bad">{formatCoins(held)}</b>
-              {others > 1 && <span className="muted"> ({formatCoins(value)} каждому)</span>}.
+              <span className="term good" title={mult !== 1 ? `×${mult} за силу ботов` : 'Если не останетесь дураком'}>
+                ▲ +{formatCoins(prize)}
+              </span>
+              <span className="term bad" title={others > 1 ? `${formatCoins(value)} каждому` : 'Если останетесь дураком'}>
+                ▼ −{formatCoins(held)}
+              </span>
             </>
           )}
+          {lowered && <span className="term-note">ставка снижена до {value ? formatCoins(value) : '0'}</span>}
         </m.p>
       </AnimatePresence>
+      {noneFits && onRefill && (
+        <m.button type="button" className="wallet-gift stake-refill" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} whileTap={{ scale: 0.94 }} onClick={onRefill}>
+          <span aria-hidden="true">🎁</span> Пополнить до {formatCoins(REFILL)}
+        </m.button>
+      )}
     </Group>
   )
 }
 
-/** The money line on the result card: what this game paid and the balance after it. */
-export function Payout({ delta, balance }: { delta: number; balance: number }) {
+/**
+ * The money line on the result card: what this game paid and the balance after it. With `onRefill`
+ * (passed when the game left the player without enough for any stake) a refill button replaces the balance.
+ */
+export function Payout({ delta, balance, onRefill }: { delta: number; balance: number; onRefill?: () => void }) {
   const tone = delta > 0 ? 'good' : delta < 0 ? 'bad' : ''
   return (
     <m.div className={`payout ${tone}`} initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 1, type: 'spring', stiffness: 380, damping: 18 }}>
@@ -132,9 +191,15 @@ export function Payout({ delta, balance }: { delta: number; balance: number }) {
         {delta > 0 ? '+' : delta < 0 ? '−' : '±'}
         <Coins value={Math.abs(delta)} from={0} />
       </span>
-      <span className="payout-balance">
-        Баланс <Coins value={balance} from={balance - delta} />
-      </span>
+      {onRefill ? (
+        <m.button type="button" className="wallet-gift" whileTap={{ scale: 0.94 }} onClick={onRefill}>
+          <span aria-hidden="true">🎁</span> Пополнить до {formatCoins(REFILL)}
+        </m.button>
+      ) : (
+        <span className="payout-balance">
+          Баланс <Coins value={balance} from={balance - delta} />
+        </span>
+      )}
     </m.div>
   )
 }

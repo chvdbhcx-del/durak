@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { affordableStake, isBroke, NEW_WALLET, placeWager, refill, settle, takeBonus } from './wallet'
+import { affordableStake, canRefill, dropRoomWager, isBroke, loadWallet, NEW_WALLET, placeWager, refill, saveWallet, settle, takeBonus } from './wallet'
 
 describe('wallet', () => {
   it('the fool pays every other player the stake', () => {
@@ -27,8 +27,9 @@ describe('wallet', () => {
     expect(settle(settle(w, 1, 'win')!.wallet, 1, 'win')).toBeNull()
   })
   it('never stakes more than the balance', () => {
-    expect(affordableStake(NEW_WALLET, 2500, 2)).toBe(500)
-    expect(placeWager(NEW_WALLET, 1, 2500, 2, 1).balance).toBe(1000)
+    expect(affordableStake(NEW_WALLET, 1000, 2)).toBe(1000)
+    expect(affordableStake(NEW_WALLET, 1000, 3)).toBe(250)
+    expect(placeWager(NEW_WALLET, 1, 1000, 3, 1).balance).toBe(1000)
   })
   it('an abandoned game keeps its money lost', () => {
     const w = placeWager(placeWager(NEW_WALLET, 1, 100, 2, 1), 2, 0, 2, 1)
@@ -49,7 +50,34 @@ describe('wallet', () => {
     expect(takeBonus(w, '2026-11-04').balance).toBe(1200)
     expect(isBroke(w)).toBe(false)
     const broke = { ...NEW_WALLET, balance: 20 }
-    expect(refill(broke).balance).toBe(500)
+    expect(refill(broke, '2026-11-04').balance).toBe(500)
     expect(refill(w)).toBe(w)
+  })
+  it('refill once a day', () => {
+    const r = refill({ ...NEW_WALLET, balance: 20 }, '2026-11-04')
+    const broke = { ...r, balance: 10 }
+    expect(canRefill(broke, '2026-11-04')).toBe(false)
+    expect(refill(broke, '2026-11-04')).toBe(broke)
+    expect(refill(broke, '2026-11-05').balance).toBe(500)
+  })
+  it('a room stake left behind does not block the refill', () => {
+    const w = { ...placeWager({ ...NEW_WALLET, balance: 140 }, 9, 100, 2, 1, 'roomWager') }
+    expect(w.balance).toBe(40)
+    expect(isBroke(w)).toBe(true)
+    const d = dropRoomWager(w)
+    expect(d.roomWager).toBeNull()
+    expect(d.lost).toBe(100)
+  })
+  it('loading closes a room stake whose room is gone, and a new wallet waits a day for the bonus', () => {
+    const store = new Map<string, string>()
+    const ls = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) }
+    Object.defineProperty(globalThis, 'localStorage', { value: ls, configurable: true })
+    const fresh = loadWallet(false, '2026-11-04')
+    expect(fresh.bonusDay).toBe('2026-11-04')
+    saveWallet(placeWager({ ...NEW_WALLET, balance: 140 }, 9, 100, 2, 1, 'roomWager'))
+    expect(loadWallet(true).roomWager?.seed).toBe(9)
+    const gone = loadWallet(false)
+    expect(gone.roomWager).toBeNull()
+    expect(gone.lost).toBe(100)
   })
 })

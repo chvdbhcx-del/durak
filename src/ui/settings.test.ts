@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addResult, EMPTY_STATS } from './settings'
+import { addResult, cleanName, EMPTY_STATS } from './settings'
 
 describe('addResult slices', () => {
   const game = { at: 1, mode: 'podkidnoy' as const, deck: 36, players: 3, online: false, level: 'hard' as const, cheat: true }
@@ -14,5 +14,13 @@ describe('addResult slices', () => {
   it('keeps working on stats saved before slices existed', () => {
     const old = { ...EMPTY_STATS, wins: 2 }
     expect(addResult(old, { ...game, result: 'win' }).wins).toBe(3)
+  })
+})
+
+describe('cleanName', () => {
+  it('trims, and an empty field keeps the old name', () => {
+    expect(cleanName('  Андрей  ', 'Игрок 12')).toBe('Андрей')
+    expect(cleanName('   ', 'Игрок 12')).toBe('Игрок 12')
+    expect(cleanName('', '')).toBe('Игрок')
   })
 })
