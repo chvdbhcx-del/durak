@@ -11,6 +11,7 @@ import { notify, tap } from './native'
 import { playCard, playDeal, playSweep, playTick } from './sfx'
 import { BOT_NAMES } from './pickers'
 import { AVATARS } from './settings'
+import { type LinkState, RoomLink } from './RoomStatus'
 import { SuitIcon } from './SuitIcon'
 import { handLayout } from './fan'
 
@@ -62,7 +63,9 @@ interface Props {
   onOpenSettings: () => void
   /** left out when this player can't start the next game (an online guest) */
   onPlayAgain?: () => void
-  room?: { code: string; notice: string | null; reconnecting?: boolean; roster?: { seat: number; name: string; fid?: string }[]; turnMs?: number }
+  /** an online host: back from the finished game to the room, to change the setup */
+  onToLobby?: () => void
+  room?: { code: string; notice: string | null; reconnecting?: boolean; roster?: { seat: number; name: string; fid?: string; off?: boolean; away?: boolean }[]; turnMs?: number; link?: LinkState }
   /** bot games: takes back the player's last move while the bots haven't answered it yet */
   onUndo?: () => void
   /** coins the next game would put at stake, shown on the "play again" button */
@@ -116,6 +119,8 @@ interface Banner {
   key: number
   text: string
   tone: 'good' | 'bad' | 'info'
+  /** room news (someone left or came back) stays up long enough to read */
+  long?: boolean
 }
 
 const DEAL_FLIGHT: Flight = { kind: 'draw', delay: 0 }
@@ -174,7 +179,9 @@ function rememberAccuse() {
   }
 }
 
-export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTurn, onBotThrow, onFinished, series, wager, payout, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, room, onUndo, nextStake }: Props) {
+export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTurn, onBotThrow, onFinished, series, wager, payout, emote, onEmote, friends, onExit, onOpenSettings, onPlayAgain, onToLobby, room, onUndo, nextStake }: Props) {
+  /** a guest whose line to the host is down: moves can't go out, so the hand waits */
+  const unlinked = !!room?.link?.guest && !!room.reconnecting
   const { table: baseCw, hand: hw, flat, tall } = useCardSizes()
   // Once the player is out, only the others are left to finish: bots then play four times faster.
   const botDelay = game.players[me]?.out && !game.over ? Math.round(baseDelay / 4) : baseDelay
@@ -405,13 +412,27 @@ export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTu
 
   useEffect(() => {
     if (!banner) return
-    const t = setTimeout(() => setBanner(null), 1300)
+    const t = setTimeout(() => setBanner(null), banner.long ? 3000 : 1300)
     return () => clearTimeout(t)
   }, [banner])
 
   useEffect(() => {
-    if (room?.notice) setBanner({ key: Date.now(), text: room.notice, tone: 'info' })
+    if (room?.notice) setBanner({ key: Date.now(), text: room.notice, tone: 'info', long: true })
   }, [room?.notice])
+
+  // The last seconds of a room's move clock are said out loud, so a move made for the player is no surprise.
+  const [hurry, setHurry] = useState(false)
+  const myClock = !!timed && actor === me
+  useEffect(() => {
+    setHurry(false)
+    if (!myClock || !timed) return
+    const t = setTimeout(() => {
+      setHurry(true)
+      tap('medium')
+      playTick()
+    }, Math.max(0, timed - 10_000))
+    return () => clearTimeout(t)
+  }, [myClock, timed, turnTick.current.n])
 
   // Report the result once per finished game.
   useEffect(() => {
@@ -423,6 +444,7 @@ export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTu
   }, [game, me, onFinished])
 
   const play = (action: Action) => {
+    if (unlinked) return
     setSelected(null)
     setTransferPick(false)
     setPlan([])
@@ -431,6 +453,7 @@ export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTu
   }
 
   const confirm = () => {
+    if (unlinked) return
     const moves = staged
     setSelected(null)
     setPlan([])
@@ -585,19 +608,7 @@ export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game, !!onUndo])
 
-  // Room move clock: the last five seconds turn red, with a tick and a buzz on the player's own turn.
-  const [hurry, setHurry] = useState(false)
   const clockKey = turnTick.current.n
-  useEffect(() => {
-    setHurry(false)
-    if (!timed || actor !== me) return
-    const t = setTimeout(() => {
-      setHurry(true)
-      tap('medium')
-      playTick()
-    }, Math.max(0, timed - 5000))
-    return () => clearTimeout(t)
-  }, [clockKey, timed, actor, me])
 
   // Keyboard play: ←/→ pick a playable card and Enter plays it, 1–9 play the playable cards in hand order,
   // Enter or Space press the main button, T takes, Esc drops a choice.
@@ -670,7 +681,11 @@ export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTu
   const fanMax = Math.max(16, slotW - (compactSeats ? 8 : 24))
   const seatMini = Math.min(miniW, Math.round(fanMax * 0.62))
   const deckCards = [...game.deck.slice(1), ...undealt]
-  const status = dealing
+  const status = unlinked
+    ? 'Ждём связь…'
+    : hurry && actor === me
+      ? 'Ход за вас через 10 с'
+      : dealing
     ? 'Раздача…'
     : staged.length
       ? planText(staged, game)
@@ -762,14 +777,7 @@ export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTu
         </m.div>
       )}
 
-      <AnimatePresence>
-        {room?.reconnecting && (
-          <m.div key="reconnecting" className="reconnecting" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-            <m.span className="toast-dot" animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1.2, repeat: Infinity }} />
-            Восстанавливаем связь…
-          </m.div>
-        )}
-      </AnimatePresence>
+      <RoomLink link={room?.link ?? { guest: false, reconnecting: !!room?.reconnecting }} />
 
       <LayoutGroup>
         <section
@@ -784,12 +792,14 @@ export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTu
               const step = cards.length > 1 ? Math.min(seatMini * 0.42, (Math.min(seatMini * 2.6, fanMax) - seatMini) / (cards.length - 1)) : 0
               const role = p.out ? 'Вышел' : dealing ? null : p.id === game.defender ? (game.taking ? 'Берёт' : 'Отбивается') : p.id === game.attacker ? 'Атакует' : null
               const isTransferTarget = dragging !== null && focusTransfers && transferSeat === p.id
+              const seatInfo = room?.roster?.find((r) => r.seat === p.id)
+              const gone = !!seatInfo?.off || !!seatInfo?.away
               return (
                 <m.div
                   key={`${gameIdOf(game)}-${p.id}`}
                   layout="position"
                   data-drop={`seat-${p.id}`}
-                  className={`seat ${actor === p.id ? 'active' : ''} ${p.out ? 'out' : ''} ${isTransferTarget ? 'drop-ok' : ''} ${isTransferTarget && hot === `seat-${p.id}` ? 'drop-hot' : ''}`}
+                  className={`seat ${actor === p.id ? 'active' : ''} ${gone ? 'unlinked' : ''} ${p.out ? 'out' : ''} ${isTransferTarget ? 'drop-ok' : ''} ${isTransferTarget && hot === `seat-${p.id}` ? 'drop-hot' : ''}`}
                   initial={{ opacity: 0, y: -14 }}
                   animate={{ opacity: p.out ? 0.45 : 1, y: 0 }}
                   exit={{ opacity: 0, y: -14 }}
@@ -801,6 +811,11 @@ export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTu
                       {!p.human && BOT_NAMES.includes(p.name) ? AVATARS[BOT_NAMES.indexOf(p.name)] : p.name[0]}
                     </m.span>
                     <span className="seat-name">{p.name}</span>
+                    {seatInfo && gone && (
+                      <span className="seat-off" title={seatInfo.off ? 'Нет связи' : 'Свернул игру'}>
+                        {seatInfo.off ? (p.human ? 'нет связи' : 'бот за него') : 'свернул'}
+                      </span>
+                    )}
                     {friends && room && p.human && (() => {
                       const fid = room.roster?.find((r) => r.seat === p.id)?.fid
                       if (!fid || fid === friends.fid) return null
@@ -981,7 +996,7 @@ export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTu
           </AnimatePresence>
         </m.section>
 
-        <section ref={meRef} className={`me ${myTurn ? 'turn' : ''} ${myRole}`} aria-label="Ваши карты">
+        <section ref={meRef} className={`me ${myTurn ? 'turn' : ''} ${myRole} ${unlinked ? 'locked' : ''} ${hurry && actor === me ? 'hurry' : ''}`} aria-label="Ваши карты" aria-busy={unlinked}>
           <div ref={controlsRef} className="controls">
             {clock(me)}
             <AnimatePresence mode="wait" initial={false}>
@@ -1191,7 +1206,7 @@ export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTu
                     ))}
                   </ul>
                 )}
-                <div className="result-actions">
+                <div className={`result-actions ${onToLobby ? 'three' : ''}`}>
                   {onPlayAgain ? (
                     <m.button type="button" className="primary" whileTap={{ scale: 0.95 }} autoFocus onClick={onPlayAgain}>
                       {series ? (seriesDone ? 'Новый турнир' : 'Следующая партия') : 'Ещё партию'}
@@ -1203,11 +1218,16 @@ export function GameScreen({ game, me, act, paused, botDelay: baseDelay, onBotTu
                       )}
                     </m.button>
                   ) : (
-                    <span className="muted">Ждём, когда хозяин начнёт новую партию</span>
+                    <span className="muted">Ждём, когда хост начнёт новую партию</span>
                   )}
                   <m.button type="button" className="ghost" whileTap={{ scale: 0.95 }} onClick={onExit}>
-                    В меню
+                    {onToLobby ? 'Выйти' : 'В меню'}
                   </m.button>
+                  {onToLobby && (
+                    <m.button type="button" className="ghost" whileTap={{ scale: 0.95 }} onClick={onToLobby}>
+                      В комнату
+                    </m.button>
+                  )}
                 </div>
               </Stagger>
             </m.div>

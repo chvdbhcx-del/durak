@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { affordableStake, isBroke, NEW_WALLET, placeWager, refill, settle, takeBonus } from './wallet'
+import { affordableStake, forfeitRoom, isBroke, NEW_WALLET, placeWager, refill, refundRoom, settle, takeBonus } from './wallet'
 
 describe('wallet', () => {
   it('the fool pays every other player the stake', () => {
@@ -51,5 +51,23 @@ describe('wallet', () => {
     const broke = { ...NEW_WALLET, balance: 20 }
     expect(refill(broke).balance).toBe(500)
     expect(refill(w)).toBe(w)
+  })
+})
+
+describe('room stake when a game ends early', () => {
+  it('leaving midway loses the stake right away', () => {
+    const w = placeWager(NEW_WALLET, 9, 100, 3, 1, 'roomWager')
+    const out = forfeitRoom(w, 9)
+    expect(out.roomWager).toBeNull()
+    expect(out.balance).toBe(800)
+    expect(out.lost).toBe(200)
+  })
+  it('a game cut off by the host or the line gives the stake back', () => {
+    const w = placeWager(NEW_WALLET, 9, 500, 2, 1, 'roomWager')
+    const r = refundRoom(w, 9)
+    expect(r.back).toBe(500)
+    expect(r.wallet.balance).toBe(1000)
+    expect(r.wallet.roomWager).toBeNull()
+    expect(refundRoom(w, 10).back).toBe(0)
   })
 })
