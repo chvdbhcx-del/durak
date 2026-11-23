@@ -108,3 +108,8 @@ export function playSweep(delay = 0, cards = 4) {
   const shoves = Math.min(3, Math.max(1, Math.ceil(cards / 2)))
   for (let i = 0; i < shoves; i++) play('shove', delay + i * 0.16, { gain: 0.85 })
 }
+
+/** A soft tick: the move clock is running out. */
+export function playTick(delay = 0) {
+  play('place', delay, { gain: 0.45, rate: 1.6 })
+}

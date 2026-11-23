@@ -3176,3 +3176,116 @@ small,
   display: block;
   box-shadow: 0 2px 6px var(--shadow);
 }
+
+/* ---- Game table, UX audit 2026-11-23 ---- */
+
+/* The bar holds the emotes next to the menu, away from the main button. */
+.bar-buttons { display: flex; align-items: center; gap: 8px; }
+.bar .icon { position: relative; }
+/* a small icon still gets a thumb-sized hit area */
+.bar .icon::after { content: ''; position: absolute; inset: -5px; }
+
+/* The player's own turn: a glowing line over the hand, gold to attack and red to defend. */
+.me { position: relative; --role-c: var(--accent); }
+.me.defending { --role-c: var(--danger); }
+.me::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  width: min(420px, 70%);
+  height: 3px;
+  translate: -50% 0;
+  border-radius: 3px;
+  background: var(--role-c);
+  box-shadow: 0 0 14px 2px color-mix(in srgb, var(--role-c) 55%, transparent);
+  opacity: 0;
+  scale: 0.6 1;
+  transition: opacity 0.25s, scale 0.35s, background-color 0.25s;
+  pointer-events: none;
+}
+.me.turn::before { opacity: 1; scale: 1 1; }
+.status.yours { color: var(--role-c); }
+/* the status and the buttons stay above a card raised in the fan */
+.me .controls { z-index: 450; }
+
+/* Seat roles: a word with a small mark; where the word doesn't fit, the mark alone. */
+.role { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-height: 1.35em; }
+.role.empty { min-height: 1.35em; }
+.role-icon { width: 1.1em; height: 1.1em; flex: none; }
+.role.defend { color: var(--danger); }
+.role.take { color: var(--danger); }
+.role.gone { color: var(--muted); }
+.opponents.compact .role { font-size: 11px; }
+.opponents.compact .role-text { display: none; }
+.opponents.compact .role-icon { width: 14px; height: 14px; }
+@media (orientation: landscape) and (max-height: 560px) {
+  .role { display: inline-flex; }
+  .role-text { display: none; }
+  .role-icon { width: 14px; height: 14px; }
+  .role.empty { display: none; }
+}
+
+/* "Беру" while a cover is possible: an outline, not the loudest button on screen. */
+.main-action.quiet { background: transparent; border-color: color-mix(in srgb, var(--danger) 70%, transparent); color: var(--danger); }
+.main-action.quiet.ready { box-shadow: none; }
+/* "Бито" or "Пусть берёт" with no choice left fills up and goes by itself. */
+.main-action .auto-fill { position: absolute; inset: 0; background: color-mix(in srgb, var(--accent-ink) 16%, transparent); transform-origin: left center; pointer-events: none; }
+.main-action.hurry { animation: hurry 0.8s ease-in-out infinite; }
+@keyframes hurry {
+  0%, 100% { box-shadow: 0 0 0 2px var(--danger), 0 0 0 0 color-mix(in srgb, var(--danger) 50%, transparent); }
+  50% { box-shadow: 0 0 0 2px var(--danger), 0 0 0 7px color-mix(in srgb, var(--danger) 0%, transparent); }
+}
+.icon.undo { color: var(--fg); }
+
+/* Move clock: thicker, and red for the last five seconds. */
+.turn-clock {
+  height: 4px;
+  animation: turn-clock var(--turn) linear forwards, turn-warn 0.3s linear calc(var(--turn) - 5s) forwards;
+}
+@keyframes turn-clock {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+@keyframes turn-warn {
+  to { background: var(--danger); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .main-action.hurry { animation: none; box-shadow: 0 0 0 2px var(--danger); }
+}
+
+/* A big hand in two rows: the back row's tops show above the front row. */
+.hand { height: calc(var(--hw) * 1.4 + 34px + var(--lift, 0px)); }
+
+/* Cards that can't go now: a softer veil, and they sit a little lower. */
+.hand .card.dim .side.front::after { background: color-mix(in srgb, var(--bg) 25%, transparent); }
+.hand .card.keyed .pose { box-shadow: 0 0 0 2px var(--fg), 0 12px 26px var(--shadow); }
+
+/* The trump under the deck shows half of itself, index included. */
+.deck { width: calc(var(--cw) * 1.65); }
+.deck .trump-card { left: calc(var(--cw) * 0.62); }
+
+/* An empty discard pile shows a faint mark of a swept pile, not an empty slot to put a card in. */
+.discard-mark { position: absolute; inset: 0; margin: auto; width: 46%; height: 46%; color: var(--muted); opacity: 0.35; pointer-events: none; }
+.discard { outline-color: color-mix(in srgb, var(--muted) 18%, transparent); outline-style: solid; }
+
+/* Emotes open under the bar and close with a tap anywhere else. */
+.emote-catch { position: fixed; inset: 0; z-index: 65; }
+.emote-picker { top: calc(58px + env(safe-area-inset-top, 0px)); bottom: auto; right: max(12px, env(safe-area-inset-right, 0px)); }
+/* An opponent's emote pops up under their name, not over the bar. */
+.bubble.emote { top: calc(100% + 2px); z-index: 6; }
+
+/* Result: a full-width "play again" with the next stake on it, "to menu" under it. */
+.result-actions { flex-direction: column; align-items: stretch; gap: 8px; }
+.result-actions > button { min-height: 48px; width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.again-stake { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; opacity: 0.85; }
+
+/* Light theme: the interface goes light, the table stays a deep cloth so white cards stand out. */
+:root[data-theme='light'][data-table='forest'] { --felt: #2b5f4c; --felt-glow: #387a62; }
+:root[data-theme='light'] .felt { --muted: #c2d4cc; --accent: #f0b85a; }
+:root[data-theme='light'] .felt .zone-label b { color: #f2f6f3; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark'])[data-table='forest'] { --felt: #2b5f4c; --felt-glow: #387a62; }
+  :root:not([data-theme='dark']) .felt { --muted: #c2d4cc; --accent: #f0b85a; }
+  :root:not([data-theme='dark']) .felt .zone-label b { color: #f2f6f3; }
+}

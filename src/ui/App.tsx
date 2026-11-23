@@ -1,5 +1,5 @@
 import { AnimatePresence } from 'framer-motion'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { eagerThrow } from '../engine/bot'
 import { think } from '../engine/think'
 import { botReaction, botReply, type Emote, fingerprint } from '../engine/emotes'
@@ -224,16 +224,28 @@ export function App() {
   }, [shownEmote])
   const sendMyEmote = (emoji: string) => (liveOnline ? online.sendEmote(emoji) : setLocalEmote({ seat: ME, emoji, key: Date.now() + Math.random() }))
 
+  // The player's last move in a bot game, kept for a moment so a mis-tap can be taken back before the bots answer.
+  // Only moves that reveal nothing new can be taken back: no card was drawn and the game didn't end.
+  const undoRef = useRef<{ before: GameState; after: string } | null>(null)
   const playLocal = (action: Action) => {
     tap(action.type === 'take' ? 'medium' : 'light')
     setGame((g) => {
       if (!g) return g
       try {
-        return applyAction(g, ME, action)
+        const next = applyAction(g, ME, action)
+        const undoable = ['attack', 'throw', 'defend', 'bluff', 'take'].includes(action.type) && next.deck.length === g.deck.length && !next.over
+        undoRef.current = undoable ? { before: g, after: JSON.stringify(next) } : null
+        return next
       } catch {
         return g
       }
     })
+  }
+  const gameSig = useMemo(() => (game && undoRef.current ? JSON.stringify(game) : ''), [game])
+  const undoLocal = () => {
+    const u = undoRef.current
+    undoRef.current = null
+    if (u) setGame((g) => (g && JSON.stringify(g) === u.after ? u.before : g))
   }
   const playOnline = (action: Action) => {
     tap(action.type === 'take' ? 'medium' : 'light')
@@ -386,6 +398,8 @@ export function App() {
         emote={shownEmote}
         onEmote={sendMyEmote}
         onPlayAgain={() => newRound(settings, false)}
+        onUndo={undoRef.current && gameSig === undoRef.current.after ? undoLocal : undefined}
+        nextStake={affordableStake(wallet, settings.stake, playersFor(settings))}
       />
     )
   } else if (screen === 'online') {

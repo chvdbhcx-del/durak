@@ -19,11 +19,16 @@ const RULES: { suit: Suit; title: string; text: string }[] = [
   { suit: 'C', title: 'Конец игры', text: 'Когда колода кончилась, игроки без карт выходят. Если последние карты ушли одновременно, это ничья.' },
 ]
 
+// Shown only where there is a keyboard and a mouse: phones don't need it.
+const KEYS_RULE = { suit: 'S' as Suit, title: 'Клавиши', text: '← → выбрать карту, Enter положить. 1–9 сразу кладут карту, Пробел жмёт главную кнопку, T — беру, Esc — отмена.' }
+const hasKeyboard = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches
+
 export function RulesPanel({ onClose }: { onClose: () => void }) {
+  const rules = hasKeyboard() ? [...RULES, KEYS_RULE] : RULES
   return (
     <Sheet title="Правила" onClose={onClose} wide>
       <div className="rules">
-        {RULES.map((r, i) => (
+        {rules.map((r, i) => (
           <m.article key={r.title} className="rule" variants={sheetItem} whileHover={{ y: -3 }}>
             <span className={`rule-suit ${r.suit === 'H' || r.suit === 'D' ? 'red' : ''}`} aria-hidden="true">
               <SuitIcon suit={r.suit} size="100%" />
