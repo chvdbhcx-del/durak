@@ -1,5 +1,6 @@
-import { m } from 'framer-motion'
+import { m, useDragControls, type PanInfo } from 'framer-motion'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useBack } from './back'
 
 // Rows inside a sheet reveal one after another.
 export const sheetList = { hidden: {}, shown: { transition: { staggerChildren: 0.045, delayChildren: 0.08 } } }
@@ -19,6 +20,16 @@ interface Props {
 /** Bottom sheet on phones, centred card on wider screens. */
 export function Sheet({ title, onClose, children, footer, wide }: Props) {
   const box = useRef<HTMLDivElement>(null)
+  // The system back closes the sheet on top.
+  useBack(() => {
+    onClose()
+    return true
+  })
+  // Pulled down by its grip or title, the sheet closes; the list inside keeps its own scrolling.
+  const drag = useDragControls()
+  const dragEnd = (_: unknown, info: PanInfo) => {
+    if (info.offset.y > 90 || info.velocity.y > 600) onClose()
+  }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') return onClose()
@@ -62,9 +73,18 @@ export function Sheet({ title, onClose, children, footer, wide }: Props) {
         exit={{ y: 50, opacity: 0, scale: 0.98 }}
         transition={{ type: 'spring', stiffness: 360, damping: 32 }}
         onClick={(e) => e.stopPropagation()}
+        drag="y"
+        dragListener={false}
+        dragControls={drag}
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0, bottom: 0.9 }}
+        dragSnapToOrigin
+        onDragEnd={dragEnd}
       >
-        <div className="sheet-grip" aria-hidden="true" />
-        <div className="sheet-head">
+        <div className="sheet-grab" onPointerDown={(e) => drag.start(e)}>
+          <div className="sheet-grip" aria-hidden="true" />
+        </div>
+        <div className="sheet-head" onPointerDown={(e) => (e.target as HTMLElement).closest('button') || drag.start(e)}>
           <h2>{title}</h2>
           <m.button type="button" className="icon" aria-label="Закрыть" whileHover={{ rotate: 90 }} whileTap={{ scale: 0.88, rotate: 90 }} onClick={onClose}>
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">

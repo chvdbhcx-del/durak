@@ -967,6 +967,12 @@ button.card[aria-disabled='true'] {
   display: none;
 }
 
+/* the grip and the title pull the sheet down */
+.sheet-grab,
+.sheet-head {
+  touch-action: none;
+}
+
 .sheet-head {
   display: flex;
   align-items: center;
@@ -3195,6 +3201,60 @@ small,
   box-shadow: 0 2px 6px var(--shadow);
 }
 
+/* Main menu: the play chip, the friends button, rules in the corner */
+.menu { position: relative; }
+.menu-rules {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top, 0px));
+  right: max(14px, env(safe-area-inset-right, 0px));
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+.play-chip-row { display: grid; justify-items: center; margin-top: -2px; }
+.play-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  font-variant-numeric: tabular-nums;
+}
+.play-chip-stake { display: inline-flex; align-items: center; gap: 4px; color: var(--fg); }
+.play-chip svg:last-child { opacity: 0.6; }
+.friends-play { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+.friends-play svg { color: var(--accent); }
+.tile-avatar { font-size: 1.5rem; line-height: 1; height: 24px; }
+.menu-tiles .menu-tile { padding-block: 18px 16px; }
+
+/* Phone on its side: the hero on the left, everything to tap on the right */
+@media (orientation: landscape) and (max-height: 560px) {
+  .menu {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: 'wallet wallet' 'hero actions' 'hero tiles';
+    align-content: center;
+    column-gap: 24px;
+    row-gap: 14px;
+  }
+  .menu > .wallet-row { grid-area: wallet; }
+  .menu > .menu-hero { grid-area: hero; --cw: clamp(56px, 14vh, 80px); }
+  .menu > .menu-actions { grid-area: actions; }
+  .menu > .menu-tiles { grid-area: tiles; }
+  .menu .menu-tile { padding-block: 10px 8px; }
+}
+
+/* Sticky start in a room: always in reach, the list scrolls under it */
+.sticky-start {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: grid;
+  padding: 18px 0 max(12px, env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to bottom, transparent, var(--bg) 38%);
+}
+.paste-big { justify-self: center; }
+.friends-empty .primary { justify-self: center; margin-top: 4px; }
+.leave-sure { margin-left: auto; }
+.name-ask { display: grid; gap: 14px; }
 /* ---- Game table, UX audit 2026-11-23 ---- */
 
 /* The bar holds the emotes next to the menu, away from the main button. */

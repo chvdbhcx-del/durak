@@ -10,8 +10,11 @@ import type { Online } from '../net/useOnline'
 import { BackButton } from './PlayScreen'
 import { BOT_NAMES, CheatPicker, DeckPicker, DifficultyPicker, Group, ModePicker, plural } from './pickers'
 import { RoomLink } from './RoomStatus'
-import { AVATARS, cleanName, type Settings } from './settings'
-import { Sheet, sheetList } from './Sheet'
+import { cleanName, type Settings } from './settings'
+import { Sheet, sheetItem, sheetList } from './Sheet'
+import { useBack } from './back'
+import { isNative } from './native'
+import { Capacitor } from '@capacitor/core'
 import { appLink, type Invite, inviteFromText, inviteUrl, webPlatform } from './deeplink'
 
 
@@ -150,53 +153,84 @@ function PasteButton({ onCode }: { onCode: (inv: Invite) => void }) {
     }
   }
   return (
-    <m.button type="button" className="link paste-code" whileTap={{ scale: 0.95 }} onClick={paste}>
+    <m.button type="button" className="ghost paste-big" whileTap={{ scale: 0.95 }} onClick={paste}>
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+        <path fill="currentColor" d="M9 3h6a1 1 0 0 1 1 1v1h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2V4a1 1 0 0 1 1-1zm1 2v2h4V5h-4zm-2 7v2h8v-2H8zm0 4v2h5v-2H8z" />
+      </svg>
       {miss ? 'В буфере нет кода' : 'Вставить'}
     </m.button>
   )
 }
 
-/** The name friends see, with the profile's avatar; the same rule as the profile: an emptied field keeps the old name. */
-function NameBadge({ name, avatar, onChange }: { name: string; avatar: string; onChange: (n: string) => void }) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(name)
+// The name is set in the profile; a player still called "Игрок 42" is asked for it once, before the first room.
+const NAME_ASKED = 'durak.nameAsked'
+const isDefaultName = (n: string) => /^Игрок( \d+)?$/.test(n.trim())
+function nameAsked() {
+  try {
+    return localStorage.getItem(NAME_ASKED) === '1'
+  } catch {
+    return true
+  }
+}
+function markNameAsked() {
+  try {
+    localStorage.setItem(NAME_ASKED, '1')
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+function NameSheet({ name, onDone, onClose }: { name: string; onDone: (n: string) => void; onClose: () => void }) {
+  const [value, setValue] = useState(isDefaultName(name) ? '' : name)
+  const done = () => onDone(cleanName(value, name))
   return (
-    <div className="name-badge">
-      <m.span key={avatar} className="name-avatar" initial={{ scale: 0.6 }} animate={{ scale: 1 }}>
-        {avatar}
-      </m.span>
-      {editing ? (
-        <input
-          id="player-name"
-          className="name-edit"
-          value={draft}
-          maxLength={16}
-          autoFocus
-          aria-label="Ваше имя"
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => {
-            const next = cleanName(draft, name)
-            if (next !== name) onChange(next)
-            setEditing(false)
-          }}
-          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-        />
-      ) : (
-        <button
-          type="button"
-          className="name-show"
-          onClick={() => {
-            setDraft(name)
-            setEditing(true)
-          }}
-        >
-          {name}
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-            <path fill="currentColor" d="M4 17.3V20h2.7l8-8-2.7-2.7-8 8zm12.7-7.6a.9.9 0 0 0 0-1.3l-1.1-1.1a.9.9 0 0 0-1.3 0l-1 1 2.4 2.4 1-1z" />
-          </svg>
-        </button>
+    <Sheet
+      title="Как вас зовут?"
+      onClose={onClose}
+      footer={
+        <m.button type="button" className="primary big" whileTap={{ scale: 0.96 }} onClick={done}>
+          Готово
+        </m.button>
+      }
+    >
+      <m.div className="name-ask" variants={sheetItem}>
+        <input className="profile-name" value={value} maxLength={16} autoFocus placeholder={name} aria-label="Ваше имя" onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && done()} />
+      </m.div>
+    </Sheet>
+  )
+}
+
+/** One place to call people in: the link to share, and friends to call straight in (for the host). */
+function InviteSheet({ onShare, copied, friends, members, host, onInviteFriend, onClose }: { onShare: () => void; copied: boolean; friends: Friends; members: { fid?: string }[]; host: boolean; onInviteFriend: (fid: string) => void; onClose: () => void }) {
+  const list = host ? friends.list.filter((f) => !members.some((mem) => mem.fid === f.id)) : []
+  return (
+    <Sheet title="Пригласить" onClose={onClose}>
+      <m.button type="button" className="primary big" variants={sheetItem} whileTap={{ scale: 0.96 }} onClick={onShare}>
+        <AnimatePresence mode="wait" initial={false}>
+          <m.span key={copied ? 'ok' : 'share'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+            {copied ? 'Ссылка скопирована' : 'Поделиться ссылкой'}
+          </m.span>
+        </AnimatePresence>
+      </m.button>
+      {list.length > 0 && (
+        <m.div className="invite-list" variants={sheetItem}>
+          {list.map((f) => (
+            <div key={f.id} className="invite-item">
+              <span className="invite-who">
+                <i className={`friend-dot ${friends.here[f.id] ? 'on' : ''}`} aria-hidden="true" />
+                <span>
+                  <b>{f.name}</b>
+                  <small>{presenceText(friends, f.id)}</small>
+                </span>
+              </span>
+              <m.button type="button" className="primary small" whileTap={{ scale: 0.94 }} onClick={() => onInviteFriend(f.id)}>
+                Позвать
+              </m.button>
+            </div>
+          ))}
+        </m.div>
       )}
-    </div>
+    </Sheet>
   )
 }
 
@@ -214,6 +248,11 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
   const [mode, setMode] = useState<'choose' | 'join'>(initialCode ? 'join' : 'choose')
   const [code, setCode] = useState(initialCode)
   const [copied, setCopied] = useState(false)
+  const [inviting, setInviting] = useState(false)
+  const [asking, setAsking] = useState<null | 'create' | 'join'>(null)
+  const [sure, setSure] = useState(false)
+  const sureTimer = useRef<ReturnType<typeof setTimeout>>()
+  useEffect(() => () => clearTimeout(sureTimer.current), [])
   const [codeCopied, setCodeCopied] = useState(false)
   const [setup, setSetup] = useState(false)
   /** Android: the app was offered first; the code field shows once the player picks the browser */
@@ -251,11 +290,56 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
     return () => clearInterval(t)
   }, [watching, refresh])
 
-  const back = () => {
-    if (phase !== 'idle') online.leave()
-    else if (mode === 'join') setMode('choose')
-    else onBack()
+  // Leaving a room someone else is in takes a second press: for the host it closes the room for everyone.
+  const others = lobby ? lobby.members.filter((mem) => mem.online && mem.id !== lobby.members.find((x) => x.host)?.id).length : 0
+  const needsSure = phase === 'lobby' && (role !== 'host' || others > 0)
+  const leave = () => {
+    clearTimeout(sureTimer.current)
+    setSure(false)
+    online.leave()
   }
+  const back = () => {
+    if (phase === 'idle') return mode === 'join' ? setMode('choose') : onBack()
+    if (!needsSure || sure) return leave()
+    setSure(true)
+    clearTimeout(sureTimer.current)
+    sureTimer.current = setTimeout(() => setSure(false), 3000)
+  }
+  useBack(() => {
+    back()
+    return true
+  })
+
+  const myName = settings.name.trim() || 'Игрок'
+  // A player still called "Игрок 42" names themselves once before the first room.
+  const run = (kind: 'create' | 'join') => (kind === 'create' ? online.create({ name: myName, mode: settings.mode, deckSize: settings.deckSize, cheat: settings.cheat }) : online.join(code, myName))
+  const named = (kind: 'create' | 'join') => (isDefaultName(settings.name) && !nameAsked() ? setAsking(kind) : run(kind))
+  const create = () => named('create')
+  const join = () => named('join')
+  // After the name sheet the room is made on the next render, with the new name saved.
+  const [afterName, setAfterName] = useState<null | 'create' | 'join'>(null)
+  useEffect(() => {
+    if (!afterName) return
+    run(afterName)
+    setAfterName(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [afterName])
+
+  // On Android a copied invite fills the code by itself (the clipboard is read without a prompt there).
+  useEffect(() => {
+    if (mode !== 'join' || code || !isNative || Capacitor.getPlatform() !== 'android' || !navigator.clipboard?.readText) return
+    navigator.clipboard
+      .readText()
+      .then((t) => {
+        const inv = inviteFromText(t)
+        if (inv) {
+          setCode(inv.code)
+          onInviteServer(inv.server)
+        }
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode])
 
   const copyCode = async () => {
     if (!lobby) return
@@ -293,7 +377,6 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
   const players = lobby ? lobby.members.filter((m) => m.online).length + lobby.bots : 0
   const roomFull = lobby ? lobby.members.length + lobby.bots >= maxPlayers(lobby.deckSize) : false
   const hostName = lobby?.members.find((m) => m.host)?.name ?? 'хост'
-  const joinNow = () => online.join(code, settings.name.trim() || 'Игрок')
   const createOwn = () => {
     online.leave()
     online.create({ name: settings.name.trim() || 'Игрок', mode: settings.mode, deckSize: settings.deckSize, cheat: settings.cheat })
@@ -338,7 +421,14 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
     <m.main className="screen" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}>
       <header className="screen-head">
         <BackButton onClick={back} />
-        <h1>{phase === 'lobby' ? 'Комната' : 'Онлайн'}</h1>
+        <h1>{phase === 'lobby' ? 'Комната' : 'С друзьями'}</h1>
+        <AnimatePresence>
+          {sure && (
+            <m.button key="sure" type="button" className="danger small leave-sure" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} whileTap={{ scale: 0.95 }} onClick={leave}>
+              {role === 'host' ? 'Закрыть комнату?' : 'Выйти из комнаты?'}
+            </m.button>
+          )}
+        </AnimatePresence>
       </header>
 
       <div className="screen-body">
@@ -353,7 +443,6 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
         <AnimatePresence mode="wait">
           {phase === 'idle' && (
             <m.div key={`idle-${mode}`} className="online-block" variants={sheetList} initial="hidden" animate="shown" exit={{ opacity: 0, y: -10 }}>
-              <NameBadge name={settings.name} avatar={AVATARS[settings.avatar] ?? AVATARS[0]} onChange={(name) => onChange({ ...settings, name })} />
               {mode === 'choose' ? (
                 <div className="way-cards">
                   <m.button
@@ -364,13 +453,12 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
-                    onClick={() => online.create({ name: settings.name.trim() || 'Игрок', mode: settings.mode, deckSize: settings.deckSize, cheat: settings.cheat })}
+                    onClick={create}
                   >
                     <span className="way-art plus" aria-hidden="true">
                       +
                     </span>
                     <span className="way-title">Создать комнату</span>
-                    <span className="way-note">Позовите друзей по ссылке</span>
                   </m.button>
                   <m.button type="button" className="way" whileHover={{ y: -4 }} whileTap={{ scale: 0.97 }} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} onClick={() => setMode('join')}>
                     <span className="way-art key" aria-hidden="true">
@@ -379,7 +467,6 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
                       </svg>
                     </span>
                     <span className="way-title">Войти по коду</span>
-                    <span className="way-note">Код из приглашения</span>
                   </m.button>
                 </div>
               ) : (
@@ -390,17 +477,17 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
                   <>
                   <div className="join-head">
                     <p className="join-label">Код комнаты</p>
-                    {!(offerApp && code === initialCode) && (
-                      <PasteButton
-                        onCode={(inv) => {
-                          setCode(inv.code)
-                          onInviteServer(inv.server)
-                        }}
-                      />
-                    )}
                   </div>
-                  <CodeInput value={code} onChange={setCode} onDone={joinNow} />
-                  <m.button type="button" className="primary big" disabled={code.length !== CODE_LENGTH} whileTap={{ scale: 0.96 }} onClick={joinNow}>
+                  <CodeInput value={code} onChange={setCode} onDone={join} />
+                  {!(offerApp && code === initialCode) && code.length < CODE_LENGTH && (
+                    <PasteButton
+                      onCode={(inv) => {
+                        setCode(inv.code)
+                        onInviteServer(inv.server)
+                      }}
+                    />
+                  )}
+                  <m.button type="button" className="primary big" disabled={code.length !== CODE_LENGTH} whileTap={{ scale: 0.96 }} onClick={join}>
                     Войти
                   </m.button>
                   </>
@@ -499,15 +586,13 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
                     </m.span>
                   ))}
                 </button>
-                {host && (
-                  <m.button type="button" className="ghost invite" whileTap={{ scale: 0.95 }} onClick={() => invite()}>
-                    <AnimatePresence mode="wait" initial={false}>
-                      <m.span key={copied ? 'ok' : 'share'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
-                        {copied ? 'Ссылка скопирована' : 'Пригласить друзей'}
-                      </m.span>
-                    </AnimatePresence>
-                  </m.button>
-                )}
+                <m.button type="button" className="ghost invite" whileTap={{ scale: 0.95 }} onClick={() => (host && friends.list.length > 0 ? setInviting(true) : invite())}>
+                  <AnimatePresence mode="wait" initial={false}>
+                    <m.span key={copied ? 'ok' : 'share'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+                      {copied ? 'Ссылка скопирована' : 'Пригласить'}
+                    </m.span>
+                  </AnimatePresence>
+                </m.button>
               </m.section>
 
               <Group title="Игроки" value={`${players} ${plural(players, 'игрок', 'игрока', 'игроков')}`}>
@@ -535,6 +620,11 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
                         <span className="avatar-circle">{BOT_NAMES[i][0]}</span>
                         <span className="avatar-name">{BOT_NAMES[i]}</span>
                         <span className="seat-tag">бот</span>
+                        {host && i === lobby.bots - 1 && (
+                          <button type="button" className="seat-kick" aria-label={`Убрать ${BOT_NAMES[i]}`} onClick={() => online.setLobby({ bots: lobby.bots - 1 })}>
+                            ×
+                          </button>
+                        )}
                       </m.div>
                     ))}
                     {host && !roomFull && (
@@ -543,38 +633,9 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
                         <span className="avatar-name">Бот</span>
                       </m.button>
                     )}
-                    {host && lobby.bots > 0 && (
-                      <m.button key="remove-bot" layout type="button" className="lobby-seat add" whileTap={{ scale: 0.92 }} onClick={() => online.setLobby({ bots: lobby.bots - 1 })} initial={{ scale: 0 }} animate={{ scale: 1 }}>
-                        <span className="avatar-circle dashed">−</span>
-                        <span className="avatar-name">Убрать</span>
-                      </m.button>
-                    )}
                   </AnimatePresence>
                 </div>
               </Group>
-
-              {host && friends.list.length > 0 && (
-                <Group title="Позвать друга">
-                  <div className="invite-list">
-                    {friends.list
-                      .filter((f) => !lobby.members.some((m) => m.fid === f.id))
-                      .map((f) => (
-                        <div key={f.id} className="invite-item">
-                          <span className="invite-who">
-                            <i className={`friend-dot ${friends.here[f.id] ? 'on' : ''}`} aria-hidden="true" />
-                            <span>
-                              <b>{f.name}</b>
-                              <small>{presenceText(friends, f.id)}</small>
-                            </span>
-                          </span>
-                          <m.button type="button" className="primary small" whileTap={{ scale: 0.94 }} onClick={() => onInviteFriend(f.id)}>
-                            Позвать
-                          </m.button>
-                        </div>
-                      ))}
-                  </div>
-                </Group>
-              )}
 
               {host ? (
                 <>
@@ -593,9 +654,11 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
                       </Sheet>
                     )}
                   </AnimatePresence>
-                  <m.button type="button" className="primary big" disabled={players < 2} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={() => online.start(settings.difficulty)}>
-                    {players < 2 ? 'Ждём хотя бы одного игрока' : 'Начать игру'}
-                  </m.button>
+                  <div className="sticky-start">
+                    <m.button type="button" className="primary big" disabled={players < 2} whileTap={{ scale: 0.96 }} whileHover={{ y: -2 }} onClick={() => online.start(settings.difficulty)}>
+                      {players < 2 ? 'Ждём хотя бы одного игрока' : 'Начать игру'}
+                    </m.button>
+                  </div>
                 </>
               ) : (
                 <m.div className="waiting" variants={sheetList}>
@@ -625,6 +688,33 @@ export function OnlineScreen({ online, settings, wallet, onChange, server, onInv
           )}
         </AnimatePresence>
       </div>
+      <AnimatePresence>
+        {inviting && lobby && (
+          <InviteSheet
+            key="invite"
+            onShare={invite}
+            copied={copied}
+            friends={friends}
+            members={lobby.members}
+            host={host}
+            onInviteFriend={onInviteFriend}
+            onClose={() => setInviting(false)}
+          />
+        )}
+        {asking && (
+          <NameSheet
+            key="name"
+            name={settings.name}
+            onClose={() => setAsking(null)}
+            onDone={(n) => {
+              markNameAsked()
+              onChange({ ...settings, name: n })
+              setAfterName(asking)
+              setAsking(null)
+            }}
+          />
+        )}
+      </AnimatePresence>
     </m.main>
   )
 }
