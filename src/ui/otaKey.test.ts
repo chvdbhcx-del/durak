@@ -21,3 +21,11 @@ describe('signed updates', () => {
     expect(await verifyUpdate(spki, '1.1.30', sha, forged)).toBe(false)
   })
 })
+
+describe('built-in release key', () => {
+  it('is a P-256 public key the app can load', async () => {
+    const { OTA_PUBLIC_KEY } = await import('./otaKey')
+    const raw = Uint8Array.from(atob(OTA_PUBLIC_KEY), (ch) => ch.charCodeAt(0))
+    await expect(crypto.subtle.importKey('spki', raw, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'])).resolves.toBeDefined()
+  })
+})
