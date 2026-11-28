@@ -18,7 +18,7 @@ android {
         }
     }
     signingConfigs {
-        // Test builds are signed with this committed key (it protects nothing: it is the standard
+        // CI test builds only (releases are signed with the release key from secrets). It protects nothing: it is the standard
         // "android" debug password). A fixed key lets each new APK install over the last one;
         // a key generated per CI run made every update fail with "App not installed".
         debug {

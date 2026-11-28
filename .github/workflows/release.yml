@@ -50,9 +50,10 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           PW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set: debug-signed APK, unsigned update.json"
-            exit 0
+          # The app refuses unsigned updates (src/ui/otaKey.ts), so a release without the key must not go out.
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$PW" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD are not set"
+            exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
@@ -62,6 +63,9 @@ jobs:
             openssl pkcs12 -in "$RUNNER_TEMP/ota.p12" -nocerts -nodes -passin env:PW -out "$RUNNER_TEMP/ota.pem"
             rm "$RUNNER_TEMP/ota.p12"
             echo "OTA_KEY=$RUNNER_TEMP/ota.pem" >> "$GITHUB_ENV"
+          else
+            echo "::error::the release keystore has no \"ota\" key"
+            exit 1
           fi
 
       - name: Package the over-the-air bundle
@@ -71,20 +75,15 @@ jobs:
           node scripts/release-manifest.mjs "$VERSION_NAME" "$VERSION_CODE" \
             "https://github.com/${{ github.repository }}/releases/download/v$VERSION_NAME/durak-web-$VERSION_NAME.zip" previous-update.json \
             "durak-web-$VERSION_NAME.zip"
-          if [ -n "$OTA_KEY" ]; then node scripts/sign-update.mjs "$OTA_KEY"; rm -f "$OTA_KEY"; fi
+          node scripts/sign-update.mjs "$OTA_KEY"; rm -f "$OTA_KEY"
 
       - name: Build the Android APK
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           npx cap sync android
-          if [ -n "$ANDROID_KEYSTORE_PATH" ]; then
-            (cd android && ./gradlew assembleRelease --no-daemon)
-            cp android/app/build/outputs/apk/release/app-release.apk "Durak-$VERSION_NAME.apk"
-          else
-            (cd android && ./gradlew assembleDebug --no-daemon)
-            cp android/app/build/outputs/apk/debug/app-debug.apk "Durak-$VERSION_NAME-debug.apk"
-          fi
+          (cd android && ./gradlew assembleRelease --no-daemon)
+          cp android/app/build/outputs/apk/release/app-release.apk "Durak-$VERSION_NAME.apk"
 
       - name: Publish the release
         run: |
