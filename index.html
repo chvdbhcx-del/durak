@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0d1112" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#e8ece9" media="(prefers-color-scheme: light)" />
+    <title>Дурак</title>
+    <meta name="description" content="Подкидной и переводной дурак против ботов" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Дурак" />
+    <link rel="apple-touch-startup-image" href="./splash/390x844-light.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
+    <link rel="apple-touch-startup-image" href="./splash/390x844-dark.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="./splash/430x932-light.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" />
+    <link rel="apple-touch-startup-image" href="./splash/430x932-dark.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="./splash/375x667-light.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: light)" />
+    <link rel="apple-touch-startup-image" href="./splash/375x667-dark.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="./splash/414x896-light.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: light)" />
+    <link rel="apple-touch-startup-image" href="./splash/414x896-dark.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <script type="module" crossorigin src="./assets/index-CSJzRmB0.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/motion-CshvLvTF.js">
+    <link rel="modulepreload" crossorigin href="./assets/react-B-tRxUZP.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-DqTVb6yP.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Safety net: if the game's script never starts (e.g. an old copy of this page points at files
+      // a newer deploy removed), reload once from the server instead of leaving a blank screen.
+      setTimeout(function () {
+        try {
+          if (document.getElementById('root').childElementCount) return
+          if (sessionStorage.getItem('durak-reloaded')) return
+          sessionStorage.setItem('durak-reloaded', '1')
+          location.reload()
+        } catch (e) {}
+      }, 6000)
+    </script>
+  </body>
+</html>
